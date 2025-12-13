@@ -80,6 +80,8 @@ model User {
   checkins           Checkin[]
   reports            Report[]
   auditLogs          AuditLog[]
+  location           UserLocation?
+  locationHistory    LocationHistory[]
 
   @@map("users")
 }
@@ -157,6 +159,7 @@ model Project {
   documents         ProjectDocument[]
   generatedReports  GeneratedReport[]
   telegramConfig    TelegramConfig?
+  activeLocations   UserLocation[]
 
   @@map("projects")
 }
@@ -410,6 +413,53 @@ model TelegramConfig {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@map("telegram_config")
+}
+
+// =============================================
+// USER LOCATION (Real-time tracking)
+// =============================================
+model UserLocation {
+  id            String    @id @default(uuid())
+  userId        String    @unique @map("user_id")
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  latitude      Decimal   @db.Decimal(10, 8)
+  longitude     Decimal   @db.Decimal(11, 8)
+  accuracy      Decimal?  @db.Decimal(10, 2) // meters
+  heading       Decimal?  @db.Decimal(5, 2)  // degrees
+  speed         Decimal?  @db.Decimal(6, 2)  // m/s
+
+  // Status
+  isOnline      Boolean   @default(true) @map("is_online")
+  batteryLevel  Int?      @map("battery_level") // percentage
+
+  // Current project (if checked in)
+  currentProjectId String? @map("current_project_id")
+  currentProject   Project? @relation(fields: [currentProjectId], references: [id])
+
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("user_locations")
+}
+
+// =============================================
+// LOCATION HISTORY (Optional - for tracking routes)
+// =============================================
+model LocationHistory {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  latitude      Decimal   @db.Decimal(10, 8)
+  longitude     Decimal   @db.Decimal(11, 8)
+  accuracy      Decimal?  @db.Decimal(10, 2)
+
+  projectId     String?   @map("project_id")
+
+  recordedAt    DateTime  @default(now()) @map("recorded_at")
+
+  @@index([userId, recordedAt])
+  @@map("location_history")
 }
 
 // =============================================

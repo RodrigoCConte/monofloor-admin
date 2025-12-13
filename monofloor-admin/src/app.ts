@@ -14,12 +14,20 @@ const allowedOrigins = [
   config.cors.mobileAppUrl,
   'http://localhost:3000',
   'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'http://localhost:5176',
 ];
 
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, Postman)
     if (!origin) return callback(null, true);
+
+    // Allow any localhost origin during development
+    if (origin && origin.match(/^http:\/\/localhost:\d+$/)) {
+      return callback(null, true);
+    }
 
     if (allowedOrigins.includes(origin)) {
       callback(null, true);

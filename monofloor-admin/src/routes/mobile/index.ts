@@ -603,4 +603,117 @@ router.get(
   }
 );
 
+// =============================================
+// LOCATION
+// =============================================
+
+// POST /api/mobile/location - Update current location
+router.post(
+  '/location',
+  mobileAuth,
+  [
+    body('latitude').isFloat({ min: -90, max: 90 }),
+    body('longitude').isFloat({ min: -180, max: 180 }),
+    body('accuracy').optional().isFloat({ min: 0 }),
+    body('heading').optional().isFloat({ min: 0, max: 360 }),
+    body('speed').optional().isFloat({ min: 0 }),
+    body('batteryLevel').optional().isInt({ min: 0, max: 100 }),
+    body('isOnline').optional().isBoolean(),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { latitude, longitude, accuracy, heading, speed, batteryLevel, isOnline } = req.body;
+      const userId = req.user!.sub;
+
+      // Get active checkin to know current project
+      const activeCheckin = await prisma.checkin.findFirst({
+        where: {
+          userId,
+          checkoutAt: null,
+        },
+      });
+
+      // Upsert user location
+      const location = await prisma.userLocation.upsert({
+        where: { userId },
+        update: {
+          latitude,
+          longitude,
+          accuracy,
+          heading,
+          speed,
+          batteryLevel,
+          isOnline: isOnline !== false,
+          currentProjectId: activeCheckin?.projectId || null,
+        },
+        create: {
+          userId,
+          latitude,
+          longitude,
+          accuracy,
+          heading,
+          speed,
+          batteryLevel,
+          isOnline: isOnline !== false,
+          currentProjectId: activeCheckin?.projectId || null,
+        },
+      });
+
+      // Also save to history (every 5 minutes max)
+      const lastHistory = await prisma.locationHistory.findFirst({
+        where: { userId },
+        orderBy: { recordedAt: 'desc' },
+      });
+
+      const shouldSaveHistory =
+        !lastHistory ||
+        new Date().getTime() - lastHistory.recordedAt.getTime() > 5 * 60 * 1000;
+
+      if (shouldSaveHistory) {
+        await prisma.locationHistory.create({
+          data: {
+            userId,
+            latitude,
+            longitude,
+            accuracy,
+            projectId: activeCheckin?.projectId,
+          },
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          ...location,
+          latitude: Number(location.latitude),
+          longitude: Number(location.longitude),
+          accuracy: location.accuracy ? Number(location.accuracy) : null,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// PUT /api/mobile/location/offline - Mark as offline
+router.put('/location/offline', mobileAuth, async (req, res, next) => {
+  try {
+    const userId = req.user!.sub;
+
+    await prisma.userLocation.updateMany({
+      where: { userId },
+      data: { isOnline: false },
+    });
+
+    res.json({
+      success: true,
+      message: 'Marked as offline',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export { router as mobileRoutes };
