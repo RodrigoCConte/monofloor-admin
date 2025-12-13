@@ -740,6 +740,52 @@ router.post(
   }
 );
 
+// DELETE /api/admin/projects - Delete ALL projects (TESTING ONLY)
+// IMPORTANT: This route must be defined BEFORE /:id to avoid route conflicts
+router.delete('/', adminAuth, async (req, res, next) => {
+  try {
+    // Delete all related records first
+    await prisma.$transaction(async (tx) => {
+      // Delete all checkins
+      await tx.checkin.deleteMany({});
+
+      // Delete all report photos and reports
+      await tx.reportPhoto.deleteMany({});
+      await tx.report.deleteMany({});
+
+      // Delete all project assignments
+      await tx.projectAssignment.deleteMany({});
+
+      // Delete all project documents
+      await tx.projectDocument.deleteMany({});
+
+      // Delete all generated reports
+      await tx.generatedReport.deleteMany({});
+
+      // Finally delete all projects
+      const deleted = await tx.project.deleteMany({});
+
+      // Create audit log
+      await tx.auditLog.create({
+        data: {
+          adminUserId: req.user!.sub,
+          action: 'DELETE_ALL_PROJECTS',
+          entityType: 'Project',
+          entityId: 'all',
+          description: `Deleted all ${deleted.count} projects`,
+        },
+      });
+    });
+
+    res.json({
+      success: true,
+      message: 'Todos os projetos foram deletados',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // DELETE /api/admin/projects/:id - Delete project
 router.delete('/:id', adminAuth, async (req, res, next) => {
   try {
@@ -824,51 +870,6 @@ router.delete('/:id', adminAuth, async (req, res, next) => {
     res.json({
       success: true,
       message: 'Projeto deletado com sucesso',
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// DELETE /api/admin/projects - Delete ALL projects (TESTING ONLY)
-router.delete('/', adminAuth, async (req, res, next) => {
-  try {
-    // Delete all related records first
-    await prisma.$transaction(async (tx) => {
-      // Delete all checkins
-      await tx.checkin.deleteMany({});
-
-      // Delete all report photos and reports
-      await tx.reportPhoto.deleteMany({});
-      await tx.report.deleteMany({});
-
-      // Delete all project assignments
-      await tx.projectAssignment.deleteMany({});
-
-      // Delete all project documents
-      await tx.projectDocument.deleteMany({});
-
-      // Delete all generated reports
-      await tx.generatedReport.deleteMany({});
-
-      // Finally delete all projects
-      const deleted = await tx.project.deleteMany({});
-
-      // Create audit log
-      await tx.auditLog.create({
-        data: {
-          adminUserId: req.user!.sub,
-          action: 'DELETE_ALL_PROJECTS',
-          entityType: 'Project',
-          entityId: 'all',
-          description: `Deleted all ${deleted.count} projects`,
-        },
-      });
-    });
-
-    res.json({
-      success: true,
-      message: 'Todos os projetos foram deletados',
     });
   } catch (error) {
     next(error);
