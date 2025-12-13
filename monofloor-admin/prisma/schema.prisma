@@ -28,6 +28,7 @@ model AdminUser {
   uploadedDocuments  ProjectDocument[]
   generatedReports   GeneratedReport[]
   auditLogs          AuditLog[]
+  nightShiftInvites  NightShiftInvite[]
 
   @@map("admin_users")
 }
@@ -76,12 +77,13 @@ model User {
   updatedAt       DateTime   @updatedAt @map("updated_at")
 
   // Relations
-  projectAssignments ProjectAssignment[]
-  checkins           Checkin[]
-  reports            Report[]
-  auditLogs          AuditLog[]
-  location           UserLocation?
-  locationHistory    LocationHistory[]
+  projectAssignments  ProjectAssignment[]
+  checkins            Checkin[]
+  reports             Report[]
+  auditLogs           AuditLog[]
+  location            UserLocation?
+  locationHistory     LocationHistory[]
+  nightShiftInvites   NightShiftInvite[]
 
   @@map("users")
 }
@@ -145,6 +147,12 @@ model Project {
   longitude       Decimal? @db.Decimal(11, 8)
   geofenceRadius  Int      @default(200) @map("geofence_radius") // meters
 
+  // Night Shift configuration
+  isNightShift      Boolean   @default(false) @map("is_night_shift")
+  nightShiftSlots   Int?      @map("night_shift_slots")  // number of slots/vacancies
+  nightShiftStart   DateTime? @map("night_shift_start")  // period start date
+  nightShiftEnd     DateTime? @map("night_shift_end")    // period end date
+
   // Timestamps
   startedAt       DateTime? @map("started_at")
   completedAt     DateTime? @map("completed_at")
@@ -153,13 +161,14 @@ model Project {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  assignments       ProjectAssignment[]
-  checkins          Checkin[]
-  reports           Report[]
-  documents         ProjectDocument[]
-  generatedReports  GeneratedReport[]
-  telegramConfig    TelegramConfig?
-  activeLocations   UserLocation[]
+  assignments        ProjectAssignment[]
+  checkins           Checkin[]
+  reports            Report[]
+  documents          ProjectDocument[]
+  generatedReports   GeneratedReport[]
+  telegramConfig     TelegramConfig?
+  activeLocations    UserLocation[]
+  nightShiftInvites  NightShiftInvite[]
 
   @@map("projects")
 }
@@ -197,6 +206,33 @@ model ProjectAssignment {
 enum ProjectRole {
   APLICADOR
   LIDER
+}
+
+// =============================================
+// NIGHT SHIFT INVITES
+// =============================================
+model NightShiftInvite {
+  id          String       @id @default(uuid())
+  projectId   String       @map("project_id")
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId      String       @map("user_id")
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status      InviteStatus @default(PENDING)
+  invitedAt   DateTime     @default(now()) @map("invited_at")
+  respondedAt DateTime?    @map("responded_at")
+  invitedById String?      @map("invited_by")
+  invitedBy   AdminUser?   @relation(fields: [invitedById], references: [id])
+
+  @@unique([projectId, userId])
+  @@map("night_shift_invites")
+}
+
+enum InviteStatus {
+  PENDING    // Awaiting response
+  ACCEPTED   // Accepted
+  DECLINED   // Declined
+  EXPIRED    // Expired without response
 }
 
 // =============================================

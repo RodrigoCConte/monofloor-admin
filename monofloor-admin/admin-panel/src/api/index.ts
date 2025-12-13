@@ -75,6 +75,26 @@ export const projectsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+  // Team management
+  getTeam: (id: string) => api.get(`/api/admin/projects/${id}/team`),
+  addTeamMember: (id: string, userId: string, projectRole: string) =>
+    api.post(`/api/admin/projects/${id}/team`, { userId, projectRole }),
+  removeTeamMember: (id: string, userId: string) =>
+    api.delete(`/api/admin/projects/${id}/team/${userId}`),
+  // Check-ins and Reports
+  getCheckins: (id: string, params?: { dateFrom?: string; dateTo?: string }) =>
+    api.get(`/api/admin/projects/${id}/checkins`, { params }),
+  getReports: (id: string, params?: { dateFrom?: string; dateTo?: string }) =>
+    api.get(`/api/admin/projects/${id}/reports`, { params }),
+  // Night Shift
+  configureNightShift: (id: string, data: { slots?: number; startDate?: string; endDate?: string }) =>
+    api.put(`/api/admin/projects/${id}/night-shift`, data),
+  getNightShiftInvites: (id: string) =>
+    api.get(`/api/admin/projects/${id}/night-shift/invites`),
+  sendNightShiftInvites: (id: string, userIds: string[]) =>
+    api.post(`/api/admin/projects/${id}/night-shift/invites`, { userIds }),
+  cancelNightShiftInvite: (projectId: string, inviteId: string) =>
+    api.delete(`/api/admin/projects/${projectId}/night-shift/invites/${inviteId}`),
 };
 
 // Reports API

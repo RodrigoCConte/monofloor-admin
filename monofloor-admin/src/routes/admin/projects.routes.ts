@@ -226,6 +226,13 @@ router.put(
     body('latitude').optional().isFloat({ min: -90, max: 90 }),
     body('longitude').optional().isFloat({ min: -180, max: 180 }),
     body('geofenceRadius').optional().isInt({ min: 50, max: 1000 }),
+    body('isNightShift').optional().isBoolean(),
+    body('nightShiftSlots').optional().isInt({ min: 1 }),
+    body('nightShiftStart').optional().isISO8601(),
+    body('nightShiftEnd').optional().isISO8601(),
+    body('consultor').optional().trim(),
+    body('material').optional().trim(),
+    body('cor').optional().trim(),
   ],
   validate,
   async (req, res, next) => {
@@ -250,6 +257,13 @@ router.put(
         'longitude',
         'geofenceRadius',
         'aiTasksPrompt',
+        'isNightShift',
+        'nightShiftSlots',
+        'nightShiftStart',
+        'nightShiftEnd',
+        'consultor',
+        'material',
+        'cor',
       ];
 
       for (const field of allowedFields) {
@@ -875,5 +889,221 @@ router.delete('/:id', adminAuth, async (req, res, next) => {
     next(error);
   }
 });
+
+// =============================================
+// NIGHT SHIFT INVITE ENDPOINTS
+// =============================================
+
+// PUT /api/admin/projects/:id/night-shift - Configure night shift
+router.put(
+  '/:id/night-shift',
+  adminAuth,
+  [
+    param('id').isUUID(),
+    body('slots').optional().isInt({ min: 1 }),
+    body('startDate').optional().isISO8601(),
+    body('endDate').optional().isISO8601(),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const project = await prisma.project.findUnique({
+        where: { id: req.params.id },
+      });
+
+      if (!project) {
+        throw new AppError('Project not found', 404, 'PROJECT_NOT_FOUND');
+      }
+
+      const updatedProject = await prisma.project.update({
+        where: { id: req.params.id },
+        data: {
+          isNightShift: true,
+          nightShiftSlots: req.body.slots,
+          nightShiftStart: req.body.startDate ? new Date(req.body.startDate) : null,
+          nightShiftEnd: req.body.endDate ? new Date(req.body.endDate) : null,
+        },
+      });
+
+      res.json({
+        success: true,
+        data: updatedProject,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/admin/projects/:id/night-shift/invites - List invites for a project
+router.get(
+  '/:id/night-shift/invites',
+  adminAuth,
+  [param('id').isUUID()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const invites = await prisma.nightShiftInvite.findMany({
+        where: { projectId: req.params.id },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              photoUrl: true,
+              phone: true,
+            },
+          },
+          invitedBy: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: { invitedAt: 'desc' },
+      });
+
+      // Count by status
+      const statusCounts = {
+        pending: invites.filter((i) => i.status === 'PENDING').length,
+        accepted: invites.filter((i) => i.status === 'ACCEPTED').length,
+        declined: invites.filter((i) => i.status === 'DECLINED').length,
+        expired: invites.filter((i) => i.status === 'EXPIRED').length,
+      };
+
+      res.json({
+        success: true,
+        data: invites,
+        meta: {
+          total: invites.length,
+          ...statusCounts,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST /api/admin/projects/:id/night-shift/invites - Send invites
+router.post(
+  '/:id/night-shift/invites',
+  adminAuth,
+  [
+    param('id').isUUID(),
+    body('userIds').isArray({ min: 1 }).withMessage('At least one user required'),
+    body('userIds.*').isUUID(),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { userIds } = req.body;
+
+      const project = await prisma.project.findUnique({
+        where: { id: req.params.id },
+      });
+
+      if (!project) {
+        throw new AppError('Project not found', 404, 'PROJECT_NOT_FOUND');
+      }
+
+      if (!project.isNightShift) {
+        throw new AppError('Project is not configured as night shift', 400, 'NOT_NIGHT_SHIFT');
+      }
+
+      // Check for existing invites
+      const existingInvites = await prisma.nightShiftInvite.findMany({
+        where: {
+          projectId: req.params.id,
+          userId: { in: userIds },
+        },
+        select: { userId: true },
+      });
+
+      const existingUserIds = new Set(existingInvites.map((i) => i.userId));
+      const newUserIds = userIds.filter((id: string) => !existingUserIds.has(id));
+
+      if (newUserIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'All selected users already have invites',
+        });
+      }
+
+      // Create invites
+      const invites = await prisma.nightShiftInvite.createMany({
+        data: newUserIds.map((userId: string) => ({
+          projectId: req.params.id,
+          userId,
+          invitedById: req.user!.sub,
+          status: 'PENDING',
+        })),
+      });
+
+      // Fetch created invites with user info
+      const createdInvites = await prisma.nightShiftInvite.findMany({
+        where: {
+          projectId: req.params.id,
+          userId: { in: newUserIds },
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+            },
+          },
+        },
+      });
+
+      res.status(201).json({
+        success: true,
+        data: {
+          created: invites.count,
+          skipped: userIds.length - newUserIds.length,
+          invites: createdInvites,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// DELETE /api/admin/projects/:id/night-shift/invites/:inviteId - Cancel invite
+router.delete(
+  '/:id/night-shift/invites/:inviteId',
+  adminAuth,
+  [param('id').isUUID(), param('inviteId').isUUID()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const invite = await prisma.nightShiftInvite.findFirst({
+        where: {
+          id: req.params.inviteId,
+          projectId: req.params.id,
+        },
+      });
+
+      if (!invite) {
+        throw new AppError('Invite not found', 404, 'INVITE_NOT_FOUND');
+      }
+
+      await prisma.nightShiftInvite.delete({
+        where: { id: req.params.inviteId },
+      });
+
+      res.json({
+        success: true,
+        message: 'Invite cancelled',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 export { router as projectsRoutes };

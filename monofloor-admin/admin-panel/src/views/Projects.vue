@@ -252,7 +252,7 @@ onMounted(loadProjects);
       </div>
 
       <div v-else class="projects-grid">
-        <div v-for="project in projects" :key="project.id" class="project-card">
+        <div v-for="project in projects" :key="project.id" class="project-card" @click="router.push(`/projects/${project.id}`)">
           <div class="project-header">
             <h3>{{ project.title }}</h3>
             <div class="project-actions">
@@ -680,12 +680,14 @@ onMounted(loadProjects);
   border-radius: var(--border-radius-lg);
   padding: 24px;
   transition: all 0.2s;
+  cursor: pointer;
 }
 
 .project-card:hover {
   background: var(--bg-card-hover);
-  border-color: var(--text-tertiary);
+  border-color: var(--accent-primary);
   transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 .project-header {
