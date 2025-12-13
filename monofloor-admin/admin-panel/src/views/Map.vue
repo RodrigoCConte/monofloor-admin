@@ -3,7 +3,6 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { locationsApi } from '../api';
-import { Loader } from '@googlemaps/js-api-loader';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -51,16 +50,38 @@ const getRoleLabel = (role: string) => {
   }
 };
 
+const loadGoogleMapsScript = (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    // Check if already loaded
+    if (window.google?.maps) {
+      resolve();
+      return;
+    }
+
+    // Check if script is already being loaded
+    const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve());
+      existingScript.addEventListener('error', () => reject(new Error('Failed to load Google Maps')));
+      return;
+    }
+
+    // Create and load script
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Google Maps'));
+    document.head.appendChild(script);
+  });
+};
+
 const initMap = async () => {
   if (!mapContainer.value) return;
 
   try {
-    const loader = new Loader({
-      apiKey: GOOGLE_MAPS_API_KEY,
-      version: 'weekly',
-    });
-
-    await loader.load();
+    await loadGoogleMapsScript();
 
     // Default center: Sao Paulo
     const defaultCenter = { lat: -23.5505, lng: -46.6333 };
