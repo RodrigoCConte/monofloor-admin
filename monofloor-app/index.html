@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Monofloor - App de Equipes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="phone-frame">
+        <div class="phone-notch"></div>
+
+        <!-- Tela de Login -->
+        <div id="screen-login" class="screen active">
+            <div class="login-container">
+                <div class="logo-container">
+                    <img src="logo.png" alt="Monofloor" class="logo-image">
+                    <span class="logo-subtitle">EQUIPES</span>
+                </div>
+                <div class="login-form">
+                    <div class="input-group">
+                        <label>E-mail</label>
+                        <input type="email" placeholder="seu@email.com">
+                    </div>
+                    <div class="input-group">
+                        <label>Senha</label>
+                        <input type="password" placeholder="********">
+                    </div>
+                    <button class="btn-primary" onclick="navigateTo('screen-projects')">Entrar</button>
+                    <a href="#" class="forgot-password">Esqueceu a senha?</a>
+                    <div class="signup-link">
+                        Novo por aqui? <a href="#" onclick="navigateTo('screen-create-profile')">Criar conta</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela de Criar Perfil -->
+        <div id="screen-create-profile" class="screen">
+            <div class="header-back">
+                <button class="back-btn" onclick="navigateTo('screen-login')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                </button>
+                <h1>Criar Perfil</h1>
+                <div style="width: 40px;"></div>
+            </div>
+
+            <div class="content create-profile-content">
+                <div class="profile-photo-upload">
+                    <div class="photo-circle" onclick="document.getElementById('photoInput').click()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="photoPlaceholder">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                            <circle cx="12" cy="7" r="4"/>
+                        </svg>
+                        <img id="photoPreview" src="" alt="" style="display: none;">
+                        <div class="photo-overlay">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                                <circle cx="12" cy="13" r="4"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <input type="file" id="photoInput" accept="image/*" style="display: none;" onchange="previewPhoto(this)">
+                    <span class="photo-hint">Toque para adicionar foto</span>
+                </div>
+
+                <div class="profile-form">
+                    <div class="input-group">
+                        <label>Nome completo</label>
+                        <input type="text" placeholder="Seu nome" id="profileName">
+                    </div>
+                    <div class="input-group">
+                        <label>Username</label>
+                        <div class="input-with-prefix">
+                            <span class="prefix">@</span>
+                            <input type="text" placeholder="seu.username" id="profileUsername">
+                        </div>
+                        <span class="input-hint">Este será seu identificador único no app</span>
+                    </div>
+                    <div class="input-group">
+                        <label>E-mail</label>
+                        <input type="email" placeholder="seu@email.com" id="profileEmail">
+                    </div>
+                    <div class="input-group">
+                        <label>Senha</label>
+                        <input type="password" placeholder="Mínimo 8 caracteres" id="profilePassword">
+                    </div>
+                    <div class="input-group">
+                        <label>Confirmar senha</label>
+                        <input type="password" placeholder="Repita a senha" id="profilePasswordConfirm">
+                    </div>
+                </div>
+
+                <button class="btn-primary" onclick="createProfile()">Criar minha conta</button>
+            </div>
+        </div>
+
+        <!-- Tela de Projetos (PRINCIPAL) -->
+        <div id="screen-projects" class="screen">
+            <div class="header">
+                <div class="header-left">
+                    <img src="logo.png" alt="Monofloor" class="header-logo">
+                </div>
+                <div class="header-right">
+                    <div class="avatar" onclick="navigateTo('screen-profile')">JS</div>
+                </div>
+            </div>
+
+            <div class="content">
+                <!-- Location Status Banner -->
+                <div class="location-banner" id="locationBanner">
+                    <div class="location-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 8v8M8 12h8"/>
+                        </svg>
+                    </div>
+                    <span>Localizando...</span>
+                </div>
+
+                <!-- Active Projects -->
+                <div class="section-title">Meus Projetos</div>
+                <div class="projects-list" id="projectsList">
+                    <!-- Projetos carregados dinamicamente do Pipefy -->
+                    <div class="loading-state">
+                        <div class="loading-spinner"></div>
+                        <span>Carregando projetos...</span>
+                    </div>
+                </div>
+
+                <!-- Completed Projects -->
+                <div class="section-header-row">
+                    <div class="section-title">Projetos Concluídos</div>
+                    <span class="see-all" onclick="navigateTo('screen-completed-projects')">Ver todos</span>
+                </div>
+                <div class="completed-projects-preview">
+                    <div class="completed-card-mini">
+                        <div class="completed-thumb"></div>
+                        <div class="completed-info">
+                            <h4>Restaurante Jardins</h4>
+                            <span>320m² • 86h</span>
+                        </div>
+                    </div>
+                    <div class="completed-card-mini">
+                        <div class="completed-thumb"></div>
+                        <div class="completed-info">
+                            <h4>Clínica Itaim</h4>
+                            <span>180m² • 42h</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Navigation -->
+            <nav class="bottom-nav">
+                <div class="nav-item active" onclick="navigateTo('screen-projects')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <span>Projetos</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-feed')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21,15 16,10 5,21"/>
+                    </svg>
+                    <span>Feed</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-hours')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12,6 12,12 16,14"/>
+                    </svg>
+                    <span>Horas</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-learn')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                        <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                    </svg>
+                    <span>Aprender</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-profile')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <span>Perfil</span>
+                </div>
+            </nav>
+        </div>
+
+        <!-- Tela de Detalhe do Projeto -->
+        <div id="screen-project-detail" class="screen">
+            <div class="header-back">
+                <button class="back-btn" onclick="navigateTo('screen-projects')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                </button>
+                <h1>Detalhes do Projeto</h1>
+                <div style="width: 40px;"></div>
+            </div>
+
+            <div class="content">
+                <!-- Map Section -->
+                <div class="map-container">
+                    <div class="map-placeholder">
+                        <div class="map-pin"></div>
+                        <div class="map-radius"></div>
+                        <div class="map-you"></div>
+                    </div>
+                </div>
+
+                <!-- Location Check -->
+                <div class="location-check-card" id="locationCheckCard">
+                    <div class="location-status-icon valid">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22,4 12,14.01 9,11.01"/>
+                        </svg>
+                    </div>
+                    <div class="location-status-info">
+                        <span class="status-main">Você está na área do projeto</span>
+                        <span class="status-sub">Distância: 45m do ponto central (raio: 200m)</span>
+                    </div>
+                </div>
+
+                <!-- Project Info -->
+                <div class="project-detail-card">
+                    <h2>Residência Alto de Pinheiros</h2>
+                    <p class="project-address">Av. Pedroso de Morais, 1234 - Alto de Pinheiros, São Paulo</p>
+
+                    <div class="project-tag-row">
+                        <span class="tag-pill stelion">STELION</span>
+                        <span class="tag-pill">Residencial</span>
+                    </div>
+                </div>
+
+                <!-- Team Section -->
+                <div class="section-title">Equipe do Projeto</div>
+                <div class="team-list">
+                    <div class="team-member">
+                        <div class="member-avatar">JS</div>
+                        <div class="member-info">
+                            <span class="member-name">João Silva</span>
+                            <span class="member-role">Aplicador Sênior</span>
+                        </div>
+                        <span class="member-hours">48h</span>
+                    </div>
+                    <div class="team-member">
+                        <div class="member-avatar">MC</div>
+                        <div class="member-info">
+                            <span class="member-name">Maria Costa</span>
+                            <span class="member-role">Aplicadora</span>
+                        </div>
+                        <span class="member-hours">36h</span>
+                    </div>
+                    <div class="team-member">
+                        <div class="member-avatar">RP</div>
+                        <div class="member-info">
+                            <span class="member-name">Ricardo Pereira</span>
+                            <span class="member-role">Auxiliar</span>
+                        </div>
+                        <span class="member-hours">24h</span>
+                    </div>
+                </div>
+
+                <!-- Check-in Button -->
+                <button class="btn-checkin-large" id="checkinBtn" onclick="doCheckin()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                        <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                    <span>Fazer Check-in</span>
+                </button>
+
+                <!-- Report Button (shown after check-in) -->
+                <button class="btn-report" id="reportBtn" style="display: none;" onclick="navigateTo('screen-report')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 20h9"/>
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                    </svg>
+                    <span>Criar Relatório</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Tela de Feed -->
+        <div id="screen-feed" class="screen">
+            <div class="header">
+                <div class="header-left">
+                    <h1 class="header-title">Feed</h1>
+                </div>
+                <div class="header-right">
+                    <button class="icon-btn" onclick="navigateTo('screen-new-post')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="12" y1="8" x2="12" y2="16"/>
+                            <line x1="8" y1="12" x2="16" y2="12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="content feed-content">
+                <!-- Post 1 -->
+                <div class="feed-post">
+                    <div class="post-header">
+                        <div class="post-avatar">MC</div>
+                        <div class="post-user-info">
+                            <span class="post-username">Maria Costa</span>
+                            <span class="post-meta">@maria.costa • 2h atrás</span>
+                        </div>
+                        <button class="post-menu-btn">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="12" cy="5" r="1"/>
+                                <circle cx="12" cy="12" r="1"/>
+                                <circle cx="12" cy="19" r="1"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="post-image">
+                        <div class="post-image-placeholder">
+                            <span>Acabamento perfeito!</span>
+                        </div>
+                    </div>
+                    <div class="post-content">
+                        <p>Finalizado o acabamento da sala principal. STELION ficou incrível com a luz natural!</p>
+                        <span class="post-project-tag">Residência Alto de Pinheiros</span>
+                    </div>
+                    <div class="post-actions">
+                        <button class="action-btn liked">
+                            <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2">
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                            </svg>
+                            <span>24</span>
+                        </button>
+                        <button class="action-btn" onclick="navigateTo('screen-comments')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                            </svg>
+                            <span>8</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Post 2 -->
+                <div class="feed-post">
+                    <div class="post-header">
+                        <div class="post-avatar">RP</div>
+                        <div class="post-user-info">
+                            <span class="post-username">Ricardo Pereira</span>
+                            <span class="post-meta">@ricardo.p • 5h atrás</span>
+                        </div>
+                        <button class="post-menu-btn">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="12" cy="5" r="1"/>
+                                <circle cx="12" cy="12" r="1"/>
+                                <circle cx="12" cy="19" r="1"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="post-image">
+                        <div class="post-image-placeholder style2">
+                            <span>Preparação do substrato</span>
+                        </div>
+                    </div>
+                    <div class="post-content">
+                        <p>Preparação concluída! Amanhã começamos a aplicação. Equipe afiada!</p>
+                        <span class="post-project-tag">Ed. Comercial Faria Lima</span>
+                    </div>
+                    <div class="post-actions">
+                        <button class="action-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                            </svg>
+                            <span>18</span>
+                        </button>
+                        <button class="action-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                            </svg>
+                            <span>5</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Post 3 -->
+                <div class="feed-post">
+                    <div class="post-header">
+                        <div class="post-avatar">JS</div>
+                        <div class="post-user-info">
+                            <span class="post-username">João Silva</span>
+                            <span class="post-meta">@joao.silva • 1d atrás</span>
+                        </div>
+                        <button class="post-menu-btn">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="12" cy="5" r="1"/>
+                                <circle cx="12" cy="12" r="1"/>
+                                <circle cx="12" cy="19" r="1"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="post-image">
+                        <div class="post-image-placeholder style3">
+                            <span>Projeto finalizado!</span>
+                        </div>
+                    </div>
+                    <div class="post-content">
+                        <p>Mais um projeto entregue! 320m² de puro STELION. O cliente ficou muito satisfeito.</p>
+                        <span class="post-project-tag">Restaurante Jardins</span>
+                    </div>
+                    <div class="post-actions">
+                        <button class="action-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                            </svg>
+                            <span>42</span>
+                        </button>
+                        <button class="action-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                            </svg>
+                            <span>12</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="bottom-nav">
+                <div class="nav-item" onclick="navigateTo('screen-projects')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <span>Projetos</span>
+                </div>
+                <div class="nav-item active" onclick="navigateTo('screen-feed')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21,15 16,10 5,21"/>
+                    </svg>
+                    <span>Feed</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-hours')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12,6 12,12 16,14"/>
+                    </svg>
+                    <span>Horas</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-learn')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                        <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                    </svg>
+                    <span>Aprender</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-profile')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <span>Perfil</span>
+                </div>
+            </nav>
+        </div>
+
+        <!-- Tela de Novo Post -->
+        <div id="screen-new-post" class="screen">
+            <div class="header-back">
+                <button class="back-btn" onclick="navigateTo('screen-feed')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                </button>
+                <h1>Novo Post</h1>
+                <button class="text-btn" onclick="publishPost()">Publicar</button>
+            </div>
+
+            <div class="content">
+                <div class="new-post-form">
+                    <div class="post-image-upload">
+                        <div class="upload-area">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                <circle cx="8.5" cy="8.5" r="1.5"/>
+                                <polyline points="21,15 16,10 5,21"/>
+                            </svg>
+                            <span>Adicionar foto</span>
+                        </div>
+                    </div>
+
+                    <textarea class="post-text-input" placeholder="Compartilhe seu trabalho com a equipe..."></textarea>
+
+                    <div class="project-selector">
+                        <label>Vincular ao projeto:</label>
+                        <div class="select-box">
+                            <span>Residência Alto de Pinheiros</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6,9 12,15 18,9"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela de Comentários -->
+        <div id="screen-comments" class="screen">
+            <div class="header-back">
+                <button class="back-btn" onclick="navigateTo('screen-feed')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                </button>
+                <h1>Comentários</h1>
+                <div style="width: 40px;"></div>
+            </div>
+
+            <div class="content comments-content">
+                <div class="comments-list">
+                    <div class="comment">
+                        <div class="comment-avatar">RP</div>
+                        <div class="comment-body">
+                            <span class="comment-user">Ricardo Pereira</span>
+                            <p>Ficou show! Trabalho de primeira.</p>
+                            <span class="comment-time">2h</span>
+                        </div>
+                    </div>
+                    <div class="comment">
+                        <div class="comment-avatar">AF</div>
+                        <div class="comment-body">
+                            <span class="comment-user">Ana Ferreira</span>
+                            <p>Parabéns Maria! Excelente acabamento!</p>
+                            <span class="comment-time">1h</span>
+                        </div>
+                    </div>
+                    <div class="comment">
+                        <div class="comment-avatar">LM</div>
+                        <div class="comment-body">
+                            <span class="comment-user">Lucas Mendes</span>
+                            <p>Esse STELION é demais!</p>
+                            <span class="comment-time">45min</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="comment-input-area">
+                <input type="text" placeholder="Adicionar comentário...">
+                <button class="send-btn">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Tela de Horas (Simplificada) -->
+        <div id="screen-hours" class="screen">
+            <div class="header">
+                <div class="header-left">
+                    <h1 class="header-title">Minhas Horas</h1>
+                </div>
+                <div class="header-right"></div>
+            </div>
+
+            <div class="content">
+                <!-- Period Selector -->
+                <div class="period-selector">
+                    <button class="period-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="15,18 9,12 15,6"/>
+                        </svg>
+                    </button>
+                    <span class="period-text">Dezembro 2024</span>
+                    <button class="period-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9,18 15,12 9,6"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Hours Summary -->
+                <div class="hours-summary-simple">
+                    <div class="hours-total">
+                        <span class="hours-big">142h</span>
+                        <span class="hours-label">Total do Mês</span>
+                    </div>
+                </div>
+
+                <!-- Hours by Project -->
+                <div class="section-title">Horas por Projeto</div>
+                <div class="hours-project-list">
+                    <div class="hours-project-card active-project">
+                        <div class="project-hours-header">
+                            <div class="project-status-dot active"></div>
+                            <h3>Residência Alto de Pinheiros</h3>
+                        </div>
+                        <div class="project-hours-stats">
+                            <div class="hours-stat">
+                                <span class="hours-value">48h</span>
+                                <span class="hours-desc">registradas</span>
+                            </div>
+                            <div class="hours-stat">
+                                <span class="hours-value">8</span>
+                                <span class="hours-desc">check-ins</span>
+                            </div>
+                        </div>
+                        <div class="hours-history-mini">
+                            <span class="history-item">Hoje: 6h</span>
+                            <span class="history-item">Ontem: 8h</span>
+                            <span class="history-item">Qua: 7h</span>
+                        </div>
+                    </div>
+
+                    <div class="hours-project-card active-project">
+                        <div class="project-hours-header">
+                            <div class="project-status-dot active"></div>
+                            <h3>Ed. Comercial Faria Lima</h3>
+                        </div>
+                        <div class="project-hours-stats">
+                            <div class="hours-stat">
+                                <span class="hours-value">72h</span>
+                                <span class="hours-desc">registradas</span>
+                            </div>
+                            <div class="hours-stat">
+                                <span class="hours-value">12</span>
+                                <span class="hours-desc">check-ins</span>
+                            </div>
+                        </div>
+                        <div class="hours-history-mini">
+                            <span class="history-item">Seg: 9h</span>
+                            <span class="history-item">Dom: 6h</span>
+                            <span class="history-item">Sáb: 8h</span>
+                        </div>
+                    </div>
+
+                    <div class="hours-project-card completed-project">
+                        <div class="project-hours-header">
+                            <div class="project-status-dot completed"></div>
+                            <h3>Restaurante Jardins</h3>
+                            <span class="completed-badge">Concluído</span>
+                        </div>
+                        <div class="project-hours-stats">
+                            <div class="hours-stat">
+                                <span class="hours-value">22h</span>
+                                <span class="hours-desc">neste mês</span>
+                            </div>
+                            <div class="hours-stat">
+                                <span class="hours-value">86h</span>
+                                <span class="hours-desc">total</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="bottom-nav">
+                <div class="nav-item" onclick="navigateTo('screen-projects')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <span>Projetos</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-feed')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21,15 16,10 5,21"/>
+                    </svg>
+                    <span>Feed</span>
+                </div>
+                <div class="nav-item active" onclick="navigateTo('screen-hours')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12,6 12,12 16,14"/>
+                    </svg>
+                    <span>Horas</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-learn')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                        <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                    </svg>
+                    <span>Aprender</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-profile')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <span>Perfil</span>
+                </div>
+            </nav>
+        </div>
+
+        <!-- Tela de Relatório -->
+        <div id="screen-report" class="screen">
+            <div class="header-back">
+                <button class="back-btn" onclick="navigateTo('screen-project-detail')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                </button>
+                <h1>Relatório de Obra</h1>
+                <div style="width: 40px;"></div>
+            </div>
+
+            <div class="content">
+                <div class="report-project">
+                    <span class="label">Projeto</span>
+                    <span class="project">Residência Alto de Pinheiros</span>
+                </div>
+
+                <div class="report-date">
+                    <span class="label">Data</span>
+                    <span class="date">13 de Dezembro, 2024</span>
+                </div>
+
+                <!-- Audio Recording -->
+                <div class="audio-section">
+                    <div class="section-title">Registrar por Áudio</div>
+                    <p class="audio-hint">Descreva as atividades realizadas, materiais utilizados, ocorrências e próximos passos.</p>
+
+                    <div class="audio-recorder" id="audioRecorder">
+                        <div class="audio-waves">
+                            <div class="wave"></div>
+                            <div class="wave"></div>
+                            <div class="wave"></div>
+                            <div class="wave"></div>
+                            <div class="wave"></div>
+                        </div>
+                        <button class="record-btn" onclick="toggleRecording()">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                            </svg>
+                        </button>
+                        <span class="record-time">00:00</span>
+                    </div>
+                </div>
+
+                <!-- Quick Tags -->
+                <div class="section-title">Tags Rápidas</div>
+                <div class="quick-tags">
+                    <div class="tag-item">Aplicação concluída</div>
+                    <div class="tag-item">Aguardando material</div>
+                    <div class="tag-item">Problema identificado</div>
+                    <div class="tag-item">Cura em andamento</div>
+                    <div class="tag-item">Lixamento feito</div>
+                    <div class="tag-item">Selador aplicado</div>
+                </div>
+
+                <!-- Photos -->
+                <div class="section-title">Fotos</div>
+                <div class="photos-grid">
+                    <div class="photo-add">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <circle cx="8.5" cy="8.5" r="1.5"/>
+                            <polyline points="21,15 16,10 5,21"/>
+                        </svg>
+                        <span>Adicionar</span>
+                    </div>
+                    <div class="photo-placeholder"></div>
+                    <div class="photo-placeholder"></div>
+                </div>
+
+                <button class="btn-primary" onclick="showReportSuccess()">
+                    Enviar Relatório
+                </button>
+            </div>
+        </div>
+
+        <!-- Tela Educacional / Gamificação -->
+        <div id="screen-learn" class="screen">
+            <div class="header">
+                <div class="header-left">
+                    <h1 class="header-title">Academia</h1>
+                </div>
+                <div class="header-right"></div>
+            </div>
+
+            <div class="content">
+                <!-- User Level Card -->
+                <div class="user-level-card">
+                    <div class="level-avatar">
+                        <div class="avatar-ring">
+                            <svg viewBox="0 0 36 36" class="circular-progress">
+                                <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                                <path class="circle-progress" stroke-dasharray="78, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                            </svg>
+                            <div class="avatar-inner">JS</div>
+                        </div>
+                    </div>
+                    <div class="level-details">
+                        <span class="user-level">Nível 7</span>
+                        <span class="user-title">Aplicador Sênior</span>
+                        <div class="xp-info">
+                            <span>2.350 / 3.000 XP</span>
+                            <span class="xp-needed">650 XP para o próximo nível</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Achievements -->
+                <div class="section-title">Conquistas Recentes</div>
+                <div class="achievements-row">
+                    <div class="achievement unlocked">
+                        <div class="achievement-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                            </svg>
+                        </div>
+                        <span>Primeira Obra</span>
+                    </div>
+                    <div class="achievement unlocked">
+                        <div class="achievement-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12,6 12,12 16,14" stroke="#000" stroke-width="2" fill="none"/>
+                            </svg>
+                        </div>
+                        <span>100 Horas</span>
+                    </div>
+                    <div class="achievement unlocked">
+                        <div class="achievement-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                                <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                            </svg>
+                        </div>
+                        <span>5 Cursos</span>
+                    </div>
+                    <div class="achievement locked">
+                        <div class="achievement-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            </svg>
+                        </div>
+                        <span>Mestre</span>
+                    </div>
+                </div>
+
+                <!-- Learning Paths -->
+                <div class="section-title">Trilhas de Aprendizado</div>
+                <div class="learning-paths">
+                    <div class="path-card">
+                        <div class="path-icon stelion">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                <path d="M3 9h18M9 21V9"/>
+                            </svg>
+                        </div>
+                        <div class="path-info">
+                            <h3>Sistema STELION</h3>
+                            <p>Aprenda aplicação de pisos monolíticos</p>
+                            <div class="path-progress">
+                                <div class="path-bar">
+                                    <div class="path-fill" style="width: 60%"></div>
+                                </div>
+                                <span>60%</span>
+                            </div>
+                        </div>
+                        <span class="path-xp">+150 XP</span>
+                    </div>
+
+                    <div class="path-card">
+                        <div class="path-icon safety">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            </svg>
+                        </div>
+                        <div class="path-info">
+                            <h3>Segurança em Obra</h3>
+                            <p>Práticas e equipamentos essenciais</p>
+                            <div class="path-progress">
+                                <div class="path-bar">
+                                    <div class="path-fill" style="width: 100%"></div>
+                                </div>
+                                <span>100%</span>
+                            </div>
+                        </div>
+                        <span class="path-xp completed">Concluído</span>
+                    </div>
+
+                    <div class="path-card">
+                        <div class="path-icon tools">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                            </svg>
+                        </div>
+                        <div class="path-info">
+                            <h3>Ferramentas e Equipamentos</h3>
+                            <p>Uso correto de cada ferramenta</p>
+                            <div class="path-progress">
+                                <div class="path-bar">
+                                    <div class="path-fill" style="width: 25%"></div>
+                                </div>
+                                <span>25%</span>
+                            </div>
+                        </div>
+                        <span class="path-xp">+200 XP</span>
+                    </div>
+                </div>
+
+                <!-- Weekly Challenge -->
+                <div class="section-title">Desafio da Semana</div>
+                <div class="challenge-card">
+                    <div class="challenge-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                        </svg>
+                    </div>
+                    <div class="challenge-info">
+                        <h3>Pontualidade Perfeita</h3>
+                        <p>Faça check-in no horário correto por 5 dias seguidos</p>
+                        <div class="challenge-progress">
+                            <div class="check-days">
+                                <div class="day checked">S</div>
+                                <div class="day checked">T</div>
+                                <div class="day checked">Q</div>
+                                <div class="day">Q</div>
+                                <div class="day">S</div>
+                            </div>
+                            <span class="challenge-reward">+500 XP</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="bottom-nav">
+                <div class="nav-item" onclick="navigateTo('screen-projects')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <span>Projetos</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-feed')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21,15 16,10 5,21"/>
+                    </svg>
+                    <span>Feed</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-hours')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12,6 12,12 16,14"/>
+                    </svg>
+                    <span>Horas</span>
+                </div>
+                <div class="nav-item active" onclick="navigateTo('screen-learn')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                        <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                    </svg>
+                    <span>Aprender</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-profile')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <span>Perfil</span>
+                </div>
+            </nav>
+        </div>
+
+        <!-- Tela de Perfil -->
+        <div id="screen-profile" class="screen">
+            <div class="header-back">
+                <button class="back-btn" onclick="navigateTo('screen-projects')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                </button>
+                <h1>Perfil</h1>
+                <div style="width: 40px;"></div>
+            </div>
+
+            <div class="content">
+                <div class="profile-header">
+                    <div class="profile-avatar-large">JS</div>
+                    <h2>João Silva</h2>
+                    <span class="profile-username">@joao.silva</span>
+                    <p class="profile-role">Aplicador Sênior</p>
+                    <div class="profile-stats">
+                        <div class="stat">
+                            <span class="stat-value">1.2k</span>
+                            <span class="stat-label">m² aplicados</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value">12</span>
+                            <span class="stat-label">Projetos</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value">Nv. 7</span>
+                            <span class="stat-label">Nível</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="profile-menu">
+                    <div class="menu-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                            <circle cx="12" cy="7" r="4"/>
+                        </svg>
+                        <span>Editar Perfil</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="chevron">
+                            <polyline points="9,18 15,12 9,6"/>
+                        </svg>
+                    </div>
+                    <div class="menu-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                        </svg>
+                        <span>Configurações</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="chevron">
+                            <polyline points="9,18 15,12 9,6"/>
+                        </svg>
+                    </div>
+                    <div class="menu-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                        <span>Ajuda</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="chevron">
+                            <polyline points="9,18 15,12 9,6"/>
+                        </svg>
+                    </div>
+                    <div class="menu-item logout" onclick="navigateTo('screen-login')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                            <polyline points="16 17 21 12 16 7"/>
+                            <line x1="21" y1="12" x2="9" y2="12"/>
+                        </svg>
+                        <span>Sair</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="chevron">
+                            <polyline points="9,18 15,12 9,6"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <div class="app-version">
+                    <span>Monofloor Equipes v1.0.0</span>
+                </div>
+            </div>
+
+            <nav class="bottom-nav">
+                <div class="nav-item" onclick="navigateTo('screen-projects')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <span>Projetos</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-feed')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21,15 16,10 5,21"/>
+                    </svg>
+                    <span>Feed</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-hours')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12,6 12,12 16,14"/>
+                    </svg>
+                    <span>Horas</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('screen-learn')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                        <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                    </svg>
+                    <span>Aprender</span>
+                </div>
+                <div class="nav-item active" onclick="navigateTo('screen-profile')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <span>Perfil</span>
+                </div>
+            </nav>
+        </div>
+
+        <!-- Modal de Saída do Projeto -->
+        <div id="leaving-modal" class="modal">
+            <div class="modal-content leaving-modal-content">
+                <div class="leaving-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                        <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                </div>
+                <h2>Você está saindo do projeto</h2>
+                <p>Você está indo para:</p>
+
+                <div class="leaving-options">
+                    <button class="leaving-option" onclick="selectLeavingReason('insumos')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="9" cy="21" r="1"/>
+                            <circle cx="20" cy="21" r="1"/>
+                            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                        </svg>
+                        <span>Comprar insumos para o projeto</span>
+                    </button>
+                    <button class="leaving-option" onclick="selectLeavingReason('outro')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        <span>Outro projeto</span>
+                    </button>
+                    <button class="leaving-option" onclick="selectLeavingReason('fim')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12,6 12,12 16,14"/>
+                        </svg>
+                        <span>Já terminei por hoje</span>
+                    </button>
+                </div>
+
+                <button class="btn-secondary" onclick="closeLeavingModal()">Cancelar</button>
+            </div>
+        </div>
+
+        <!-- Success Modal -->
+        <div id="success-modal" class="modal">
+            <div class="modal-content">
+                <div class="success-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22,4 12,14.01 9,11.01"/>
+                    </svg>
+                </div>
+                <h2 id="modal-title">Check-in Realizado!</h2>
+                <p id="modal-message">Bom trabalho! Seu expediente começou às 08:00.</p>
+                <button class="btn-primary" onclick="closeModal()">Continuar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="pipefy.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

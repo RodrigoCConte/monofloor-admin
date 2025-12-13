@@ -82,7 +82,7 @@ export const generateAdminToken = (user: { id: string; email: string; role: stri
   };
 
   return jwt.sign(payload, config.jwt.admin.secret, {
-    expiresIn: config.jwt.admin.expiresIn,
+    expiresIn: config.jwt.admin.expiresIn as any,
   });
 };
 
@@ -95,6 +95,6 @@ export const generateMobileToken = (user: { id: string; email: string; role: str
   };
 
   return jwt.sign(payload, config.jwt.mobile.secret, {
-    expiresIn: config.jwt.mobile.expiresIn,
+    expiresIn: config.jwt.mobile.expiresIn as any,
   });
 };

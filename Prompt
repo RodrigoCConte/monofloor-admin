@@ -1,0 +1,198 @@
+Vamos criar um app para a monofloor. A essencia de design é comunicacao é essa:
+DIRETRIZ PARA GERAÇÃO DE DOCUMENTOS DE APRESENTAÇÃO – MONOFLOOR
+
+Objetivo do documento
+Todo documento de apresentação da Monofloor (proposta, relatório, apresentação técnica, manifesto, estudo, etc.) deve:
+
+– Tornar fácil entender a ideia central.
+– Ajudar a tomar decisão (especificar, contratar, aprovar, seguir adiante).
+– Valorizar a qualidade das ideias, na ordem: clareza do texto, organização visual, conteúdo técnico.
+
+Sempre que um agente ou pessoa for gerar um documento, deve se perguntar:
+“Depois de ler isso, o que o leitor passa a entender, decidir ou fazer que não conseguia antes?”
+
+Estrutura básica obrigatória
+
+Todo documento deve seguir, na essência, esta sequência:
+
+Abertura com promessa clara (por que este documento existe).
+
+Contexto e enquadramento do problema.
+
+Ideia central / solução proposta.
+
+Desenvolvimento em blocos (mínimo 3, máximo 7 blocos principais).
+
+Evidências, comparações e exemplos.
+
+Conclusão em forma de contribuições (o que entregamos aqui).
+
+Próximos passos, quando fizer sentido.
+
+Abertura com promessa (empowerment promise escrita)
+
+No início do documento, incluir sempre um parágrafo que responda claramente:
+
+– O que este documento vai esclarecer.
+– Para quem ele foi escrito.
+– Qual decisão ou entendimento ele pretende destravar.
+
+Exemplos de frases de abertura:
+
+– “Este documento foi preparado para ajudar você a decidir se o sistema STELION™ é adequado para o seu projeto, explicando desempenho, riscos, limites e benefícios em linguagem objetiva.”
+– “Aqui você vai entender a diferença entre um revestimento monolítico comum e um monolítico ultra compacto, e como isso impacta durabilidade, manutenção e estética ao longo dos anos.”
+
+Essa promessa deve ser específica e alinhada com o leitor-alvo (cliente final, arquiteto, engenheiro, time interno etc).
+
+Conteúdo: como organizar as ideias
+
+4.1) Ciclar nas ideias principais
+– Definir de 1 a 3 ideias centrais do documento.
+– Retomar essas ideias ao longo do texto em diferentes trechos, com outras palavras e exemplos.
+
+Exemplo: em um documento sobre STELION:
+– Ideia 1: densidade e resistência acima da média do mercado.
+– Ideia 2: previsibilidade de obra (menos retrabalho, menos patologia).
+– Ideia 3: valor estético contínuo (sem juntas, base silenciosa).
+
+Essas ideias devem aparecer na abertura, ser desenvolvidas no meio e reaparecer na conclusão.
+
+4.2) Cercar a ideia (definir o que é e o que não é)
+– Sempre explicar o que é o conceito e o que costuma ser confundido com ele.
+
+Modelo de parágrafo:
+
+– “Quando falamos em revestimento monolítico na Monofloor, NÃO estamos falando de microcimento, pintura epóxi industrial ou porcelanato de grandes formatos. Estamos falando de um compósito mineral e resinoso de alta performance, com X características, Y desempenho e Z modo de aplicação.”
+
+Sempre que possível, incluir comparações diretas com alternativas reais de mercado.
+
+4.3) Pontuação estrutural (para o leitor poder “voltar para o ônibus”)
+– Usar numeração e subtítulos para marcar etapas do raciocínio:
+– 1) Contexto
+– 2) Problema
+– 3) Solução proposta
+– 4) Benefícios concretos
+– 5) Riscos e limitações
+– 6) Conclusão e próximos passos
+
+– Dentro dos blocos, usar frases como:
+– “Em primeiro lugar…”
+– “Em segundo lugar…”
+– “Por fim…”
+
+O leitor deve conseguir “escanejar” o documento e entender a estrutura apenas olhando títulos e subtítulos.
+
+4.4) Perguntas dentro do texto
+
+Usar perguntas retóricas para manter o leitor ativo:
+
+– “Qual é o maior risco quando se especifica um revestimento contínuo sem conhecer o sistema aplicado?”
+– “O que acontece com a manutenção do projeto se o piso começar a trincar após dois anos?”
+
+Depois da pergunta, responder de forma direta em seguida.
+
+Estilo de escrita
+
+– Clara, direta, técnica sem ser hermética.
+– Frases relativamente curtas.
+– Parágrafos curtos (de preferência 3 a 6 linhas).
+– Evitar jargão excessivo sem explicação. Sempre que usar termo técnico, explicar pelo menos uma vez.
+– Misturar:
+– Explicação técnica.
+– Exemplo concreto.
+– Consequência prática para o leitor.
+
+Exemplo de microestrutura:
+
+– Parágrafo 1: explicar o conceito.
+– Parágrafo 2: dar um exemplo de obra ou situação real.
+– Parágrafo 3: dizer o que isso significa na prática para o cliente / arquiteto.
+
+Visual e “peso” do documento
+
+– Nunca encher páginas com blocos gigantes de texto sem respiro.
+– Usar listas numeradas e com marcadores para organizar ideias.
+– Usar quadros comparativos simples quando estiver comparando sistemas (Monofloor vs outras soluções).
+– Imagens só quando forem realmente úteis (corte técnico, foto de obra, gráfico de desempenho).
+– Evitar inserir imagens decorativas sem função.
+
+Regra geral:
+Se uma página parece “pesada” demais, reorganizar em mais seções, mais listas e mais respiro.
+
+Comparações, evidências e histórias
+
+Todo documento importante deve conter pelo menos um dos seguintes elementos:
+
+– Comparação explícita:
+– Desempenho, manutenção, estética, prazo, risco.
+– Evidência concreta:
+– Dados de testes, tempo de uso, histórico de obras.
+– História curta (case):
+– Situação inicial, solução usada, resultado obtido, lição aprendida.
+
+Formato preferencial de case:
+
+– Contexto (obra, tipo de cliente, desafios).
+– Problema (o que estava em jogo).
+– Solução Monofloor (sistema, forma de aplicação).
+– Resultado (indicadores ou fatos concretos).
+– Aprendizado (o que isso mostra sobre o sistema).
+
+Tono de voz Monofloor (para documentos)
+
+– Confiante, mas não arrogante.
+– Respeitoso com o leitor (não infantilizar, não “vender milagre”).
+– Técnico, porém com consciência estética e arquitetônica.
+– Mostrar paixão pela solução, mas com disciplina e serenidade.
+
+Frases típicas desse tom:
+
+– “Na prática, isso significa…”
+– “O que queremos evitar aqui é…”
+– “Do ponto de vista arquitetônico, o impacto é…”
+– “Tecnicamente, a diferença central é…”
+
+Conclusão: sempre em forma de contribuições
+
+O final do documento NUNCA deve ser um “obrigado” textual como foco principal.
+
+Toda conclusão deve incluir um bloco chamado “Contribuições deste documento” ou equivalente, respondendo:
+
+– O que entregamos de concreto aqui?
+– Que clareza ou decisão isso habilita?
+
+Modelo de final:
+
+Contribuições deste documento:
+
+Esclarecemos a diferença entre X e Y em termos de desempenho e risco.
+
+Mostramos como o sistema Z se comporta em situação real de obra.
+
+Apresentamos os critérios recomendados para decidir se esta solução é adequada ao seu projeto.
+
+Em seguida, se fizer sentido, adicionar “Próximos passos recomendados”.
+
+Próximos passos
+
+Sempre que possível, fechar indicando:
+
+– O que o leitor pode/precisa fazer agora (enviar planta, agendar visita, especificar em projeto, etc.).
+– Para quem ele deve falar (sem necessariamente colocar e-mail ou telefone no corpo, caso isso vá em outro lugar do fluxo).
+
+Exemplo:
+
+– “Se você deseja aprofundar a avaliação para o seu projeto, o próximo passo é compartilhar planta e metragens. A partir disso, conseguimos preparar um estudo de solução com cronograma estimado e recomendações técnicas específicas.”
+
+Checklist rápido para qualquer documento Monofloor
+
+Antes de considerar um documento “pronto”, checar:
+
+– Tem uma frase de abertura que explica por que o leitor deveria ler isso?
+– As 1–3 ideias centrais estão claras e reaparecem ao longo do texto?
+– Está claro o que é a solução Monofloor e o que ela NÃO é?
+– O texto está organizado em seções numeradas ou bem separadas?
+– Existem listas e comparações para facilitar leitura?
+– Há pelo menos um exemplo concreto, comparação ou pequeno case?
+– A conclusão está escrita em forma de contribuições, e não apenas “obrigado”?
+– Há um próximo passo explícito para o leitor?

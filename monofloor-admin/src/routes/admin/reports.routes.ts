@@ -97,7 +97,7 @@ router.post(
         reports: reports.map((r) => ({
           userName: r.user.name,
           notes: r.notes || '',
-          transcription: r.transcription || undefined,
+          transcription: r.audioTranscription || undefined,
           tags: r.tags as string[],
           time: r.reportDate.toLocaleTimeString('pt-BR', {
             hour: '2-digit',
@@ -117,7 +117,7 @@ router.post(
           generatedByAdminId: req.user!.sub,
           type: 'DAILY',
           title: generatedReport.title,
-          content: generatedReport,
+          content: JSON.parse(JSON.stringify(generatedReport)),
           periodStart: startOfDay,
           periodEnd: endOfDay,
           sourceReportIds: reports.map((r) => r.id),
@@ -211,7 +211,7 @@ router.post(
 
       for (const [day, dayReports] of reportsByDay) {
         const notes = dayReports
-          .map((r) => `${r.user.name}: ${r.notes || r.transcription || 'Sem notas'}`)
+          .map((r) => `${r.user.name}: ${r.notes || r.audioTranscription || 'Sem notas'}`)
           .join('\n');
         dailySummaries.push(`[${day}]\n${notes}`);
       }

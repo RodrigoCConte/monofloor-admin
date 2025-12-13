@@ -39,7 +39,7 @@ export class WhisperService {
       throw new Error(`Whisper API error: ${response.status} - ${error}`);
     }
 
-    const data = await response.json();
+    const data: any = await response.json();
 
     return {
       text: data.text,
@@ -75,7 +75,7 @@ export class WhisperService {
       throw new Error(`Whisper API error: ${response.status} - ${error}`);
     }
 
-    const data = await response.json();
+    const data: any = await response.json();
 
     return {
       text: data.text,
