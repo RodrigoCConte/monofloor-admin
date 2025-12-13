@@ -42,7 +42,7 @@ onMounted(loadData);
   <div class="dashboard">
     <header class="header">
       <div class="header-left">
-        <span class="logo">MONOFLOOR</span>
+        <img src="/logo.png" alt="Monofloor" class="header-logo" />
         <span class="logo-badge">ADMIN</span>
       </div>
       <nav class="nav">
@@ -184,11 +184,9 @@ onMounted(loadData);
   gap: 12px;
 }
 
-.logo {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--accent-primary);
-  letter-spacing: 2px;
+.header-logo {
+  height: 32px;
+  width: auto;
 }
 
 .logo-badge {

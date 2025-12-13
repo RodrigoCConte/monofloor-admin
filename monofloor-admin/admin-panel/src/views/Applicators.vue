@@ -90,10 +90,8 @@ onMounted(loadApplicators);
   <div class="page">
     <header class="header">
       <div class="header-left">
-        <div class="logo">
-          <span class="logo-text">MONOFLOOR</span>
-          <span class="logo-subtitle">ADMIN</span>
-        </div>
+        <img src="/logo.png" alt="Monofloor" class="header-logo" />
+        <span class="logo-badge">ADMIN</span>
       </div>
       <nav class="nav">
         <router-link to="/" class="nav-link">
@@ -270,24 +268,19 @@ onMounted(loadApplicators);
   justify-content: space-between;
 }
 
-.logo {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.header-logo {
+  height: 32px;
+  width: auto;
 }
 
-.logo-text {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--accent-primary);
-  letter-spacing: 2px;
-}
-
-.logo-subtitle {
+.logo-badge {
   font-size: 10px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-tertiary);
-  letter-spacing: 4px;
+  background: var(--bg-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  letter-spacing: 1px;
 }
 
 .nav {

@@ -9,9 +9,12 @@ const prisma = new PrismaClient();
 router.get('/stats', adminAuth, async (req, res, next) => {
   try {
     // Total projects in execution
-    const totalProjectsInExecution = await prisma.project.count({
+    const activeProjects = await prisma.project.count({
       where: { status: 'EM_EXECUCAO' },
     });
+
+    // Total projects
+    const totalProjects = await prisma.project.count();
 
     // Total approved applicators
     const totalApplicators = await prisma.user.count({
@@ -22,6 +25,11 @@ router.get('/stats', adminAuth, async (req, res, next) => {
     const m2Result = await prisma.project.aggregate({
       where: { status: 'EM_EXECUCAO' },
       _sum: { m2Total: true },
+    });
+
+    // Total square meters applied (sum from all users)
+    const m2AppliedResult = await prisma.user.aggregate({
+      _sum: { totalM2Applied: true },
     });
 
     // Online applicators (users with active check-in)
@@ -40,11 +48,15 @@ router.get('/stats', adminAuth, async (req, res, next) => {
     res.json({
       success: true,
       data: {
-        totalProjectsInExecution,
+        // Names used by frontend
+        activeProjects,
         totalApplicators,
+        pendingApprovals,
+        totalM2Applied: Number(m2AppliedResult._sum.totalM2Applied) || 0,
+        // Additional data
+        totalProjects,
         totalSquareMeters: Number(m2Result._sum.m2Total) || 0,
         onlineApplicators,
-        pendingApprovals,
       },
     });
   } catch (error) {

@@ -22,8 +22,7 @@ const handleSubmit = async () => {
     <div class="login-card">
       <div class="login-header">
         <div class="logo">
-          <span class="logo-text">MONOFLOOR</span>
-          <span class="logo-subtitle">EQUIPES</span>
+          <img src="/logo.png" alt="Monofloor" class="logo-image" />
         </div>
         <p class="admin-badge">Painel Administrativo</p>
       </div>
@@ -102,18 +101,9 @@ const handleSubmit = async () => {
   margin-bottom: 16px;
 }
 
-.logo-text {
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--accent-primary);
-  letter-spacing: 4px;
-}
-
-.logo-subtitle {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  letter-spacing: 8px;
+.logo-image {
+  height: 60px;
+  width: auto;
 }
 
 .admin-badge {

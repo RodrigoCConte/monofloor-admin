@@ -17,6 +17,11 @@ export interface ProjectImportRow {
   material?: string;
   cor?: string;
   horas_estimadas?: number;
+  codigo?: string; // Pipefy ID
+  equipe?: string;
+  especiais?: string;
+  detalhamento?: string;
+  andamento?: string;
 }
 
 export interface ImportResult {
@@ -27,17 +32,24 @@ export interface ImportResult {
 }
 
 const STATUS_MAP: Record<string, ProjectStatus> = {
+  // Portuguese variations
   'em execução': 'EM_EXECUCAO',
   'em execucao': 'EM_EXECUCAO',
   'execução': 'EM_EXECUCAO',
   'execucao': 'EM_EXECUCAO',
   'ativo': 'EM_EXECUCAO',
+  'em andamento': 'EM_EXECUCAO',
+  'fazendo': 'EM_EXECUCAO',
   'pausado': 'PAUSADO',
   'parado': 'PAUSADO',
   'concluído': 'CONCLUIDO',
   'concluido': 'CONCLUIDO',
   'finalizado': 'CONCLUIDO',
   'cancelado': 'CANCELADO',
+  // Pipefy phases
+  'caixa de entrada': 'EM_EXECUCAO',
+  'início': 'EM_EXECUCAO',
+  'inicio': 'EM_EXECUCAO',
 };
 
 function parseStatus(value: string | undefined): ProjectStatus {
@@ -60,52 +72,73 @@ function normalizeHeaders(row: any): ProjectImportRow {
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '') // remove acentos
+      .replace(/[()]/g, '') // remove parenteses
       .replace(/\s+/g, '_')
       .trim();
 
-    // Map common variations
+    // Map common variations including Pipefy columns
     const keyMap: Record<string, string> = {
+      // Titulo / Nome do projeto
       'titulo': 'titulo',
       'title': 'titulo',
       'nome': 'titulo',
       'projeto': 'titulo',
+      // Cliente
       'cliente': 'cliente',
       'client': 'cliente',
+      // Endereco
       'endereco': 'endereco',
       'address': 'endereco',
       'localizacao': 'endereco',
+      // M2 Total
       'm2_total': 'm2_total',
       'm2total': 'm2_total',
       'area_total': 'm2_total',
       'total_m2': 'm2_total',
+      // Piso
       'm2_piso': 'm2_piso',
       'm2piso': 'm2_piso',
-      'piso': 'm2_piso',
       'piso_m2': 'm2_piso',
+      'piso_m2_': 'm2_piso', // Pipefy: "Piso (m²)"
+      // Parede
       'm2_parede': 'm2_parede',
       'm2parede': 'm2_parede',
-      'parede': 'm2_parede',
       'parede_m2': 'm2_parede',
+      'parede_m2_': 'm2_parede', // Pipefy: "Parede (m²)"
+      // Teto
       'm2_teto': 'm2_teto',
       'm2teto': 'm2_teto',
-      'teto': 'm2_teto',
       'teto_m2': 'm2_teto',
+      'teto_m2_': 'm2_teto', // Pipefy: "Teto (m²)"
+      // Rodape
       'm_rodape': 'm_rodape',
       'mrodape': 'm_rodape',
-      'rodape': 'm_rodape',
-      'rodape_m': 'm_rodape',
+      'rodape_m_linear': 'm_rodape', // Pipefy: "Rodapé (m linear)"
+      'rodape_m_linear_': 'm_rodape',
+      // Status
       'status': 'status',
       'situacao': 'status',
-      'fase': 'status',
+      'fase_atual': 'status', // Pipefy: "Fase atual"
+      // Consultor
       'consultor': 'consultor',
       'vendedor': 'consultor',
+      // Material
       'material': 'material',
       'tipo': 'material',
+      // Cor
       'cor': 'cor',
       'color': 'cor',
+      // Horas
       'horas_estimadas': 'horas_estimadas',
       'horas': 'horas_estimadas',
       'estimativa_horas': 'horas_estimadas',
+      // Pipefy specific
+      'codigo': 'codigo',
+      'code': 'codigo',
+      'equipe': 'equipe',
+      'especiais': 'especiais',
+      'detalhamento': 'detalhamento',
+      'andamento': 'andamento',
     };
 
     const mappedKey = keyMap[normalizedKey] || normalizedKey;
@@ -151,14 +184,25 @@ export const excelService = {
         }
 
         const title = String(row.titulo).trim();
+        const pipefyCardId = row.codigo ? String(row.codigo).trim() : null;
 
-        // Check if project exists by title + cliente
-        const existingProject = await prisma.project.findFirst({
-          where: {
-            title,
-            cliente: row.cliente ? String(row.cliente).trim() : undefined,
-          },
-        });
+        // Check if project exists by Pipefy ID first, then by title + cliente
+        let existingProject = null;
+
+        if (pipefyCardId) {
+          existingProject = await prisma.project.findFirst({
+            where: { pipefyCardId },
+          });
+        }
+
+        if (!existingProject) {
+          existingProject = await prisma.project.findFirst({
+            where: {
+              title,
+              cliente: row.cliente ? String(row.cliente).trim() : undefined,
+            },
+          });
+        }
 
         const projectData = {
           title,
@@ -174,6 +218,7 @@ export const excelService = {
           material: row.material ? String(row.material).trim() : null,
           cor: row.cor ? String(row.cor).trim() : null,
           estimatedHours: row.horas_estimadas ? parseNumber(row.horas_estimadas) : null,
+          pipefyCardId: pipefyCardId,
         };
 
         if (existingProject) {
