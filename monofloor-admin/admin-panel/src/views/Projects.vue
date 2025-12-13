@@ -15,6 +15,8 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const deleting = ref<string | null>(null);
 const showDeleteModal = ref(false);
 const projectToDelete = ref<any>(null);
+const deletingAll = ref(false);
+const showDeleteAllModal = ref(false);
 
 const logout = () => {
   authStore.logout();
@@ -119,6 +121,19 @@ const confirmDelete = async () => {
   }
 };
 
+const confirmDeleteAll = async () => {
+  deletingAll.value = true;
+  try {
+    await projectsApi.deleteAll();
+    await loadProjects();
+    showDeleteAllModal.value = false;
+  } catch (error: any) {
+    alert('Erro ao deletar: ' + (error.response?.data?.error || 'Erro desconhecido'));
+  } finally {
+    deletingAll.value = false;
+  }
+};
+
 onMounted(loadProjects);
 </script>
 
@@ -192,6 +207,17 @@ onMounted(loadProjects);
               <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             Baixar Template
+          </button>
+          <button
+            v-if="projects.length > 0"
+            @click="showDeleteAllModal = true"
+            class="btn btn-danger-outline"
+          >
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            Deletar Todos
           </button>
           <button @click="triggerFileInput" class="btn btn-primary" :disabled="importing">
             <svg v-if="!importing" class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -335,6 +361,35 @@ onMounted(loadProjects);
           >
             <div v-if="deleting === projectToDelete?.id" class="btn-spinner"></div>
             {{ deleting === projectToDelete?.id ? 'Excluindo...' : 'Excluir Projeto' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete All Confirmation Modal -->
+    <div v-if="showDeleteAllModal" class="modal-overlay" @click="showDeleteAllModal = false">
+      <div class="modal" @click.stop>
+        <div class="modal-header">
+          <svg class="modal-icon modal-icon-danger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <h3>Deletar TODOS os Projetos</h3>
+        </div>
+        <div class="modal-body">
+          <p>Voce esta prestes a excluir <strong>{{ projects.length }} projetos</strong>.</p>
+          <p class="modal-warning">ATENCAO: Esta acao ira remover TODOS os projetos e seus dados relacionados (check-ins, relatorios, documentos). Esta acao NAO pode ser desfeita!</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showDeleteAllModal = false">Cancelar</button>
+          <button
+            class="btn btn-danger"
+            @click="confirmDeleteAll"
+            :disabled="deletingAll"
+          >
+            <div v-if="deletingAll" class="btn-spinner"></div>
+            {{ deletingAll ? 'Excluindo...' : 'Sim, Deletar Todos' }}
           </button>
         </div>
       </div>
@@ -869,5 +924,19 @@ onMounted(loadProjects);
 .btn-danger .btn-spinner {
   border-color: rgba(255, 255, 255, 0.2);
   border-top-color: #fff;
+}
+
+.btn-danger-outline {
+  background: transparent;
+  color: var(--accent-red);
+  border: 1px solid var(--accent-red);
+}
+
+.btn-danger-outline:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.modal-icon-danger {
+  color: var(--accent-red) !important;
 }
 </style>
