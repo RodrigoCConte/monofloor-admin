@@ -1,9 +1,28 @@
 import { Router } from 'express';
 import { PrismaClient, ProjectStatus } from '@prisma/client';
 import { body, param, query, validationResult } from 'express-validator';
+import multer from 'multer';
 import { adminAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
-import { pipefyService } from '../../services/pipefy.service';
+import { excelService } from '../../services/excel.service';
+
+// Configure multer for Excel file upload
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+      'text/csv', // .csv
+    ];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Apenas arquivos Excel (.xlsx, .xls) ou CSV são permitidos'));
+    }
+  },
+});
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -586,31 +605,139 @@ router.get(
   }
 );
 
-// POST /api/admin/projects/sync-pipefy - Sync projects from Pipefy
-router.post('/sync-pipefy', adminAuth, async (req, res, next) => {
+// POST /api/admin/projects/import - Import projects from Excel
+router.post('/import', adminAuth, upload.single('file'), async (req, res, next) => {
   try {
-    const result = await pipefyService.syncProjects();
+    if (!req.file) {
+      throw new AppError('Arquivo Excel é obrigatório', 400, 'FILE_REQUIRED');
+    }
+
+    // Parse Excel file
+    const data = excelService.parseExcel(req.file.buffer);
+
+    if (data.length === 0) {
+      throw new AppError('Arquivo Excel está vazio', 400, 'EMPTY_FILE');
+    }
+
+    // Import projects
+    const result = await excelService.importProjects(data);
 
     // Create audit log
     await prisma.auditLog.create({
       data: {
         adminUserId: req.user!.sub,
-        action: 'SYNC_PIPEFY',
+        action: 'IMPORT_PROJECTS',
         entityType: 'Project',
-        description: `Synced ${result.total} projects from Pipefy (${result.created} created, ${result.updated} updated)`,
+        description: `Imported ${result.total} projects from Excel (${result.created} created, ${result.updated} updated, ${result.errors.length} errors)`,
       },
     });
 
     res.json({
       success: true,
       data: {
-        message: 'Sync completed successfully',
-        ...result,
+        message: 'Importação concluída',
+        total: result.total,
+        created: result.created,
+        updated: result.updated,
+        errors: result.errors,
       },
     });
   } catch (error) {
     next(error);
   }
 });
+
+// GET /api/admin/projects/template - Download Excel template
+router.get('/template', adminAuth, async (req, res, next) => {
+  try {
+    const buffer = excelService.generateTemplate();
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=modelo_projetos.xlsx');
+    res.send(buffer);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/admin/projects/export - Export all projects to Excel
+router.get('/export', adminAuth, async (req, res, next) => {
+  try {
+    const buffer = await excelService.exportProjects();
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=projetos_${new Date().toISOString().split('T')[0]}.xlsx`);
+    res.send(buffer);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/admin/projects - Create single project manually
+router.post(
+  '/',
+  adminAuth,
+  [
+    body('title').trim().isLength({ min: 1 }).withMessage('Título é obrigatório'),
+    body('cliente').optional().trim(),
+    body('endereco').optional().trim(),
+    body('m2Total').optional().isFloat({ min: 0 }),
+    body('m2Piso').optional().isFloat({ min: 0 }),
+    body('m2Parede').optional().isFloat({ min: 0 }),
+    body('m2Teto').optional().isFloat({ min: 0 }),
+    body('mRodape').optional().isFloat({ min: 0 }),
+    body('status').optional().isIn(['EM_EXECUCAO', 'PAUSADO', 'CONCLUIDO', 'CANCELADO']),
+    body('estimatedHours').optional().isFloat({ min: 0 }),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const project = await prisma.project.create({
+        data: {
+          title: req.body.title,
+          cliente: req.body.cliente || null,
+          endereco: req.body.endereco || null,
+          m2Total: req.body.m2Total || 0,
+          m2Piso: req.body.m2Piso || 0,
+          m2Parede: req.body.m2Parede || 0,
+          m2Teto: req.body.m2Teto || 0,
+          mRodape: req.body.mRodape || 0,
+          status: req.body.status || 'EM_EXECUCAO',
+          estimatedHours: req.body.estimatedHours || null,
+          consultor: req.body.consultor || null,
+          material: req.body.material || null,
+          cor: req.body.cor || null,
+        },
+      });
+
+      // Create audit log
+      await prisma.auditLog.create({
+        data: {
+          adminUserId: req.user!.sub,
+          action: 'CREATE_PROJECT',
+          entityType: 'Project',
+          entityId: project.id,
+          newValues: project,
+          description: `Created project ${project.title}`,
+        },
+      });
+
+      res.status(201).json({
+        success: true,
+        data: {
+          ...project,
+          m2Total: Number(project.m2Total),
+          m2Piso: Number(project.m2Piso),
+          m2Parede: Number(project.m2Parede),
+          m2Teto: Number(project.m2Teto),
+          mRodape: Number(project.mRodape),
+          workedHours: Number(project.workedHours),
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 export { router as projectsRoutes };

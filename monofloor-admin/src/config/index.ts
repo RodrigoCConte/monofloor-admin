@@ -23,13 +23,6 @@ export const config = {
     },
   },
 
-  // Pipefy
-  pipefy: {
-    apiToken: process.env.PIPEFY_API_TOKEN || '',
-    pipeId: process.env.PIPEFY_PIPE_ID || '306848975',
-    endpoint: 'https://api.pipefy.com/graphql',
-  },
-
   // OpenAI
   openai: {
     apiKey: process.env.OPENAI_API_KEY || '',
