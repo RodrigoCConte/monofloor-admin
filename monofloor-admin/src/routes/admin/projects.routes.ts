@@ -740,4 +740,94 @@ router.post(
   }
 );
 
+// DELETE /api/admin/projects/:id - Delete project
+router.delete('/:id', adminAuth, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Check if project exists
+    const project = await prisma.project.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            checkins: true,
+            reports: true,
+            assignments: true,
+          },
+        },
+      },
+    });
+
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: 'Projeto não encontrado',
+      });
+    }
+
+    // Delete related records first (cascade)
+    await prisma.$transaction(async (tx) => {
+      // Delete checkins
+      await tx.checkin.deleteMany({
+        where: { projectId: id },
+      });
+
+      // Delete report photos and reports
+      const reports = await tx.report.findMany({
+        where: { projectId: id },
+        select: { id: true },
+      });
+
+      if (reports.length > 0) {
+        await tx.reportPhoto.deleteMany({
+          where: { reportId: { in: reports.map(r => r.id) } },
+        });
+        await tx.report.deleteMany({
+          where: { projectId: id },
+        });
+      }
+
+      // Delete project assignments
+      await tx.projectAssignment.deleteMany({
+        where: { projectId: id },
+      });
+
+      // Delete project documents
+      await tx.projectDocument.deleteMany({
+        where: { projectId: id },
+      });
+
+      // Delete generated reports
+      await tx.generatedReport.deleteMany({
+        where: { projectId: id },
+      });
+
+      // Finally delete the project
+      await tx.project.delete({
+        where: { id },
+      });
+
+      // Create audit log
+      await tx.auditLog.create({
+        data: {
+          adminUserId: req.user!.sub,
+          action: 'DELETE_PROJECT',
+          entityType: 'Project',
+          entityId: id,
+          oldValues: project,
+          description: `Deleted project ${project.title}`,
+        },
+      });
+    });
+
+    res.json({
+      success: true,
+      message: 'Projeto deletado com sucesso',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export { router as projectsRoutes };

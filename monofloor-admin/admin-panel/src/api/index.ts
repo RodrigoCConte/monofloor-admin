@@ -65,6 +65,7 @@ export const projectsApi = {
   getById: (id: string) => api.get(`/api/admin/projects/${id}`),
   create: (data: any) => api.post('/api/admin/projects', data),
   update: (id: string, data: any) => api.put(`/api/admin/projects/${id}`, data),
+  delete: (id: string) => api.delete(`/api/admin/projects/${id}`),
   getTemplate: () => api.get('/api/admin/projects/template', { responseType: 'blob' }),
   importExcel: (file: File) => {
     const formData = new FormData();

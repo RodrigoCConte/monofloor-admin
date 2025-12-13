@@ -12,6 +12,9 @@ const loading = ref(true);
 const filter = ref('all');
 const importing = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
+const deleting = ref<string | null>(null);
+const showDeleteModal = ref(false);
+const projectToDelete = ref<any>(null);
 
 const logout = () => {
   authStore.logout();
@@ -88,6 +91,31 @@ const getStatusLabel = (status: string) => {
     case 'PAUSADO': return 'Pausado';
     case 'FINALIZADO': return 'Finalizado';
     default: return status;
+  }
+};
+
+const openDeleteModal = (project: any) => {
+  projectToDelete.value = project;
+  showDeleteModal.value = true;
+};
+
+const closeDeleteModal = () => {
+  showDeleteModal.value = false;
+  projectToDelete.value = null;
+};
+
+const confirmDelete = async () => {
+  if (!projectToDelete.value) return;
+
+  deleting.value = projectToDelete.value.id;
+  try {
+    await projectsApi.delete(projectToDelete.value.id);
+    await loadProjects();
+    closeDeleteModal();
+  } catch (error: any) {
+    alert('Erro ao deletar: ' + (error.response?.data?.error || 'Erro desconhecido'));
+  } finally {
+    deleting.value = null;
   }
 };
 
@@ -201,16 +229,30 @@ onMounted(loadProjects);
         <div v-for="project in projects" :key="project.id" class="project-card">
           <div class="project-header">
             <h3>{{ project.title }}</h3>
-            <span
-              class="status-badge"
-              :style="{
-                background: getStatusColor(project.status) + '20',
-                color: getStatusColor(project.status),
-                borderColor: getStatusColor(project.status) + '40'
-              }"
-            >
-              {{ getStatusLabel(project.status) }}
-            </span>
+            <div class="project-actions">
+              <span
+                class="status-badge"
+                :style="{
+                  background: getStatusColor(project.status) + '20',
+                  color: getStatusColor(project.status),
+                  borderColor: getStatusColor(project.status) + '40'
+                }"
+              >
+                {{ getStatusLabel(project.status) }}
+              </span>
+              <button
+                class="delete-btn"
+                @click.stop="openDeleteModal(project)"
+                title="Deletar projeto"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                  <line x1="10" y1="11" x2="10" y2="17"/>
+                  <line x1="14" y1="11" x2="14" y2="17"/>
+                </svg>
+              </button>
+            </div>
           </div>
           <div class="project-client">
             <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -268,6 +310,35 @@ onMounted(loadProjects);
         </div>
       </div>
     </main>
+
+    <!-- Delete Confirmation Modal -->
+    <div v-if="showDeleteModal" class="modal-overlay" @click="closeDeleteModal">
+      <div class="modal" @click.stop>
+        <div class="modal-header">
+          <svg class="modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <h3>Confirmar Exclusao</h3>
+        </div>
+        <div class="modal-body">
+          <p>Tem certeza que deseja excluir o projeto <strong>{{ projectToDelete?.title }}</strong>?</p>
+          <p class="modal-warning">Esta acao nao pode ser desfeita. Todos os dados relacionados (check-ins, relatorios, documentos) serao removidos.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="closeDeleteModal">Cancelar</button>
+          <button
+            class="btn btn-danger"
+            @click="confirmDelete"
+            :disabled="deleting === projectToDelete?.id"
+          >
+            <div v-if="deleting === projectToDelete?.id" class="btn-spinner"></div>
+            {{ deleting === projectToDelete?.id ? 'Excluindo...' : 'Excluir Projeto' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -670,5 +741,133 @@ onMounted(loadProjects);
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+/* Project Actions */
+.project-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.delete-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--border-radius);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--accent-red);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  opacity: 0;
+}
+
+.project-card:hover .delete-btn {
+  opacity: 1;
+}
+
+.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: var(--accent-red);
+}
+
+.delete-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 24px 0;
+}
+
+.modal-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--accent-orange);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 20px 24px;
+}
+
+.modal-body p {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.modal-body p:last-child {
+  margin-bottom: 0;
+}
+
+.modal-warning {
+  color: var(--accent-red) !important;
+  background: rgba(239, 68, 68, 0.1);
+  padding: 12px;
+  border-radius: var(--border-radius);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  font-size: 13px !important;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 16px 24px 24px;
+}
+
+.btn-danger {
+  background: var(--accent-red);
+  color: #fff;
+  border: none;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.btn-danger:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.btn-danger .btn-spinner {
+  border-color: rgba(255, 255, 255, 0.2);
+  border-top-color: #fff;
 }
 </style>
