@@ -28,6 +28,56 @@ const validate = (req: any, res: any, next: any) => {
 // ADMIN AUTH
 // =============================================
 
+// POST /api/auth/admin/setup - One-time admin creation (only works if no admin exists)
+router.post(
+  '/admin/setup',
+  [
+    body('email').isEmail().normalizeEmail(),
+    body('password').isLength({ min: 6 }),
+    body('name').trim().isLength({ min: 2 }),
+    body('setupKey').equals('MONOFLOOR_SETUP_2024'),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { email, password, name } = req.body;
+
+      // Check if any admin already exists
+      const existingAdmin = await prisma.adminUser.findFirst();
+      if (existingAdmin) {
+        throw new AppError('Admin already exists', 400, 'ADMIN_EXISTS');
+      }
+
+      const passwordHash = await hashPassword(password);
+
+      const admin = await prisma.adminUser.create({
+        data: {
+          email,
+          passwordHash,
+          name,
+          role: 'SUPER_ADMIN',
+          isActive: true,
+        },
+      });
+
+      res.status(201).json({
+        success: true,
+        data: {
+          message: 'Admin created successfully',
+          user: {
+            id: admin.id,
+            email: admin.email,
+            name: admin.name,
+            role: admin.role,
+          },
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // POST /api/auth/admin/login
 router.post(
   '/admin/login',
