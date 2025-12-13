@@ -25,6 +25,12 @@ const formData = ref({
   material: '',
   cor: '',
   isNightShift: false,
+  // Metragens
+  m2Total: null as number | null,
+  m2Piso: null as number | null,
+  m2Parede: null as number | null,
+  m2Teto: null as number | null,
+  mRodape: null as number | null,
 });
 
 // Team management
@@ -84,6 +90,12 @@ const loadProject = async () => {
       material: project.value.material || '',
       cor: project.value.cor || '',
       isNightShift: project.value.isNightShift || false,
+      // Metragens
+      m2Total: project.value.m2Total,
+      m2Piso: project.value.m2Piso,
+      m2Parede: project.value.m2Parede,
+      m2Teto: project.value.m2Teto,
+      mRodape: project.value.mRodape,
     };
 
     // Set team from response
@@ -130,6 +142,12 @@ const cancelEdit = () => {
       material: project.value.material || '',
       cor: project.value.cor || '',
       isNightShift: project.value.isNightShift || false,
+      // Metragens
+      m2Total: project.value.m2Total,
+      m2Piso: project.value.m2Piso,
+      m2Parede: project.value.m2Parede,
+      m2Teto: project.value.m2Teto,
+      mRodape: project.value.mRodape,
     };
   }
 };
@@ -643,7 +661,64 @@ onMounted(async () => {
               <!-- Measurements Card -->
               <div class="info-card">
                 <h3>Metragens</h3>
-                <div class="measurements-grid">
+                <div v-if="editMode" class="info-fields measurements-edit">
+                  <div class="field">
+                    <label>m² Total</label>
+                    <input
+                      v-model.number="formData.m2Total"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      class="input"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div class="field">
+                    <label>m² Piso</label>
+                    <input
+                      v-model.number="formData.m2Piso"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      class="input"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div class="field">
+                    <label>m² Parede</label>
+                    <input
+                      v-model.number="formData.m2Parede"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      class="input"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div class="field">
+                    <label>m² Teto</label>
+                    <input
+                      v-model.number="formData.m2Teto"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      class="input"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div class="field">
+                    <label>m Rodape</label>
+                    <input
+                      v-model.number="formData.mRodape"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      class="input"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+                <div v-else class="measurements-grid">
                   <div class="measurement">
                     <div class="measurement-icon m2-total">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1682,6 +1757,18 @@ onMounted(async () => {
 }
 
 /* Measurements */
+.measurements-edit {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 600px) {
+  .measurements-edit {
+    grid-template-columns: 1fr;
+  }
+}
+
 .measurements-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

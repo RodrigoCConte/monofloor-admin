@@ -233,6 +233,12 @@ router.put(
     body('consultor').optional().trim(),
     body('material').optional().trim(),
     body('cor').optional().trim(),
+    // Metragens
+    body('m2Total').optional().isFloat({ min: 0 }),
+    body('m2Piso').optional().isFloat({ min: 0 }),
+    body('m2Parede').optional().isFloat({ min: 0 }),
+    body('m2Teto').optional().isFloat({ min: 0 }),
+    body('mRodape').optional().isFloat({ min: 0 }),
   ],
   validate,
   async (req, res, next) => {
@@ -264,6 +270,12 @@ router.put(
         'consultor',
         'material',
         'cor',
+        // Metragens
+        'm2Total',
+        'm2Piso',
+        'm2Parede',
+        'm2Teto',
+        'mRodape',
       ];
 
       for (const field of allowedFields) {
