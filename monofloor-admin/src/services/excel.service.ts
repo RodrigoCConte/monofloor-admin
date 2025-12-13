@@ -92,24 +92,34 @@ function normalizeHeaders(row: any): ProjectImportRow {
       'localizacao': 'endereco',
       // M2 Total
       'm2_total': 'm2_total',
+      'm²_total': 'm2_total', // Pipefy: "M² Total"
       'm2total': 'm2_total',
       'area_total': 'm2_total',
       'total_m2': 'm2_total',
       // Piso
       'm2_piso': 'm2_piso',
+      'm²_piso': 'm2_piso',
       'm2piso': 'm2_piso',
       'piso_m2': 'm2_piso',
+      'piso_m²': 'm2_piso',
       'piso_m2_': 'm2_piso', // Pipefy: "Piso (m²)"
+      'piso_m²_': 'm2_piso',
       // Parede
       'm2_parede': 'm2_parede',
+      'm²_parede': 'm2_parede',
       'm2parede': 'm2_parede',
       'parede_m2': 'm2_parede',
+      'parede_m²': 'm2_parede',
       'parede_m2_': 'm2_parede', // Pipefy: "Parede (m²)"
+      'parede_m²_': 'm2_parede',
       // Teto
       'm2_teto': 'm2_teto',
+      'm²_teto': 'm2_teto',
       'm2teto': 'm2_teto',
       'teto_m2': 'm2_teto',
+      'teto_m²': 'm2_teto',
       'teto_m2_': 'm2_teto', // Pipefy: "Teto (m²)"
+      'teto_m²_': 'm2_teto',
       // Rodape
       'm_rodape': 'm_rodape',
       'mrodape': 'm_rodape',
