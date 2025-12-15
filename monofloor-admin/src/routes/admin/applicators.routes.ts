@@ -3,6 +3,7 @@ import { PrismaClient, UserStatus, UserRole } from '@prisma/client';
 import { body, param, query, validationResult } from 'express-validator';
 import { adminAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
+import { emitRoleEvolution } from '../../services/socket.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -77,6 +78,29 @@ router.get(
             level: true,
             createdAt: true,
             approvedAt: true,
+            location: {
+              select: {
+                isOnline: true,
+                currentProjectId: true,
+                updatedAt: true,
+              },
+            },
+            checkins: {
+              where: {
+                checkoutAt: null,
+              },
+              take: 1,
+              orderBy: { checkinAt: 'desc' },
+              include: {
+                project: {
+                  select: {
+                    id: true,
+                    title: true,
+                    cliente: true,
+                  },
+                },
+              },
+            },
           },
         }),
         prisma.user.count({ where }),
@@ -84,11 +108,18 @@ router.get(
 
       res.json({
         success: true,
-        data: users.map((u) => ({
-          ...u,
-          totalHoursWorked: Number(u.totalHoursWorked),
-          totalM2Applied: Number(u.totalM2Applied),
-        })),
+        data: users.map((u) => {
+          const activeCheckin = u.checkins?.[0];
+          return {
+            ...u,
+            totalHoursWorked: Number(u.totalHoursWorked),
+            totalM2Applied: Number(u.totalM2Applied),
+            isOnline: u.location?.isOnline || false,
+            currentProject: activeCheckin?.project || null,
+            checkins: undefined, // Remove from response
+            location: undefined, // Remove raw location from response
+          };
+        }),
         meta: {
           total,
           page,
@@ -132,6 +163,26 @@ router.get(
           promotedBy: {
             select: { id: true, name: true },
           },
+          // Include user badges
+          badges: {
+            include: {
+              badge: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  iconUrl: true,
+                  color: true,
+                  category: true,
+                  rarity: true,
+                },
+              },
+            },
+            orderBy: [
+              { isPrimary: 'desc' },
+              { awardedAt: 'desc' },
+            ],
+          },
         },
       });
 
@@ -151,12 +202,22 @@ router.get(
         },
       });
 
+      // Format badges for response
+      const primaryBadge = user.badges.find(b => b.isPrimary)?.badge || null;
+      const formattedBadges = user.badges.map(b => ({
+        ...b.badge,
+        isPrimary: b.isPrimary,
+        awardedAt: b.awardedAt,
+      }));
+
       res.json({
         success: true,
         data: {
           ...user,
           totalHoursWorked: Number(user.totalHoursWorked),
           totalM2Applied: Number(user.totalM2Applied),
+          primaryBadge,
+          badges: formattedBadges,
           recentCheckins: recentCheckins.map((c) => ({
             ...c,
             hoursWorked: c.hoursWorked ? Number(c.hoursWorked) : null,
@@ -283,7 +344,7 @@ router.put(
   adminAuth,
   [
     param('id').isUUID(),
-    body('role').isIn(['AUXILIAR', 'APLICADOR', 'APLICADOR_SENIOR', 'LIDER_EQUIPE']),
+    body('role').isIn(['LIDER', 'APLICADOR', 'APLICADOR_AUX', 'LIDER_PREPARACAO', 'PREPARADOR', 'AUXILIAR']),
   ],
   validate,
   async (req, res, next) => {
@@ -321,6 +382,25 @@ router.put(
           description: `Changed role from ${oldRole} to ${newRole}`,
         },
       });
+
+      // Emit role evolution event via Socket.io for real-time notification
+      emitRoleEvolution({
+        userId: user.id,
+        userName: user.name,
+        oldRole: oldRole,
+        newRole: newRole,
+        timestamp: new Date(),
+      });
+
+      // Also send push notification (for when app is in background or closed)
+      try {
+        const { sendRoleEvolutionPush } = await import('../../services/push.service');
+        sendRoleEvolutionPush(user.id, oldRole, newRole).catch((err) => {
+          console.error('[Push] Error sending role evolution push:', err);
+        });
+      } catch (pushError) {
+        console.error('[Push] Error importing push service:', pushError);
+      }
 
       res.json({
         success: true,
@@ -553,6 +633,73 @@ router.delete(
       res.json({
         success: true,
         data: { message: 'User removed from project' },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// DELETE /api/admin/applicators/:id - Delete applicator permanently
+router.delete(
+  '/:id',
+  adminAuth,
+  [param('id').isUUID()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: req.params.id },
+      });
+
+      if (!user) {
+        throw new AppError('Applicator not found', 404, 'USER_NOT_FOUND');
+      }
+
+      // Delete all related data in order
+      // 1. Delete location history
+      await prisma.locationHistory.deleteMany({
+        where: { userId: req.params.id },
+      });
+
+      // 2. Delete user location
+      await prisma.userLocation.deleteMany({
+        where: { userId: req.params.id },
+      });
+
+      // 3. Delete report photos first, then reports
+      const reports = await prisma.report.findMany({
+        where: { userId: req.params.id },
+        select: { id: true },
+      });
+      const reportIds = reports.map((r) => r.id);
+
+      await prisma.reportPhoto.deleteMany({
+        where: { reportId: { in: reportIds } },
+      });
+
+      await prisma.report.deleteMany({
+        where: { userId: req.params.id },
+      });
+
+      // 4. Delete checkins
+      await prisma.checkin.deleteMany({
+        where: { userId: req.params.id },
+      });
+
+      // 5. Delete project assignments
+      await prisma.projectAssignment.deleteMany({
+        where: { userId: req.params.id },
+      });
+
+      // 6. Finally delete the user
+      await prisma.user.delete({
+        where: { id: req.params.id },
+      });
+
+      res.json({
+        success: true,
+        data: { message: 'Applicator deleted successfully' },
       });
     } catch (error) {
       next(error);

@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { PrismaClient, ProjectStatus } from '@prisma/client';
+import { geocodingService } from './geocoding.service';
 
 const prisma = new PrismaClient();
 
@@ -214,10 +215,29 @@ export const excelService = {
           });
         }
 
-        const projectData = {
+        const endereco = row.endereco ? String(row.endereco).trim() : null;
+
+        // Geocode address if available and project doesn't have coordinates
+        let latitude: number | null = null;
+        let longitude: number | null = null;
+
+        if (endereco && (!existingProject?.latitude || !existingProject?.longitude)) {
+          try {
+            const geocodeResult = await geocodingService.geocodeAddress(endereco);
+            if (geocodeResult) {
+              latitude = geocodeResult.latitude;
+              longitude = geocodeResult.longitude;
+            }
+          } catch (geoError) {
+            console.error(`Geocoding failed for row ${rowNum}:`, geoError);
+            // Continue without coordinates
+          }
+        }
+
+        const projectData: any = {
           title,
           cliente: row.cliente ? String(row.cliente).trim() : null,
-          endereco: row.endereco ? String(row.endereco).trim() : null,
+          endereco,
           m2Total: parseNumber(row.m2_total),
           m2Piso: parseNumber(row.m2_piso),
           m2Parede: parseNumber(row.m2_parede),
@@ -230,6 +250,12 @@ export const excelService = {
           estimatedHours: row.horas_estimadas ? parseNumber(row.horas_estimadas) : null,
           pipefyCardId: pipefyCardId,
         };
+
+        // Only add coordinates if we have them
+        if (latitude !== null && longitude !== null) {
+          projectData.latitude = latitude;
+          projectData.longitude = longitude;
+        }
 
         if (existingProject) {
           // Update existing project

@@ -5,6 +5,7 @@ import multer from 'multer';
 import { adminAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
 import { excelService } from '../../services/excel.service';
+import { sendEntryRequest } from '../../services/whatsapp.service';
 
 // Configure multer for Excel file upload
 const upload = multer({
@@ -87,6 +88,12 @@ router.get(
                 assignments: { where: { isActive: true } },
                 reports: true,
                 documents: true,
+                checkins: {
+                  where: {
+                    checkoutAt: null,
+                    checkinAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+                  },
+                },
               },
             },
           },
@@ -108,6 +115,7 @@ router.get(
           teamCount: p._count.assignments,
           reportsCount: p._count.reports,
           documentsCount: p._count.documents,
+          activeCheckinsCount: p._count.checkins,
         })),
         meta: {
           total,
@@ -239,6 +247,8 @@ router.put(
     body('m2Parede').optional().isFloat({ min: 0 }),
     body('m2Teto').optional().isFloat({ min: 0 }),
     body('mRodape').optional().isFloat({ min: 0 }),
+    body('responsiblePhones').optional().isArray(),
+    body('responsiblePhones.*').optional().isString().trim(),
   ],
   validate,
   async (req, res, next) => {
@@ -276,11 +286,29 @@ router.put(
         'm2Parede',
         'm2Teto',
         'mRodape',
+        // Responsible phones
+        'responsiblePhones',
+        // Cronograma / Horarios
+        'workStartTime',
+        'workEndTime',
+        'deadlineDate',
+        'estimatedDays',
+        'allowSaturday',
+        'allowSunday',
+        'allowNightWork',
       ];
 
       for (const field of allowedFields) {
         if (req.body[field] !== undefined) {
           updateData[field] = req.body[field];
+        }
+      }
+
+      // Convert date fields to Date objects
+      const dateFields = ['deadlineDate', 'nightShiftStart', 'nightShiftEnd'];
+      for (const field of dateFields) {
+        if (updateData[field] && typeof updateData[field] === 'string') {
+          updateData[field] = new Date(updateData[field]);
         }
       }
 
@@ -714,6 +742,8 @@ router.post(
     body('mRodape').optional().isFloat({ min: 0 }),
     body('status').optional().isIn(['EM_EXECUCAO', 'PAUSADO', 'CONCLUIDO', 'CANCELADO']),
     body('estimatedHours').optional().isFloat({ min: 0 }),
+    body('latitude').optional().isFloat({ min: -90, max: 90 }),
+    body('longitude').optional().isFloat({ min: -180, max: 180 }),
   ],
   validate,
   async (req, res, next) => {
@@ -733,6 +763,8 @@ router.post(
           consultor: req.body.consultor || null,
           material: req.body.material || null,
           cor: req.body.cor || null,
+          latitude: req.body.latitude || null,
+          longitude: req.body.longitude || null,
         },
       });
 
@@ -1111,6 +1143,109 @@ router.delete(
       res.json({
         success: true,
         message: 'Invite cancelled',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================
+// ENTRY REQUEST (Solicitar liberação na portaria)
+// =============================================
+
+// POST /api/admin/projects/:id/request-entry - Request entry for team members
+router.post(
+  '/:id/request-entry',
+  adminAuth,
+  [
+    param('id').isUUID(),
+    body('userIds').isArray({ min: 1 }).withMessage('Selecione pelo menos um aplicador'),
+    body('userIds.*').isUUID(),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { userIds } = req.body;
+
+      // Get project with responsible phones
+      const project = await prisma.project.findUnique({
+        where: { id: req.params.id },
+        select: {
+          id: true,
+          title: true,
+          cliente: true,
+          endereco: true,
+          responsiblePhones: true,
+        },
+      });
+
+      if (!project) {
+        throw new AppError('Projeto não encontrado', 404, 'PROJECT_NOT_FOUND');
+      }
+
+      if (!project.responsiblePhones || project.responsiblePhones.length === 0) {
+        throw new AppError(
+          'Nenhum telefone de responsável cadastrado para este projeto',
+          400,
+          'NO_RESPONSIBLE_PHONES'
+        );
+      }
+
+      // Get selected users with their documents
+      const users = await prisma.user.findMany({
+        where: {
+          id: { in: userIds },
+        },
+        select: {
+          id: true,
+          name: true,
+          cpf: true,
+          phone: true,
+          role: true,
+        },
+      });
+
+      if (users.length === 0) {
+        throw new AppError('Nenhum aplicador encontrado', 404, 'USERS_NOT_FOUND');
+      }
+
+      // Send WhatsApp messages to responsible phones
+      const results = await sendEntryRequest({
+        projectName: project.title || project.cliente || 'Projeto',
+        projectAddress: project.endereco || 'Endereço não informado',
+        responsiblePhones: project.responsiblePhones,
+        applicators: users.map((u) => ({
+          name: u.name,
+          cpf: u.cpf || 'Não informado',
+          phone: u.phone || undefined,
+          role: u.role,
+        })),
+      });
+
+      // Create audit log
+      await prisma.auditLog.create({
+        data: {
+          adminUserId: req.user!.sub,
+          action: 'REQUEST_ENTRY',
+          entityType: 'Project',
+          entityId: project.id,
+          newValues: {
+            userIds,
+            responsiblePhones: project.responsiblePhones,
+          },
+          description: `Requested entry for ${users.length} applicator(s) at ${project.title}`,
+        },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          message: `Solicitação de liberação enviada para ${project.responsiblePhones.length} telefone(s)`,
+          applicatorsCount: users.length,
+          phonesNotified: project.responsiblePhones,
+          results,
+        },
       });
     } catch (error) {
       next(error);

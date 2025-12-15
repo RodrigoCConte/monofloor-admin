@@ -22,13 +22,16 @@ model AdminUser {
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  approvedUsers      User[]              @relation("ApprovedByAdmin")
-  promotedUsers      User[]              @relation("PromotedByAdmin")
-  projectAssignments ProjectAssignment[] @relation("AssignedByAdmin")
-  uploadedDocuments  ProjectDocument[]
-  generatedReports   GeneratedReport[]
-  auditLogs          AuditLog[]
-  nightShiftInvites  NightShiftInvite[]
+  approvedUsers         User[]              @relation("ApprovedByAdmin")
+  promotedUsers         User[]              @relation("PromotedByAdmin")
+  projectAssignments    ProjectAssignment[] @relation("AssignedByAdmin")
+  uploadedDocuments     ProjectDocument[]
+  generatedReports      GeneratedReport[]
+  auditLogs             AuditLog[]
+  nightShiftInvites     NightShiftInvite[]
+  reviewedContributions ContributionRequest[]
+  resolvedHelpRequests  HelpRequest[]
+  notifications         Notification[]
 
   @@map("admin_users")
 }
@@ -49,7 +52,9 @@ model User {
   name            String
   username        String     @unique
   phone           String?
+  cpf             String?    @unique
   photoUrl        String?    @map("photo_url")
+  documentUrl     String?    @map("document_url")
 
   // Approval workflow
   status          UserStatus @default(PENDING_APPROVAL)
@@ -77,13 +82,23 @@ model User {
   updatedAt       DateTime   @updatedAt @map("updated_at")
 
   // Relations
-  projectAssignments  ProjectAssignment[]
-  checkins            Checkin[]
-  reports             Report[]
-  auditLogs           AuditLog[]
-  location            UserLocation?
-  locationHistory     LocationHistory[]
-  nightShiftInvites   NightShiftInvite[]
+  projectAssignments    ProjectAssignment[]
+  checkins              Checkin[]
+  reports               Report[]
+  auditLogs             AuditLog[]
+  location              UserLocation?
+  locationHistory       LocationHistory[]
+  nightShiftInvites     NightShiftInvite[]
+  contributionRequests  ContributionRequest[]
+  helpRequests          HelpRequest[]
+  pushSubscriptions     PushSubscription[]
+  campaignParticipations CampaignParticipant[]
+  campaignWins          CampaignWinner[]
+  badges                UserBadge[]
+  feedPosts             FeedPost[]
+  feedPostLikes         FeedPostLike[]
+  feedPostComments      FeedPostComment[]
+  notificationViews     NotificationView[]
 
   @@map("users")
 }
@@ -96,10 +111,17 @@ enum UserStatus {
 }
 
 enum UserRole {
-  AUXILIAR
-  APLICADOR
-  APLICADOR_SENIOR
-  LIDER_EQUIPE
+  // Hierarquia de Aplicação (do maior para menor)
+  LIDER              // Líder da equipe de aplicação
+  APLICADOR          // Aplicador principal
+  APLICADOR_AUX      // Aplicador auxiliar
+
+  // Hierarquia de Preparação
+  LIDER_PREPARACAO   // Líder de preparação
+  PREPARADOR         // Preparador
+
+  // Base
+  AUXILIAR           // Auxiliar geral
 }
 
 // =============================================
@@ -132,8 +154,12 @@ model Project {
   especiais       String?
   linkEscopo      String?  @map("link_escopo")
 
+  // Responsible contact phones (for entry requests, etc.)
+  responsiblePhones String[] @default([]) @map("responsible_phones")
+
   // Admin-managed fields
   status          ProjectStatus @default(EM_EXECUCAO)
+  teamStatus      TeamStatus    @default(AGUARDANDO_EQUIPE) @map("team_status")
   estimatedHours  Decimal?      @map("estimated_hours") @db.Decimal(10, 2)
   workedHours     Decimal       @default(0) @map("worked_hours") @db.Decimal(10, 2)
   workflowDescription String?   @map("workflow_description")
@@ -153,6 +179,17 @@ model Project {
   nightShiftStart   DateTime? @map("night_shift_start")  // period start date
   nightShiftEnd     DateTime? @map("night_shift_end")    // period end date
 
+  // Work Schedule (horários de trabalho permitidos)
+  workStartTime     String?   @map("work_start_time")  // Ex: "08:00"
+  workEndTime       String?   @map("work_end_time")    // Ex: "17:00"
+  allowSaturday     Boolean   @default(false) @map("allow_saturday")
+  allowSunday       Boolean   @default(false) @map("allow_sunday")
+  allowNightWork    Boolean   @default(false) @map("allow_night_work")
+
+  // Deadline and scheduling
+  deadlineDate      DateTime? @map("deadline_date")    // Data prazo do projeto
+  estimatedDays     Int?      @map("estimated_days")   // Dias estimados de trabalho
+
   // Timestamps
   startedAt       DateTime? @map("started_at")
   completedAt     DateTime? @map("completed_at")
@@ -161,14 +198,18 @@ model Project {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  assignments        ProjectAssignment[]
-  checkins           Checkin[]
-  reports            Report[]
-  documents          ProjectDocument[]
-  generatedReports   GeneratedReport[]
-  telegramConfig     TelegramConfig?
-  activeLocations    UserLocation[]
-  nightShiftInvites  NightShiftInvite[]
+  assignments           ProjectAssignment[]
+  checkins              Checkin[]
+  reports               Report[]
+  documents             ProjectDocument[]
+  generatedReports      GeneratedReport[]
+  telegramConfig        TelegramConfig?
+  activeLocations       UserLocation[]
+  nightShiftInvites     NightShiftInvite[]
+  contributionRequests  ContributionRequest[]
+  helpRequests          HelpRequest[]
+  feedPosts             FeedPost[]
+  tasks                 ProjectTask[]
 
   @@map("projects")
 }
@@ -178,6 +219,12 @@ enum ProjectStatus {
   PAUSADO
   CONCLUIDO
   CANCELADO
+}
+
+enum TeamStatus {
+  AGUARDANDO_EQUIPE    // Aguardando definição de equipe
+  EQUIPE_DEFINIDA      // Equipe já definida
+  EQUIPE_INCOMPLETA    // Equipe parcialmente definida
 }
 
 // =============================================
@@ -204,8 +251,15 @@ model ProjectAssignment {
 }
 
 enum ProjectRole {
-  APLICADOR
-  LIDER
+  // Equipe de Aplicação
+  LIDER              // Líder da equipe
+  APLICADOR          // Aplicador principal
+  APLICADOR_AUX      // Aplicador auxiliar
+
+  // Equipe de Preparação
+  LIDER_PREPARACAO   // Líder de preparação
+  PREPARADOR         // Preparador
+  AUXILIAR           // Auxiliar
 }
 
 // =============================================
@@ -262,6 +316,7 @@ model Checkin {
 
   // Validation
   isValid         Boolean   @default(true) @map("is_valid")
+  isIrregular     Boolean   @default(false) @map("is_irregular") // No location after 3 attempts
   validationNotes String?   @map("validation_notes")
 
   createdAt       DateTime  @default(now()) @map("created_at")
@@ -278,6 +333,7 @@ enum CheckoutReason {
   FIM_EXPEDIENTE
   OUTRO_PROJETO
   COMPRA_INSUMOS
+  ALMOCO_INTERVALO
 }
 
 // =============================================
@@ -468,6 +524,11 @@ model UserLocation {
   // Status
   isOnline      Boolean   @default(true) @map("is_online")
   batteryLevel  Int?      @map("battery_level") // percentage
+  isCharging    Boolean?  @map("is_charging")
+
+  // Geofencing
+  isOutOfArea         Boolean  @default(false) @map("is_out_of_area")
+  distanceFromProject Int?     @map("distance_from_project") // meters
 
   // Current project (if checked in)
   currentProjectId String? @map("current_project_id")
@@ -526,4 +587,533 @@ model AuditLog {
   createdAt     DateTime   @default(now()) @map("created_at")
 
   @@map("audit_logs")
+}
+
+// =============================================
+// CONTRIBUTION REQUESTS (Solicitacao para contribuir em projeto)
+// =============================================
+model ContributionRequest {
+  id            String             @id @default(uuid())
+  userId        String             @map("user_id")
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId     String             @map("project_id")
+  project       Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  description   String?            // Motivo/mensagem do aplicador
+  status        ContributionStatus @default(PENDING)
+
+  createdAt     DateTime           @default(now()) @map("created_at")
+  reviewedAt    DateTime?          @map("reviewed_at")
+  reviewedById  String?            @map("reviewed_by")
+  reviewedBy    AdminUser?         @relation(fields: [reviewedById], references: [id])
+
+  @@unique([userId, projectId])
+  @@map("contribution_requests")
+}
+
+enum ContributionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// =============================================
+// HELP REQUESTS (Solicitacao de Material ou Ajuda)
+// =============================================
+model HelpRequest {
+  id               String           @id @default(uuid())
+  userId           String           @map("user_id")
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId        String?          @map("project_id")
+  project          Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  type             HelpRequestType
+  status           HelpRequestStatus @default(PENDING)
+
+  // Material request fields
+  materialName     String?          @map("material_name")
+  quantity         String?
+
+  // Help request fields
+  description      String?
+
+  // Audio recording
+  audioUrl         String?          @map("audio_url")
+  audioTranscription String?        @map("audio_transcription")
+
+  // Video (only for help requests)
+  videoUrl         String?          @map("video_url")
+
+  // Admin response
+  adminNotes       String?          @map("admin_notes")
+  resolvedAt       DateTime?        @map("resolved_at")
+  resolvedById     String?          @map("resolved_by")
+  resolvedBy       AdminUser?       @relation(fields: [resolvedById], references: [id])
+
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  @@index([userId, createdAt])
+  @@index([projectId, createdAt])
+  @@map("help_requests")
+}
+
+enum HelpRequestType {
+  MATERIAL
+  HELP
+}
+
+enum HelpRequestStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+  CANCELLED
+}
+
+// Push Notification Subscriptions
+model PushSubscription {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Web Push subscription data
+  endpoint       String   @unique
+  p256dh         String   // Public key for encryption
+  auth           String   // Auth secret
+
+  // Device info
+  userAgent      String?  @map("user_agent")
+  deviceType     String?  @map("device_type")
+
+  // Status
+  isActive       Boolean  @default(true) @map("is_active")
+
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+// =============================================
+// CAMPAIGNS (Campanhas de incentivo)
+// =============================================
+model Campaign {
+  id              String         @id @default(uuid())
+  name            String
+  description     String?
+
+  // Tipo de campanha
+  campaignType    CampaignType   @default(CHALLENGE) @map("campaign_type")
+
+  // Banner principal (video/imagem)
+  bannerUrl       String         @map("banner_url")
+  bannerType      String         @default("video") @map("banner_type") // "video" | "image"
+
+  // Datas
+  startDate       DateTime       @map("start_date")
+  endDate         DateTime       @map("end_date")
+
+  // Status
+  status          CampaignStatus @default(DRAFT)
+  launchedAt      DateTime?      @map("launched_at")
+
+  // Bonus
+  xpBonus         Int            @default(0) @map("xp_bonus")       // XP fixo ao participar
+  xpMultiplier    Float          @default(1.0) @map("xp_multiplier") // Multiplicador durante campanha
+
+  // Badge associado (para campanhas com premio de badge)
+  badgeId         String?        @map("badge_id")
+  badge           Badge?         @relation(fields: [badgeId], references: [id])
+
+  // Winner banner (para notificar vencedores)
+  winnerBannerUrl   String?      @map("winner_banner_url")
+  winnerBannerType  String?      @map("winner_banner_type") // "video" | "image"
+  winnerMessage     String?      @map("winner_message")
+
+  // Contadores
+  participantCount Int           @default(0) @map("participant_count")
+
+  // Timestamps
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  slides          CampaignSlide[]
+  participants    CampaignParticipant[]
+  winners         CampaignWinner[]
+
+  @@index([status])
+  @@index([startDate, endDate])
+  @@map("campaigns")
+}
+
+// Tipo de campanha
+enum CampaignType {
+  CHALLENGE      // Desafio com vencedores selecionados manualmente
+  MULTIPLIER     // Multiplicador de XP (pontualidade, assiduidade)
+  BONUS          // Bonus fixo de XP ao participar
+}
+
+model CampaignSlide {
+  id          String   @id @default(uuid())
+  campaignId  String   @map("campaign_id")
+
+  order       Int      @default(0)
+
+  // Conteudo
+  type        String   @default("text") // "text" | "image" | "video"
+  title       String?
+  content     String?  @db.Text  // Texto explicativo
+  mediaUrl    String?  @map("media_url") // URL da imagem/video
+
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@unique([campaignId, order])
+  @@map("campaign_slides")
+}
+
+model CampaignParticipant {
+  id          String   @id @default(uuid())
+  campaignId  String   @map("campaign_id")
+  userId      String   @map("user_id")
+  joinedAt    DateTime @default(now()) @map("joined_at")
+
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([campaignId])
+  @@index([userId])
+  @@map("campaign_participants")
+}
+
+// Vencedores de campanhas
+model CampaignWinner {
+  id          String   @id @default(uuid())
+  campaignId  String   @map("campaign_id")
+  userId      String   @map("user_id")
+
+  // Posicao (1o, 2o, 3o lugar, etc)
+  position    Int      @default(1)
+
+  // XP premio concedido
+  xpAwarded   Int      @default(0) @map("xp_awarded")
+
+  // Badge concedido
+  badgeId     String?  @map("badge_id")
+  badge       Badge?   @relation(fields: [badgeId], references: [id])
+
+  // Notificacao enviada
+  notifiedAt  DateTime? @map("notified_at")
+
+  // Timestamps
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([campaignId])
+  @@index([userId])
+  @@map("campaign_winners")
+}
+
+// =============================================
+// BADGES (Selos/Conquistas)
+// =============================================
+model Badge {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+
+  // Icone do badge
+  iconUrl     String   @map("icon_url")
+
+  // Cor do badge (para destaque)
+  color       String   @default("#c9a962")
+
+  // Categoria
+  category    BadgeCategory @default(CAMPAIGN)
+
+  // Raridade (afeta visibilidade)
+  rarity      BadgeRarity @default(COMMON)
+
+  // Ativo
+  isActive    Boolean  @default(true) @map("is_active")
+
+  // Timestamps
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  userBadges  UserBadge[]
+  campaigns   Campaign[]
+  winners     CampaignWinner[]
+
+  @@map("badges")
+}
+
+enum BadgeCategory {
+  CAMPAIGN    // Conquistado em campanha
+  ACHIEVEMENT // Conquista por metricas (ex: 100 projetos)
+  SPECIAL     // Especial/Evento
+  ROLE        // Relacionado a cargo
+}
+
+enum BadgeRarity {
+  COMMON      // Comum
+  RARE        // Raro
+  EPIC        // Epico
+  LEGENDARY   // Lendario
+}
+
+// Badges do usuario (como o selo verificado)
+model UserBadge {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  badgeId     String   @map("badge_id")
+
+  // Data de conquista
+  awardedAt   DateTime @default(now()) @map("awarded_at")
+
+  // Badge principal (mostrado ao lado do nome como verificado)
+  isPrimary   Boolean  @default(false) @map("is_primary")
+
+  // Origem do badge
+  campaignId  String?  @map("campaign_id") // Se veio de campanha
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge       Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+  @@index([badgeId])
+  @@map("user_badges")
+}
+
+enum CampaignStatus {
+  DRAFT       // Rascunho, nao visivel
+  SCHEDULED   // Agendada para data futura
+  ACTIVE      // Ativa e visivel
+  ENDED       // Encerrada (data passou)
+  CANCELLED   // Cancelada manualmente
+}
+
+// =============================================
+// FEED POSTS (Posts do feed social)
+// =============================================
+model FeedPost {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Conteudo do post
+  text        String?  @db.Text
+  imageUrl    String?  @map("image_url") @db.Text // URL ou base64 da imagem
+
+  // Projeto associado (opcional)
+  projectId   String?  @map("project_id")
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  // Contadores (denormalizados para performance)
+  likesCount    Int    @default(0) @map("likes_count")
+  commentsCount Int    @default(0) @map("comments_count")
+
+  // Timestamps
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  likes       FeedPostLike[]
+  comments    FeedPostComment[]
+
+  @@index([userId, createdAt])
+  @@index([projectId])
+  @@map("feed_posts")
+}
+
+// =============================================
+// FEED POST LIKES
+// =============================================
+model FeedPostLike {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  post      FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+  @@map("feed_post_likes")
+}
+
+// =============================================
+// FEED POST COMMENTS
+// =============================================
+model FeedPostComment {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  post      FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  text      String   @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([postId, createdAt])
+  @@index([userId])
+  @@map("feed_post_comments")
+}
+
+// =============================================
+// NOTIFICATIONS (Notificacoes com video e XP)
+// =============================================
+model Notification {
+  id          String   @id @default(uuid())
+
+  // Conteudo
+  title       String
+  message     String   @db.Text
+
+  // Video opcional
+  videoUrl    String?  @map("video_url") @db.Text
+  videoDuration Int?   @map("video_duration") // duracao em segundos
+
+  // XP por assistir video completo
+  xpReward    Int      @default(0) @map("xp_reward")
+
+  // Status
+  isActive    Boolean  @default(true) @map("is_active")
+
+  // Quem criou
+  createdById String   @map("created_by")
+  createdBy   AdminUser @relation(fields: [createdById], references: [id])
+
+  // Timestamps
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Stats (denormalizados)
+  viewsCount      Int  @default(0) @map("views_count")
+  completedCount  Int  @default(0) @map("completed_count")
+
+  // Relations
+  views       NotificationView[]
+
+  @@index([isActive, createdAt])
+  @@map("notifications")
+}
+
+// =============================================
+// NOTIFICATION VIEWS (Visualizacoes de notificacao)
+// =============================================
+model NotificationView {
+  id              String   @id @default(uuid())
+
+  notificationId  String   @map("notification_id")
+  notification    Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  userId          String   @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Status de visualizacao
+  viewedAt        DateTime @default(now()) @map("viewed_at")
+
+  // Video assistido
+  videoStarted    Boolean  @default(false) @map("video_started")
+  videoProgress   Int      @default(0) @map("video_progress") // porcentagem 0-100
+  videoCompleted  Boolean  @default(false) @map("video_completed")
+  videoCompletedAt DateTime? @map("video_completed_at")
+
+  // XP ganho
+  xpEarned        Int      @default(0) @map("xp_earned")
+
+  @@unique([notificationId, userId])
+  @@index([userId, viewedAt])
+  @@index([notificationId])
+  @@map("notification_views")
+}
+
+// =============================================
+// PROJECT TASKS (Tarefas/Etapas do projeto - Gantt)
+// =============================================
+model ProjectTask {
+  id              String        @id @default(uuid())
+  projectId       String        @map("project_id")
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Task info
+  title           String
+  description     String?       @db.Text
+  taskType        TaskType      @default(CUSTOM) @map("task_type")
+
+  // Scheduling
+  startDate       DateTime?     @map("start_date")
+  endDate         DateTime?     @map("end_date")
+  durationHours   Decimal       @default(0) @map("duration_hours") @db.Decimal(10, 2)  // Horas trabalhadas nesta etapa
+  estimatedHours  Decimal?      @map("estimated_hours") @db.Decimal(10, 2)  // Horas estimadas
+
+  // Progress
+  status          TaskStatus    @default(PENDING)
+  progress        Int           @default(0)  // 0-100%
+
+  // Dependencies (tarefa que deve ser concluída antes)
+  dependsOnId     String?       @map("depends_on_id")
+  dependsOn       ProjectTask?  @relation("TaskDependency", fields: [dependsOnId], references: [id], onDelete: SetNull)
+  dependentTasks  ProjectTask[] @relation("TaskDependency")
+
+  // Display order
+  sortOrder       Int           @default(0) @map("sort_order")
+
+  // Color for Gantt
+  color           String?       // Ex: "#c9a962", "#22c55e"
+
+  // Timestamps
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  @@index([projectId, sortOrder])
+  @@index([projectId, status])
+  @@map("project_tasks")
+}
+
+// Tipos de tarefa padrão do sistema STELION
+enum TaskType {
+  // Preparação
+  PREPARACAO
+  LIMPEZA_INICIAL
+  NIVELAMENTO
+
+  // Aplicação
+  APLICACAO_PISO
+  APLICACAO_PAREDE
+  APLICACAO_TETO
+  RODAPE
+
+  // Acabamento
+  LIXAMENTO
+  SELADOR
+  CURA
+  ACABAMENTO_FINAL
+
+  // Outros
+  INSPECAO
+  RETRABALHO
+  CUSTOM         // Tarefa personalizada
+}
+
+// Status da tarefa
+enum TaskStatus {
+  PENDING        // Não iniciada
+  IN_PROGRESS    // Em andamento
+  COMPLETED      // Concluída
+  BLOCKED        // Bloqueada (dependência não concluída)
+  CANCELLED      // Cancelada
 }
