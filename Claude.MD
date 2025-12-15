@@ -197,6 +197,40 @@ cd monofloor-app && node test-pipefy.js
 - `GET /generated/:id` - Detalhes do relatório
 - `POST /generate-tasks` - Gerar tarefas via AI
 
+### Solicitações de Contribuição (`/api/admin/contributions`)
+- `GET /` - Listar solicitações (filtros: status, paginação)
+- `GET /pending-count` - Contagem de solicitações pendentes
+- `POST /:id/approve` - Aprovar solicitação (adiciona usuário ao projeto)
+- `POST /:id/reject` - Rejeitar solicitação
+
+### Campanhas (`/api/admin/campaigns`)
+- `GET /` - Listar campanhas (filtros: status, paginação)
+- `GET /:id` - Detalhes da campanha
+- `POST /` - Criar campanha
+- `PUT /:id` - Atualizar campanha
+- `DELETE /:id` - Deletar campanha
+- `POST /:id/launch` - Lançar campanha
+- `POST /:id/slides` - Adicionar slide
+- `PUT /:id/slides/:slideId` - Atualizar slide
+- `DELETE /:id/slides/:slideId` - Deletar slide
+- `POST /:id/slides/reorder` - Reordenar slides
+- `POST /upload` - Upload de mídia (imagem/vídeo)
+- `POST /import` - Importar campanha (JSON)
+- `GET /export/:id` - Exportar campanha
+
+### Localização (`/api/admin/locations`)
+- `GET /` - Listar localizações (filtros: projectId, onlineOnly)
+- `GET /map` - Dados para visualização no mapa
+- `GET /:userId` - Localização atual de um usuário
+- `GET /:userId/history` - Histórico de localização (últimas N horas)
+
+### Projetos - Funcionalidades Adicionais (`/api/admin/projects`)
+- `PUT /:id/night-shift` - Configurar turno noturno
+- `GET /:id/night-shift/invites` - Listar convites de turno noturno
+- `POST /:id/night-shift/invites` - Enviar convites
+- `DELETE /:id/night-shift/invites/:inviteId` - Cancelar convite
+- `POST /:id/request-entry` - Solicitar liberação na portaria (WhatsApp)
+
 ### Mobile API (`/api/mobile`)
 - `GET /profile` - Perfil do usuário
 - `PUT /profile` - Atualizar perfil
@@ -209,6 +243,17 @@ cd monofloor-app && node test-pipefy.js
 - `GET /hours` - Resumo de horas trabalhadas
 - `POST /reports` - Criar relatório
 - `GET /reports` - Listar relatórios
+- `GET /campaigns` - Listar campanhas ativas (para exibir no app)
+- `POST /campaigns/:id/join` - Participar de uma campanha
+- `POST /location` - Atualizar localização do usuário (real-time)
+- `POST /location/offline` - Marcar usuário como offline
+- `GET /projects/nearby` - Projetos próximos (por localização)
+- `POST /projects/:id/request-contribution` - Solicitar para contribuir em projeto
+- `POST /projects/:id/request-entry` - Solicitar liberação na portaria
+- `POST /push-subscription` - Registrar para notificações push
+- `POST /help-requests` - Criar solicitação de material/ajuda
+- `GET /help-requests` - Listar solicitações do usuário
+- `POST /transcribe` - Transcrição de áudio (Whisper)
 
 ---
 
@@ -226,6 +271,15 @@ cd monofloor-app && node test-pipefy.js
 9. **generated_reports** - Relatórios gerados pelo admin via AI
 10. **telegram_config** - Configuração Telegram (futuro)
 11. **audit_logs** - Log de ações
+12. **contribution_requests** - Solicitações para contribuir em projetos
+13. **help_requests** - Solicitações de material/ajuda
+14. **campaigns** - Campanhas de incentivo
+15. **campaign_slides** - Slides das campanhas
+16. **campaign_participants** - Participantes das campanhas
+17. **night_shift_invites** - Convites para turno noturno
+18. **user_locations** - Localização atual dos usuários (real-time)
+19. **location_history** - Histórico de localização
+20. **push_subscriptions** - Subscrições para notificações push
 
 ### Workflow de Aprovação:
 1. Aplicador se registra → status = PENDING_APPROVAL
@@ -269,12 +323,17 @@ npm run dev
 
 - [x] Autenticação de usuários (JWT implementado)
 - [x] Banco de dados (PostgreSQL + Prisma)
-- [ ] Upload de arquivos (fotos/áudio) - estrutura pronta
-- [ ] Geofencing real (GPS) - validação no backend
-- [ ] Notificações push
-- [ ] Sistema de XP/conquistas real
-- [ ] Admin Panel frontend (React/Vue)
-- [ ] Integração Telegram
+- [x] Upload de arquivos (fotos/áudio) - estrutura pronta
+- [x] Geofencing real (GPS) - validação no backend
+- [x] Notificações push - estrutura pronta (Service Worker implementado)
+- [x] Sistema de XP/conquistas - estrutura pronta
+- [x] Admin Panel frontend (Vue.js implementado)
+- [x] Sistema de Campanhas - **IMPLEMENTADO** (admin cria, aparece no app)
+- [x] Sistema de Localização em Tempo Real - **IMPLEMENTADO**
+- [x] Sistema de Solicitações de Contribuição - **IMPLEMENTADO**
+- [x] Sistema de Turno Noturno - **IMPLEMENTADO**
+- [x] Sistema de Solicitações de Ajuda/Material - **IMPLEMENTADO**
+- [ ] Integração Telegram (estrutura pronta, não implementada)
 
 ---
 
@@ -311,13 +370,149 @@ Baseado no arquivo `Prompt`, a comunicação Monofloor segue:
 - Geração de relatórios diários e por período via AI
 - Seed com dados de teste
 
+### Sessão 3 (14/12/2024)
+- **Correções críticas no projeto após problemas de build**:
+
+#### Problemas Corrigidos:
+1. **Seed do banco de dados** - Roles antigos (`APLICADOR_SENIOR`, `LIDER_EQUIPE`) não existiam mais
+   - Corrigido para usar roles atuais: `APLICADOR`, `LIDER`, `AUXILIAR`, etc.
+   - Arquivo: `monofloor-admin/prisma/seed.ts`
+
+2. **Erros TypeScript no Admin Panel**:
+   - `socket.ts` - Object possibly undefined
+   - `auth.ts` - Adicionado `photoUrl` ao tipo User
+   - `Contributions.vue` - Retorno da função getPhotoUrl
+   - `Map.vue` - Removida função não usada, corrigido MapOptions
+   - `Projects.vue` - Removido import e variável não usados
+
+3. **Solicitação de Material no APP** (monofloor-app/app.js):
+   - Token era salvo como `token` mas lido como `authToken` - **CORRIGIDO**
+   - Variáveis `currentProject` e `currentProjectId` não existiam - **CORRIGIDO** para usar `selectedProject`
+   - Adicionada validação de token com mensagem clara para usuário
+
+#### Arquivos Modificados:
+- `monofloor-admin/prisma/seed.ts` - Roles corrigidos
+- `monofloor-admin/admin-panel/src/stores/auth.ts` - photoUrl adicionado
+- `monofloor-admin/admin-panel/src/services/socket.ts` - null check
+- `monofloor-admin/admin-panel/src/views/Contributions.vue` - retorno undefined
+- `monofloor-admin/admin-panel/src/views/Map.vue` - função removida
+- `monofloor-admin/admin-panel/src/views/Projects.vue` - imports limpos
+- `monofloor-app/app.js` - token e selectedProject corrigidos
+
+### Sessão 4+ (Atualizações Recentes - Data a confirmar)
+- **Muitas funcionalidades novas implementadas**:
+
+#### Novas Funcionalidades no Backend:
+
+1. **Sistema de Solicitações de Contribuição** (`/api/admin/contributions`):
+   - Aplicadores podem solicitar para contribuir em projetos
+   - Admin pode aprovar/rejeitar solicitações
+   - Notificações via Socket.io quando aprovado/rejeitado
+   - Endpoints: `GET /`, `GET /pending-count`, `POST /:id/approve`, `POST /:id/reject`
+
+2. **Sistema de Campanhas** (`/api/admin/campaigns`):
+   - Campanhas de incentivo com banner (vídeo/imagem)
+   - Slides informativos
+   - Bonus de XP e multiplicadores
+   - Status: DRAFT, SCHEDULED, ACTIVE, ENDED, CANCELLED
+   - Upload de mídia (imagens/vídeos até 100MB)
+   - Import/Export de campanhas
+   - Endpoints completos para CRUD, slides, launch, etc.
+
+3. **Sistema de Localização em Tempo Real** (`/api/admin/locations`):
+   - Rastreamento de localização dos aplicadores
+   - Histórico de localização
+   - Detecção de aplicadores online (últimos 5 minutos)
+   - Dados de mapa para visualização
+   - Geofencing (detecção se está fora da área do projeto)
+   - Endpoints: `GET /`, `GET /map`, `GET /:userId`, `GET /:userId/history`
+
+4. **Sistema de Turno Noturno** (Night Shift):
+   - Configuração de turnos noturnos por projeto
+   - Convites para aplicadores
+   - Controle de vagas (slots)
+   - Período de vigência (startDate/endDate)
+   - Endpoints em `/api/admin/projects/:id/night-shift`
+
+5. **Sistema de Solicitação de Entrada** (Entry Request):
+   - Solicitação de liberação na portaria
+   - Envio de WhatsApp para telefones responsáveis
+   - Endpoint: `POST /api/admin/projects/:id/request-entry`
+
+6. **Sistema de Solicitações de Ajuda/Material** (Help Requests):
+   - Solicitações de material ou ajuda
+   - Suporte a áudio e vídeo
+   - Transcrição de áudio via AI
+   - Status: PENDING, IN_PROGRESS, RESOLVED, CANCELLED
+
+#### Novas Tabelas no Banco de Dados:
+- `contribution_requests` - Solicitações para contribuir em projetos
+- `help_requests` - Solicitações de material/ajuda
+- `campaigns` - Campanhas de incentivo
+- `campaign_slides` - Slides das campanhas
+- `campaign_participants` - Participantes das campanhas
+- `night_shift_invites` - Convites para turno noturno
+- `user_locations` - Localização atual dos usuários
+- `location_history` - Histórico de localização
+
+#### Novas Views no Admin Panel:
+- **Contributions.vue** - Gerenciamento de solicitações de contribuição
+- **Campaigns.vue** - Gerenciamento completo de campanhas
+- **Map.vue** - Visualização de localização em tempo real
+
+#### Mudanças na Configuração:
+- Backend agora roda na porta **3001** (padrão, configurável via PORT)
+- API URL padrão: `https://devoted-wholeness-production.up.railway.app` (produção)
+
+#### Como Rodar (Estado Atual):
+```bash
+# Terminal 1 - Backend API
+cd monofloor-admin && npm run dev
+# Roda em http://localhost:3000 (ou porta configurada via PORT, padrão 3001)
+
+# Terminal 2 - Admin Panel (Vue)
+cd monofloor-admin/admin-panel && npm run dev
+# Roda em http://localhost:5173 ou 5174
+
+# Terminal 3 - APP Mobile (Frontend puro)
+# IMPORTANTE: Acessar diretamente via arquivo index.html
+# Abrir no navegador: file:///caminho/para/monofloor-app/index.html
+# OU usar um servidor local simples que sirva o arquivo diretamente
+# 
+# NÃO usar: npx serve -p 8080 (pode causar problemas com Service Worker e campanhas)
+# 
+# Motivo: O sistema de campanhas e Service Worker funcionam melhor quando acessado
+# diretamente via arquivo index.html, garantindo funcionamento correto das funcionalidades
+```
+
+#### Credenciais de Teste:
+- **Admin Panel**: admin@monofloor.com.br / admin123
+- **APP Mobile**: joao@monofloor.com.br / senha123
+
+#### Sistema de Campanhas no APP Mobile:
+- **Implementado**: Sistema completo de campanhas no app mobile
+- **Funcionalidade**: Admin Panel cria campanhas → aparecem automaticamente no app mobile
+- **Características**:
+  - Banner principal (vídeo ou imagem)
+  - Slides informativos adicionais
+  - Contador de participantes
+  - Navegação entre slides
+  - Participação na campanha
+  - Cache de campanhas já visualizadas
+- **API Endpoint**: `GET /api/mobile/campaigns` - Busca campanhas ativas
+- **API Endpoint**: `POST /api/mobile/campaigns/:id/join` - Participar de campanha
+- **Acesso**: App deve ser acessado via `index.html` diretamente (não via localhost:8080)
+  - Motivo: Service Worker e funcionalidades de campanha funcionam melhor com acesso direto ao arquivo
+  - Abrir: `file:///caminho/para/monofloor-app/index.html` no navegador
+
 ---
 
 ## Próximos Passos Sugeridos
 
-1. Configurar PostgreSQL e rodar migrations
-2. Testar API com Postman/Insomnia
-3. Implementar upload de arquivos (fotos/áudio)
-4. Criar Admin Panel frontend
-5. Atualizar mobile app para usar API real
+1. ~~Configurar PostgreSQL e rodar migrations~~ ✅
+2. ~~Testar API com Postman/Insomnia~~ ✅
+3. Implementar upload de arquivos (fotos/áudio) - estrutura pronta
+4. ~~Criar Admin Panel frontend~~ ✅ (Vue.js implementado)
+5. ~~Atualizar mobile app para usar API real~~ ✅
 6. Deploy no Railway
+7. Testar fluxo completo de solicitação de material/ajuda
