@@ -7,6 +7,22 @@ import { applicatorsApi } from '../api';
 const router = useRouter();
 const authStore = useAuthStore();
 
+// API URL for building photo URLs
+const API_URL = import.meta.env.VITE_API_URL || 'https://devoted-wholeness-production.up.railway.app';
+
+// Helper to get full photo URL
+const getPhotoUrl = (photoUrl: string | null | undefined): string | null => {
+  if (!photoUrl) return null;
+  if (photoUrl.startsWith('http')) return photoUrl;
+  return `${API_URL}${photoUrl}`;
+};
+
+// Get initials from name
+const getInitials = (name: string | null | undefined): string => {
+  if (!name) return '?';
+  return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+};
+
 const applicators = ref<any[]>([]);
 const loading = ref(true);
 const filter = ref('all');
@@ -75,11 +91,158 @@ const getStatusLabel = (status: string) => {
 
 const getRoleLabel = (role: string) => {
   switch (role) {
-    case 'APLICADOR_1': return 'Aplicador I';
-    case 'APLICADOR_2': return 'Aplicador II';
-    case 'APLICADOR_3': return 'Aplicador III';
     case 'LIDER': return 'Lider';
+    case 'APLICADOR': return 'Aplicador';
+    case 'APLICADOR_AUX': return 'Aplicador Aux.';
+    case 'LIDER_PREPARACAO': return 'Lider Preparacao';
+    case 'PREPARADOR': return 'Preparador';
+    case 'AUXILIAR': return 'Auxiliar';
     default: return role;
+  }
+};
+
+const getRoleColor = (role: string) => {
+  switch (role) {
+    case 'LIDER': return '#FF6B35';
+    case 'APLICADOR': return '#9B5DE5';
+    case 'APLICADOR_AUX': return '#9B5DE5';
+    case 'LIDER_PREPARACAO': return '#3B82F6';
+    case 'PREPARADOR': return '#00D4FF';
+    case 'AUXILIAR': return '#8B7355';
+    default: return '#8B7355';
+  }
+};
+
+// Character icon config - matching Map.vue
+const getCharacterIcon = (role: string): string => {
+  switch (role) {
+    case 'LIDER': return '/icons/lider.png';
+    case 'APLICADOR': return '/icons/aplicador-1.png';
+    case 'APLICADOR_AUX': return '/icons/aplicador-2.png';
+    case 'LIDER_PREPARACAO': return '/icons/lider-preparacao.png';
+    case 'PREPARADOR': return '/icons/preparador.png';
+    case 'AUXILIAR': return '/icons/ajudante.png';
+    default: return '/icons/ajudante.png';
+  }
+};
+
+// Lista de roles disponíveis
+const availableRoles = [
+  { value: 'LIDER', label: 'Lider' },
+  { value: 'APLICADOR', label: 'Aplicador' },
+  { value: 'APLICADOR_AUX', label: 'Aplicador Aux.' },
+  { value: 'LIDER_PREPARACAO', label: 'Lider Preparacao' },
+  { value: 'PREPARADOR', label: 'Preparador' },
+  { value: 'AUXILIAR', label: 'Auxiliar' },
+];
+
+// Modal de edição de role
+const showRoleModal = ref(false);
+const selectedApplicator = ref<any>(null);
+const selectedRole = ref('');
+
+const openRoleModal = (applicator: any) => {
+  selectedApplicator.value = applicator;
+  selectedRole.value = applicator.role;
+  showRoleModal.value = true;
+};
+
+const closeRoleModal = () => {
+  showRoleModal.value = false;
+  selectedApplicator.value = null;
+  selectedRole.value = '';
+};
+
+const updateRole = async () => {
+  if (!selectedApplicator.value || !selectedRole.value) return;
+
+  try {
+    await applicatorsApi.updateRole(selectedApplicator.value.id, selectedRole.value);
+    await loadApplicators();
+    closeRoleModal();
+  } catch (error) {
+    console.error('Error updating role:', error);
+    alert('Erro ao atualizar cargo');
+  }
+};
+
+// Modal de delete
+const showDeleteModal = ref(false);
+const applicatorToDelete = ref<any>(null);
+const deleting = ref(false);
+
+// Modal de perfil com badges
+const showProfileModal = ref(false);
+const profileApplicator = ref<any>(null);
+const loadingProfile = ref(false);
+
+const openProfileModal = async (applicator: any) => {
+  loadingProfile.value = true;
+  showProfileModal.value = true;
+  try {
+    const response = await applicatorsApi.getById(applicator.id);
+    profileApplicator.value = response.data.data;
+  } catch (error) {
+    console.error('Error loading applicator profile:', error);
+    profileApplicator.value = applicator;
+  } finally {
+    loadingProfile.value = false;
+  }
+};
+
+const closeProfileModal = () => {
+  showProfileModal.value = false;
+  profileApplicator.value = null;
+};
+
+const getBadgeIconUrl = (iconUrl: string | null | undefined): string => {
+  if (!iconUrl) return '/icons/badge-default.png';
+  if (iconUrl.startsWith('http')) return iconUrl;
+  return `${API_URL}${iconUrl}`;
+};
+
+const getRarityLabel = (rarity: string) => {
+  switch (rarity) {
+    case 'COMMON': return 'Comum';
+    case 'RARE': return 'Raro';
+    case 'EPIC': return 'Epico';
+    case 'LEGENDARY': return 'Lendario';
+    default: return rarity;
+  }
+};
+
+const getRarityColor = (rarity: string) => {
+  switch (rarity) {
+    case 'COMMON': return '#888888';
+    case 'RARE': return '#3b82f6';
+    case 'EPIC': return '#a855f7';
+    case 'LEGENDARY': return '#c9a962';
+    default: return '#888888';
+  }
+};
+
+const confirmDelete = (applicator: any) => {
+  applicatorToDelete.value = applicator;
+  showDeleteModal.value = true;
+};
+
+const closeDeleteModal = () => {
+  showDeleteModal.value = false;
+  applicatorToDelete.value = null;
+};
+
+const deleteApplicator = async () => {
+  if (!applicatorToDelete.value) return;
+  deleting.value = true;
+  try {
+    await applicatorsApi.delete(applicatorToDelete.value.id);
+    await loadApplicators();
+    closeDeleteModal();
+  } catch (error) {
+    console.error('Error deleting applicator:', error);
+    alert('Erro ao remover aplicador');
+  } finally {
+    deleting.value = false;
   }
 };
 
@@ -116,6 +279,20 @@ onMounted(loadApplicators);
           </svg>
           Projetos
         </router-link>
+        <router-link to="/contributions" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+          </svg>
+          Solicitacoes
+        </router-link>
+        <router-link to="/campaigns" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+          Campanhas
+        </router-link>
         <router-link to="/map" class="nav-link">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
@@ -128,7 +305,8 @@ onMounted(loadApplicators);
       <div class="header-right">
         <div class="user-info">
           <div class="user-avatar">
-            {{ authStore.user?.name?.charAt(0) || 'A' }}
+            <img v-if="getPhotoUrl(authStore.user?.photoUrl)" :src="getPhotoUrl(authStore.user?.photoUrl)!" alt="Avatar" class="avatar-img" />
+            <span v-else>{{ getInitials(authStore.user?.name) }}</span>
           </div>
           <span class="user-name">{{ authStore.user?.name }}</span>
         </div>
@@ -181,8 +359,8 @@ onMounted(loadApplicators);
               <th>Aplicador</th>
               <th>Cargo</th>
               <th>Status</th>
+              <th>Projeto Atual</th>
               <th>XP</th>
-              <th>m² Aplicados</th>
               <th>Acoes</th>
             </tr>
           </thead>
@@ -191,7 +369,8 @@ onMounted(loadApplicators);
               <td>
                 <div class="applicator-info">
                   <div class="applicator-avatar">
-                    {{ app.name?.charAt(0) || '?' }}
+                    <img v-if="getPhotoUrl(app.photoUrl)" :src="getPhotoUrl(app.photoUrl)!" alt="Avatar" class="avatar-img" />
+                    <span v-else>{{ getInitials(app.name) }}</span>
                   </div>
                   <div class="applicator-details">
                     <strong>{{ app.name }}</strong>
@@ -200,7 +379,21 @@ onMounted(loadApplicators);
                 </div>
               </td>
               <td>
-                <span class="role-badge">{{ getRoleLabel(app.role) }}</span>
+                <div class="role-cell">
+                  <span
+                    class="role-badge clickable"
+                    :style="{
+                      background: getRoleColor(app.role) + '20',
+                      color: getRoleColor(app.role),
+                      borderColor: getRoleColor(app.role) + '40'
+                    }"
+                    @click="openRoleModal(app)"
+                    title="Clique para alterar cargo"
+                  >
+                    {{ getRoleLabel(app.role) }}
+                  </span>
+                  <img :src="getCharacterIcon(app.role)" alt="" class="role-character-icon" />
+                </div>
               </td>
               <td>
                 <span
@@ -215,6 +408,19 @@ onMounted(loadApplicators);
                 </span>
               </td>
               <td>
+                <div v-if="app.isOnline && app.currentProject" class="project-status online">
+                  <span class="online-dot"></span>
+                  <div class="project-info-cell">
+                    <span class="project-name">{{ app.currentProject.cliente || app.currentProject.title }}</span>
+                    <span class="online-label">Online</span>
+                  </div>
+                </div>
+                <div v-else class="project-status offline">
+                  <span class="offline-dot"></span>
+                  <span class="offline-text">Nao esta em nenhum projeto agora :(</span>
+                </div>
+              </td>
+              <td>
                 <div class="xp-display">
                   <svg class="xp-icon" viewBox="0 0 24 24" fill="currentColor">
                     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
@@ -223,10 +429,17 @@ onMounted(loadApplicators);
                 </div>
               </td>
               <td>
-                <span class="m2-value">{{ app.totalM2Applied?.toLocaleString() || 0 }} m²</span>
-              </td>
-              <td>
                 <div class="actions">
+                  <button
+                    @click="openProfileModal(app)"
+                    class="btn btn-profile"
+                    title="Ver Perfil e Badges"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="8" r="5"/>
+                      <path d="M12 13l4 9-4-2.5L8 22l4-9"/>
+                    </svg>
+                  </button>
                   <button
                     v-if="app.status === 'PENDING_APPROVAL'"
                     @click="approveApplicator(app.id)"
@@ -250,7 +463,18 @@ onMounted(loadApplicators);
                     </svg>
                     Rejeitar
                   </button>
-                  <span v-if="app.status !== 'PENDING_APPROVAL'" class="no-actions">-</span>
+                  <button
+                    @click="confirmDelete(app)"
+                    class="btn btn-delete"
+                    title="Remover aplicador"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      <line x1="10" y1="11" x2="10" y2="17"/>
+                      <line x1="14" y1="11" x2="14" y2="17"/>
+                    </svg>
+                  </button>
                 </div>
               </td>
             </tr>
@@ -258,6 +482,216 @@ onMounted(loadApplicators);
         </table>
       </div>
     </main>
+
+    <!-- Modal de Edição de Cargo -->
+    <div v-if="showRoleModal" class="modal-overlay" @click.self="closeRoleModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Alterar Cargo</h3>
+          <button class="close-btn" @click="closeRoleModal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-info">
+            Alterando cargo de <strong>{{ selectedApplicator?.name }}</strong>
+          </p>
+          <div class="role-options">
+            <label
+              v-for="role in availableRoles"
+              :key="role.value"
+              class="role-option"
+              :class="{ selected: selectedRole === role.value }"
+            >
+              <input
+                type="radio"
+                :value="role.value"
+                v-model="selectedRole"
+              />
+              <div class="role-card" :style="{ '--role-color': getRoleColor(role.value) }">
+                <div class="role-indicator">
+                  <div class="indicator-dot"></div>
+                </div>
+                <span class="role-label">{{ role.label }}</span>
+                <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="closeRoleModal">Cancelar</button>
+          <button class="btn-save" @click="updateRole">Salvar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Confirmação de Delete -->
+    <div v-if="showDeleteModal" class="modal-overlay" @click.self="closeDeleteModal">
+      <div class="modal-content delete-modal">
+        <div class="modal-header">
+          <h3>Remover Aplicador</h3>
+          <button class="close-btn" @click="closeDeleteModal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="delete-warning">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <p>Esta acao e irreversivel!</p>
+          </div>
+          <p class="delete-info">
+            Tem certeza que deseja remover <strong>{{ applicatorToDelete?.name }}</strong>?
+          </p>
+          <p class="delete-details">
+            Todos os dados deste aplicador serao excluidos permanentemente, incluindo:
+          </p>
+          <ul class="delete-list">
+            <li>Historico de check-ins</li>
+            <li>Relatorios enviados</li>
+            <li>Historico de localizacao</li>
+            <li>Atribuicoes de projetos</li>
+          </ul>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="closeDeleteModal">Cancelar</button>
+          <button class="btn-delete-confirm" @click="deleteApplicator" :disabled="deleting">
+            {{ deleting ? 'Removendo...' : 'Remover Aplicador' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Perfil com Badges -->
+    <div v-if="showProfileModal" class="modal-overlay" @click.self="closeProfileModal">
+      <div class="modal-content profile-modal">
+        <div class="modal-header">
+          <h3>Perfil do Aplicador</h3>
+          <button class="close-btn" @click="closeProfileModal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div v-if="loadingProfile" class="loading-profile">
+            <div class="loading-spinner"></div>
+            <span>Carregando perfil...</span>
+          </div>
+          <template v-else-if="profileApplicator">
+            <!-- Profile Header -->
+            <div class="profile-header-modal">
+              <div class="profile-avatar-modal">
+                <img v-if="getPhotoUrl(profileApplicator.photoUrl)" :src="getPhotoUrl(profileApplicator.photoUrl)!" alt="Avatar" />
+                <span v-else>{{ getInitials(profileApplicator.name) }}</span>
+              </div>
+              <div class="profile-info-modal">
+                <div class="profile-name-row">
+                  <h4>{{ profileApplicator.name }}</h4>
+                  <img
+                    v-if="profileApplicator.primaryBadge?.iconUrl"
+                    :src="getBadgeIconUrl(profileApplicator.primaryBadge.iconUrl)"
+                    :alt="profileApplicator.primaryBadge.name"
+                    class="primary-badge-icon"
+                    :title="profileApplicator.primaryBadge.name"
+                  />
+                </div>
+                <span class="profile-email-modal">{{ profileApplicator.email }}</span>
+                <div class="profile-role-modal">
+                  <span
+                    class="role-badge-modal"
+                    :style="{ background: getRoleColor(profileApplicator.role) + '20', color: getRoleColor(profileApplicator.role) }"
+                  >
+                    {{ getRoleLabel(profileApplicator.role) }}
+                  </span>
+                  <img :src="getCharacterIcon(profileApplicator.role)" alt="" class="role-icon-modal" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="profile-stats-modal">
+              <div class="stat-item">
+                <span class="stat-value">{{ profileApplicator.xpTotal || 0 }}</span>
+                <span class="stat-label">XP Total</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-value">{{ profileApplicator.level || 1 }}</span>
+                <span class="stat-label">Nivel</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-value">{{ Math.round(profileApplicator.totalHoursWorked || 0) }}h</span>
+                <span class="stat-label">Horas</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-value">{{ Math.round(profileApplicator.totalM2Applied || 0) }}</span>
+                <span class="stat-label">m2</span>
+              </div>
+            </div>
+
+            <!-- Badges Section -->
+            <div class="badges-section-modal">
+              <h5>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="8" r="6"/>
+                  <path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>
+                </svg>
+                Conquistas ({{ profileApplicator.badges?.length || 0 }})
+              </h5>
+              <div v-if="profileApplicator.badges?.length > 0" class="badges-grid-modal">
+                <div
+                  v-for="badge in profileApplicator.badges"
+                  :key="badge.id"
+                  class="badge-item-modal"
+                  :class="{ 'is-primary': badge.isPrimary }"
+                  :title="badge.description || badge.name"
+                >
+                  <div
+                    class="badge-icon-modal"
+                    :style="{
+                      background: (badge.color || '#c9a962') + '20',
+                      boxShadow: `0 0 12px ${getRarityColor(badge.rarity)}40`
+                    }"
+                  >
+                    <img :src="getBadgeIconUrl(badge.iconUrl)" :alt="badge.name" />
+                  </div>
+                  <span class="badge-name-modal">{{ badge.name }}</span>
+                  <span
+                    class="badge-rarity-modal"
+                    :style="{ color: getRarityColor(badge.rarity) }"
+                  >
+                    {{ getRarityLabel(badge.rarity) }}
+                  </span>
+                  <span v-if="badge.isPrimary" class="badge-primary-tag">Principal</span>
+                </div>
+              </div>
+              <div v-else class="no-badges">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="12" cy="8" r="6"/>
+                  <path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>
+                </svg>
+                <p>Nenhuma conquista ainda</p>
+              </div>
+            </div>
+          </template>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="closeProfileModal">Fechar</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -347,6 +781,13 @@ onMounted(loadApplicators);
   font-weight: 600;
   font-size: 14px;
   color: #000;
+  overflow: hidden;
+}
+
+.user-avatar .avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .user-name {
@@ -527,6 +968,14 @@ onMounted(loadApplicators);
   font-weight: 600;
   font-size: 16px;
   color: #000;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.applicator-avatar .avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .applicator-details {
@@ -578,9 +1027,67 @@ onMounted(loadApplicators);
   height: 16px;
 }
 
-.m2-value {
-  color: var(--text-primary);
+/* Project Status Column */
+.project-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.project-status.online {
+  color: var(--accent-green);
+}
+
+.project-status.offline {
+  color: var(--text-tertiary);
+}
+
+.online-dot,
+.offline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.online-dot {
+  background: var(--accent-green);
+  box-shadow: 0 0 8px var(--accent-green);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.offline-dot {
+  background: var(--text-tertiary);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.project-info-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-name {
+  font-size: 13px;
   font-weight: 500;
+  color: var(--text-primary);
+}
+
+.online-label {
+  font-size: 11px;
+  color: var(--accent-green);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.offline-text {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  font-style: italic;
 }
 
 .actions {
@@ -628,5 +1135,614 @@ onMounted(loadApplicators);
 
 .no-actions {
   color: var(--text-tertiary);
+}
+
+/* Role Badge Clickable */
+.role-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.role-character-icon {
+  width: 36px;
+  height: auto;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid;
+}
+
+.role-badge.clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.role-badge.clickable:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--bg-card);
+  border-radius: var(--border-radius-lg);
+  width: 100%;
+  max-width: 440px;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: var(--bg-card-hover);
+}
+
+.close-btn svg {
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.modal-info {
+  margin: 0 0 20px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.modal-info strong {
+  color: var(--text-primary);
+}
+
+.role-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.role-option {
+  cursor: pointer;
+}
+
+.role-option input {
+  display: none;
+}
+
+.role-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-color);
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.role-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--role-color);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.role-card:active {
+  transform: scale(0.98) translateY(0);
+  box-shadow: none;
+}
+
+.role-indicator {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.indicator-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: transparent;
+  transition: all 0.15s ease;
+  transform: scale(0);
+}
+
+.role-label {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: color 0.15s ease;
+}
+
+.check-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--role-color);
+  opacity: 0;
+  transform: scale(0);
+  transition: all 0.2s ease;
+}
+
+/* Hover state */
+.role-option:hover .role-indicator {
+  border-color: var(--role-color);
+}
+
+.role-option:hover .role-label {
+  color: var(--text-primary);
+}
+
+/* Selected state */
+.role-option.selected .role-card {
+  background: color-mix(in srgb, var(--role-color) 15%, var(--bg-secondary));
+  border-color: var(--role-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--role-color) 20%, transparent);
+}
+
+.role-option.selected .role-indicator {
+  border-color: var(--role-color);
+  background: var(--role-color);
+}
+
+.role-option.selected .indicator-dot {
+  background: white;
+  transform: scale(1);
+}
+
+.role-option.selected .role-label {
+  color: var(--role-color);
+  font-weight: 600;
+}
+
+.role-option.selected .check-icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.modal-footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.btn-cancel {
+  padding: 10px 20px;
+  border-radius: var(--border-radius);
+  font-size: 14px;
+  font-weight: 500;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-cancel:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.btn-save {
+  padding: 10px 24px;
+  border-radius: var(--border-radius);
+  font-size: 14px;
+  font-weight: 500;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: #000;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-save:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(201, 169, 98, 0.3);
+}
+
+/* Delete Button */
+.btn-delete {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--accent-red);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  padding: 8px;
+}
+
+.btn-delete:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.btn-delete svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Delete Modal */
+.delete-modal {
+  max-width: 480px;
+}
+
+.delete-warning {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--border-radius);
+  margin-bottom: 20px;
+}
+
+.delete-warning svg {
+  width: 24px;
+  height: 24px;
+  color: var(--accent-red);
+  flex-shrink: 0;
+}
+
+.delete-warning p {
+  margin: 0;
+  font-weight: 600;
+  color: var(--accent-red);
+}
+
+.delete-info {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.delete-info strong {
+  color: var(--text-primary);
+}
+
+.delete-details {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.delete-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.delete-list li {
+  margin-bottom: 4px;
+}
+
+.btn-delete-confirm {
+  padding: 10px 20px;
+  border-radius: var(--border-radius);
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--accent-red);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-delete-confirm:hover:not(:disabled) {
+  background: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.btn-delete-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Profile Modal Styles */
+.profile-modal {
+  max-width: 600px;
+  width: 90%;
+}
+
+.loading-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  color: var(--text-secondary);
+}
+
+.profile-header-modal {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 20px;
+}
+
+.profile-avatar-modal {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.profile-avatar-modal img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-info-modal {
+  flex: 1;
+}
+
+.profile-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-name-row h4 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--text-primary);
+}
+
+.primary-badge-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.profile-email-modal {
+  color: var(--text-secondary);
+  font-size: 14px;
+  display: block;
+  margin: 4px 0 8px;
+}
+
+.profile-role-modal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.role-badge-modal {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.role-icon-modal {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.profile-stats-modal {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.badges-section-modal h5 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.badges-section-modal h5 svg {
+  width: 18px;
+  height: 18px;
+  color: var(--accent-primary);
+}
+
+.badges-grid-modal {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.badge-item-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  position: relative;
+  transition: all 0.2s;
+}
+
+.badge-item-modal:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-2px);
+}
+
+.badge-item-modal.is-primary {
+  border-color: var(--accent-primary);
+  background: linear-gradient(135deg, rgba(201, 169, 98, 0.1), transparent);
+}
+
+.badge-icon-modal {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.badge-icon-modal img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.badge-name-modal {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.badge-rarity-modal {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.badge-primary-tag {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: var(--accent-primary);
+  color: #000;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  text-transform: uppercase;
+}
+
+.no-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: var(--text-tertiary);
+  gap: 12px;
+}
+
+.no-badges svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.5;
+}
+
+.no-badges p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* Profile Button Style */
+.btn-profile {
+  background: var(--accent-primary);
+  color: #000;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-profile:hover {
+  background: #dbb872;
+  transform: scale(1.05);
+}
+
+.btn-profile svg {
+  width: 16px;
+  height: 16px;
 }
 </style>

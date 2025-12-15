@@ -2,6 +2,7 @@
   /* Colors from Mobile App */
   --bg-primary: #000000;
   --bg-secondary: #0a0a0a;
+  --bg-tertiary: #1a1a1a;
   --bg-card: #141414;
   --bg-card-hover: #1a1a1a;
   --text-primary: #ffffff;
@@ -9,6 +10,7 @@
   --text-tertiary: #555555;
   --accent-primary: #c9a962;
   --accent-secondary: #a88c4a;
+  --accent-gold: #c9a962;
   --accent-green: #22c55e;
   --accent-blue: #3b82f6;
   --accent-orange: #f97316;

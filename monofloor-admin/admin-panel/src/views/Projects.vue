@@ -1,11 +1,30 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { projectsApi } from '../api';
 
 const router = useRouter();
 const authStore = useAuthStore();
+
+// API URL for building photo URLs
+const API_URL = import.meta.env.VITE_API_URL || 'https://devoted-wholeness-production.up.railway.app';
+
+// Google Maps API key
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+
+// Helper to get full photo URL
+const getPhotoUrl = (photoUrl: string | null | undefined): string | null => {
+  if (!photoUrl) return null;
+  if (photoUrl.startsWith('http')) return photoUrl;
+  return `${API_URL}${photoUrl}`;
+};
+
+// Get initials from name
+const getInitials = (name: string | null | undefined): string => {
+  if (!name) return '?';
+  return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+};
 
 const projects = ref<any[]>([]);
 const loading = ref(true);
@@ -17,6 +36,139 @@ const showDeleteModal = ref(false);
 const projectToDelete = ref<any>(null);
 const deletingAll = ref(false);
 const showDeleteAllModal = ref(false);
+
+// Edit project modal state
+const showEditModal = ref(false);
+const editing = ref(false);
+const editProject = ref({
+  id: '',
+  title: '',
+  cliente: '',
+  endereco: '',
+  m2Total: 0,
+  m2Piso: 0,
+  m2Parede: 0,
+  m2Teto: 0,
+  mRodape: 0,
+  latitude: null as number | null,
+  longitude: null as number | null
+});
+
+// Create project modal state
+const showCreateModal = ref(false);
+const creating = ref(false);
+const newProject = ref({
+  title: '',
+  cliente: '',
+  endereco: '',
+  m2Total: 0,
+  m2Piso: 0,
+  m2Parede: 0,
+  m2Teto: 0,
+  mRodape: 0,
+  latitude: null as number | null,
+  longitude: null as number | null
+});
+
+// Google Places Autocomplete
+const enderecoInput = ref<HTMLInputElement | null>(null);
+const autocomplete = ref<google.maps.places.Autocomplete | null>(null);
+const locationFound = ref(false);
+
+// Load Google Maps script
+const loadGoogleMapsScript = (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (window.google?.maps?.places) {
+      resolve();
+      return;
+    }
+
+    const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve());
+      existingScript.addEventListener('error', () => reject(new Error('Failed to load Google Maps')));
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Google Maps'));
+    document.head.appendChild(script);
+  });
+};
+
+// Initialize Places Autocomplete
+const initAutocomplete = async () => {
+  if (!GOOGLE_MAPS_API_KEY || !enderecoInput.value) return;
+
+  try {
+    await loadGoogleMapsScript();
+
+    // Create bounds covering main operating areas (SP, RJ, Curitiba region)
+    // Southwest: South of Curitiba, West of SP
+    // Northeast: North of RJ, East coast
+    const defaultBounds = new google.maps.LatLngBounds(
+      new google.maps.LatLng(-25.8, -47.5), // Southwest (south of Curitiba)
+      new google.maps.LatLng(-22.0, -43.0)  // Northeast (north of RJ)
+    );
+
+    autocomplete.value = new google.maps.places.Autocomplete(enderecoInput.value, {
+      componentRestrictions: { country: 'br' },
+      fields: ['formatted_address', 'geometry', 'name'],
+      types: ['address'],
+      bounds: defaultBounds
+    });
+
+    // Try to get user's current location for better results
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          // Create bounds around user's location (roughly 100km radius)
+          const userBounds = new google.maps.LatLngBounds(
+            new google.maps.LatLng(
+              position.coords.latitude - 0.9,
+              position.coords.longitude - 0.9
+            ),
+            new google.maps.LatLng(
+              position.coords.latitude + 0.9,
+              position.coords.longitude + 0.9
+            )
+          );
+          autocomplete.value?.setBounds(userBounds);
+        },
+        () => {
+          // Geolocation failed, keep default bounds
+          console.log('Geolocation not available, using default bounds');
+        }
+      );
+    }
+
+    autocomplete.value.addListener('place_changed', () => {
+      const place = autocomplete.value?.getPlace();
+      if (place?.geometry?.location) {
+        newProject.value.endereco = place.formatted_address || '';
+        newProject.value.latitude = place.geometry.location.lat();
+        newProject.value.longitude = place.geometry.location.lng();
+        locationFound.value = true;
+      }
+    });
+  } catch (error) {
+    console.error('Failed to initialize autocomplete:', error);
+  }
+};
+
+// Watch for modal open to initialize autocomplete
+watch(showCreateModal, async (isOpen) => {
+  if (isOpen) {
+    await nextTick();
+    initAutocomplete();
+  } else {
+    locationFound.value = false;
+  }
+});
 
 const logout = () => {
   authStore.logout();
@@ -76,24 +228,18 @@ const handleFileUpload = async (event: Event) => {
   }
 };
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'EM_EXECUCAO': return 'var(--accent-green)';
-    case 'AGUARDANDO_INICIO': return 'var(--accent-blue)';
-    case 'PAUSADO': return 'var(--accent-orange)';
-    case 'FINALIZADO': return 'var(--text-tertiary)';
-    default: return 'var(--text-tertiary)';
+const getStatusColor = (activeCheckinsCount: number) => {
+  if (activeCheckinsCount > 0) {
+    return 'var(--accent-green)';
   }
+  return 'var(--text-tertiary)';
 };
 
-const getStatusLabel = (status: string) => {
-  switch (status) {
-    case 'EM_EXECUCAO': return 'Em Execucao';
-    case 'AGUARDANDO_INICIO': return 'Aguardando';
-    case 'PAUSADO': return 'Pausado';
-    case 'FINALIZADO': return 'Finalizado';
-    default: return status;
+const getStatusLabel = (activeCheckinsCount: number) => {
+  if (activeCheckinsCount > 0) {
+    return 'Em execucao';
   }
+  return 'Ninguem por aqui ainda :(';
 };
 
 const openDeleteModal = (project: any) => {
@@ -134,6 +280,146 @@ const confirmDeleteAll = async () => {
   }
 };
 
+// Create project functions
+const resetNewProject = () => {
+  newProject.value = {
+    title: '',
+    cliente: '',
+    endereco: '',
+    m2Total: 0,
+    m2Piso: 0,
+    m2Parede: 0,
+    m2Teto: 0,
+    mRodape: 0,
+    latitude: null,
+    longitude: null
+  };
+};
+
+const openCreateModal = () => {
+  resetNewProject();
+  showCreateModal.value = true;
+};
+
+const closeCreateModal = () => {
+  showCreateModal.value = false;
+  resetNewProject();
+};
+
+const createProject = async () => {
+  if (!newProject.value.title.trim()) {
+    alert('O nome do projeto e obrigatorio');
+    return;
+  }
+
+  creating.value = true;
+  try {
+    // Build data object, excluding null/undefined values
+    const data: Record<string, any> = {
+      title: newProject.value.title,
+      m2Total: newProject.value.m2Total,
+      m2Piso: newProject.value.m2Piso,
+      m2Parede: newProject.value.m2Parede,
+      m2Teto: newProject.value.m2Teto,
+      mRodape: newProject.value.mRodape,
+    };
+
+    // Only include optional fields if they have values
+    if (newProject.value.cliente) {
+      data.cliente = newProject.value.cliente;
+    }
+    if (newProject.value.endereco) {
+      data.endereco = newProject.value.endereco;
+    }
+
+    // Only include coordinates if they exist
+    if (newProject.value.latitude !== null && newProject.value.longitude !== null) {
+      data.latitude = newProject.value.latitude;
+      data.longitude = newProject.value.longitude;
+    }
+
+    await projectsApi.create(data);
+    await loadProjects();
+    closeCreateModal();
+  } catch (error: any) {
+    alert('Erro ao criar projeto: ' + (error.response?.data?.error?.message || 'Erro desconhecido'));
+  } finally {
+    creating.value = false;
+  }
+};
+
+// Edit project functions
+const openEditModal = (project: any) => {
+  editProject.value = {
+    id: project.id,
+    title: project.title || '',
+    cliente: project.cliente || '',
+    endereco: project.endereco || '',
+    m2Total: project.m2Total || 0,
+    m2Piso: project.m2Piso || 0,
+    m2Parede: project.m2Parede || 0,
+    m2Teto: project.m2Teto || 0,
+    mRodape: project.mRodape || 0,
+    latitude: project.latitude || null,
+    longitude: project.longitude || null
+  };
+  showEditModal.value = true;
+};
+
+const closeEditModal = () => {
+  showEditModal.value = false;
+  editProject.value = {
+    id: '',
+    title: '',
+    cliente: '',
+    endereco: '',
+    m2Total: 0,
+    m2Piso: 0,
+    m2Parede: 0,
+    m2Teto: 0,
+    mRodape: 0,
+    latitude: null,
+    longitude: null
+  };
+};
+
+const updateProject = async () => {
+  if (!editProject.value.title.trim()) {
+    alert('O nome do projeto e obrigatorio');
+    return;
+  }
+
+  editing.value = true;
+  try {
+    const data: Record<string, any> = {
+      title: editProject.value.title,
+      m2Total: editProject.value.m2Total,
+      m2Piso: editProject.value.m2Piso,
+      m2Parede: editProject.value.m2Parede,
+      m2Teto: editProject.value.m2Teto,
+      mRodape: editProject.value.mRodape,
+    };
+
+    // Include cliente and endereco even if empty (to allow clearing)
+    data.cliente = editProject.value.cliente || '';
+    data.endereco = editProject.value.endereco || '';
+
+    // Only include coordinates if they exist
+    if (editProject.value.latitude !== null && editProject.value.longitude !== null) {
+      data.latitude = editProject.value.latitude;
+      data.longitude = editProject.value.longitude;
+    }
+
+    await projectsApi.update(editProject.value.id, data);
+    await loadProjects();
+    closeEditModal();
+  } catch (error: any) {
+    alert('Erro ao atualizar projeto: ' + (error.response?.data?.error?.message || 'Erro desconhecido'));
+  } finally {
+    editing.value = false;
+  }
+};
+
 onMounted(loadProjects);
 </script>
 
@@ -167,6 +453,20 @@ onMounted(loadProjects);
           </svg>
           Projetos
         </router-link>
+        <router-link to="/contributions" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+          </svg>
+          Solicitacoes
+        </router-link>
+        <router-link to="/campaigns" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+          Campanhas
+        </router-link>
         <router-link to="/map" class="nav-link">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
@@ -179,7 +479,8 @@ onMounted(loadProjects);
       <div class="header-right">
         <div class="user-info">
           <div class="user-avatar">
-            {{ authStore.user?.name?.charAt(0) || 'A' }}
+            <img v-if="getPhotoUrl(authStore.user?.photoUrl)" :src="getPhotoUrl(authStore.user?.photoUrl)!" alt="Avatar" class="avatar-img" />
+            <span v-else>{{ getInitials(authStore.user?.name) }}</span>
           </div>
           <span class="user-name">{{ authStore.user?.name }}</span>
         </div>
@@ -208,6 +509,13 @@ onMounted(loadProjects);
             <option value="PAUSADO">Pausado</option>
             <option value="FINALIZADO">Finalizado</option>
           </select>
+          <button @click="openCreateModal" class="btn btn-primary">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Criar Projeto
+          </button>
           <button @click="downloadTemplate" class="btn btn-secondary">
             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -267,13 +575,23 @@ onMounted(loadProjects);
               <span
                 class="status-badge"
                 :style="{
-                  background: getStatusColor(project.status) + '20',
-                  color: getStatusColor(project.status),
-                  borderColor: getStatusColor(project.status) + '40'
+                  background: getStatusColor(project.activeCheckinsCount || 0) + '20',
+                  color: getStatusColor(project.activeCheckinsCount || 0),
+                  borderColor: getStatusColor(project.activeCheckinsCount || 0) + '40'
                 }"
               >
-                {{ getStatusLabel(project.status) }}
+                {{ getStatusLabel(project.activeCheckinsCount || 0) }}
               </span>
+              <button
+                class="edit-btn"
+                @click.stop="openEditModal(project)"
+                title="Editar projeto"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
               <button
                 class="delete-btn"
                 @click.stop="openDeleteModal(project)"
@@ -402,6 +720,279 @@ onMounted(loadProjects);
         </div>
       </div>
     </div>
+
+    <!-- Create Project Modal -->
+    <div v-if="showCreateModal" class="modal-overlay" @click="closeCreateModal">
+      <div class="modal modal-large" @click.stop>
+        <div class="modal-header">
+          <svg class="modal-icon modal-icon-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          <h3>Criar Novo Projeto</h3>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label>Nome do Projeto *</label>
+              <input
+                v-model="newProject.title"
+                type="text"
+                placeholder="Ex: Residencia Silva"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label>Cliente</label>
+              <input
+                v-model="newProject.cliente"
+                type="text"
+                placeholder="Nome do cliente"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group full-width">
+              <label>
+                Endereco
+                <span v-if="locationFound" class="location-found">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                  </svg>
+                  Localizacao encontrada
+                </span>
+              </label>
+              <input
+                ref="enderecoInput"
+                v-model="newProject.endereco"
+                type="text"
+                placeholder="Digite o endereco e selecione da lista"
+                class="form-input"
+                :class="{ 'has-location': locationFound }"
+              />
+            </div>
+            <div class="form-group">
+              <label>m² Total</label>
+              <input
+                v-model.number="newProject.m2Total"
+                type="number"
+                min="0"
+                step="0.01"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label>m² Piso</label>
+              <input
+                v-model.number="newProject.m2Piso"
+                type="number"
+                min="0"
+                step="0.01"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label>m² Parede</label>
+              <input
+                v-model.number="newProject.m2Parede"
+                type="number"
+                min="0"
+                step="0.01"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label>m² Teto</label>
+              <input
+                v-model.number="newProject.m2Teto"
+                type="number"
+                min="0"
+                step="0.01"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label>Metros Rodape</label>
+              <input
+                v-model.number="newProject.mRodape"
+                type="number"
+                min="0"
+                step="0.01"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group full-width" v-if="locationFound || newProject.latitude || newProject.longitude">
+              <label>Coordenadas (preenchidas automaticamente)</label>
+              <div class="coordinates-display">
+                <div class="coordinate">
+                  <span class="coord-label">Lat:</span>
+                  <span class="coord-value">{{ newProject.latitude?.toFixed(6) || '-' }}</span>
+                </div>
+                <div class="coordinate">
+                  <span class="coord-label">Lng:</span>
+                  <span class="coord-value">{{ newProject.longitude?.toFixed(6) || '-' }}</span>
+                </div>
+                <a
+                  v-if="newProject.latitude && newProject.longitude"
+                  :href="`https://www.google.com/maps?q=${newProject.latitude},${newProject.longitude}`"
+                  target="_blank"
+                  class="map-link"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/>
+                    <line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                  Ver no mapa
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="closeCreateModal">Cancelar</button>
+          <button
+            class="btn btn-primary"
+            @click="createProject"
+            :disabled="creating"
+          >
+            <div v-if="creating" class="btn-spinner"></div>
+            {{ creating ? 'Criando...' : 'Criar Projeto' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Project Modal -->
+    <div v-if="showEditModal" class="modal-overlay" @click="closeEditModal">
+      <div class="modal modal-large" @click.stop>
+        <div class="modal-header">
+          <svg class="modal-icon modal-icon-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+          <h3>Editar Projeto</h3>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label>Nome do Projeto *</label>
+              <input
+                v-model="editProject.title"
+                type="text"
+                placeholder="Ex: Residencia Silva"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label>Cliente</label>
+              <input
+                v-model="editProject.cliente"
+                type="text"
+                placeholder="Nome do cliente"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group full-width">
+              <label>Endereco</label>
+              <input
+                v-model="editProject.endereco"
+                type="text"
+                placeholder="Digite o endereco"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label>m² Total</label>
+              <input
+                v-model.number="editProject.m2Total"
+                type="number"
+                min="0"
+                step="0.01"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label>m² Piso</label>
+              <input
+                v-model.number="editProject.m2Piso"
+                type="number"
+                min="0"
+                step="0.01"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label>m² Parede</label>
+              <input
+                v-model.number="editProject.m2Parede"
+                type="number"
+                min="0"
+                step="0.01"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label>m² Teto</label>
+              <input
+                v-model.number="editProject.m2Teto"
+                type="number"
+                min="0"
+                step="0.01"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label>Metros Rodape</label>
+              <input
+                v-model.number="editProject.mRodape"
+                type="number"
+                min="0"
+                step="0.01"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group full-width" v-if="editProject.latitude || editProject.longitude">
+              <label>Coordenadas</label>
+              <div class="coordinates-display">
+                <div class="coordinate">
+                  <span class="coord-label">Lat:</span>
+                  <span class="coord-value">{{ editProject.latitude?.toFixed(6) || '-' }}</span>
+                </div>
+                <div class="coordinate">
+                  <span class="coord-label">Lng:</span>
+                  <span class="coord-value">{{ editProject.longitude?.toFixed(6) || '-' }}</span>
+                </div>
+                <a
+                  v-if="editProject.latitude && editProject.longitude"
+                  :href="`https://www.google.com/maps?q=${editProject.latitude},${editProject.longitude}`"
+                  target="_blank"
+                  class="map-link"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/>
+                    <line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                  Ver no mapa
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="closeEditModal">Cancelar</button>
+          <button
+            class="btn btn-primary"
+            @click="updateProject"
+            :disabled="editing"
+          >
+            <div v-if="editing" class="btn-spinner"></div>
+            {{ editing ? 'Salvando...' : 'Salvar Alteracoes' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -491,6 +1082,13 @@ onMounted(loadProjects);
   font-weight: 600;
   font-size: 14px;
   color: #000;
+  overflow: hidden;
+}
+
+.user-avatar .avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .user-name {
@@ -815,6 +1413,35 @@ onMounted(loadProjects);
   gap: 8px;
 }
 
+.edit-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--border-radius);
+  background: rgba(201, 169, 98, 0.1);
+  border: 1px solid rgba(201, 169, 98, 0.2);
+  color: var(--accent-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  opacity: 0;
+}
+
+.project-card:hover .edit-btn {
+  opacity: 1;
+}
+
+.edit-btn:hover {
+  background: rgba(201, 169, 98, 0.2);
+  border-color: var(--accent-primary);
+}
+
+.edit-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
 .delete-btn {
   width: 32px;
   height: 32px;
@@ -948,5 +1575,180 @@ onMounted(loadProjects);
 
 .modal-icon-danger {
   color: var(--accent-red) !important;
+}
+
+.modal-icon-success {
+  color: var(--accent-primary) !important;
+}
+
+.modal-icon-edit {
+  color: var(--accent-primary) !important;
+}
+
+.modal-large {
+  max-width: 640px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.form-group label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.form-input {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 10px 14px;
+  font-size: 14px;
+  color: var(--text-primary);
+  transition: all 0.2s;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(201, 169, 98, 0.1);
+}
+
+.form-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.btn-primary .btn-spinner {
+  border-color: rgba(0, 0, 0, 0.2);
+  border-top-color: #000;
+}
+
+/* Location found indicator */
+.location-found {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--accent-green);
+  font-weight: 500;
+}
+
+.location-found svg {
+  width: 12px;
+  height: 12px;
+}
+
+.form-input.has-location {
+  border-color: var(--accent-green);
+  background: rgba(34, 197, 94, 0.05);
+}
+
+/* Coordinates display */
+.coordinates-display {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+}
+
+.coordinate {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.coord-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.coord-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-family: monospace;
+}
+
+.map-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 6px 12px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: var(--border-radius);
+  color: var(--accent-blue);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.map-link:hover {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.map-link svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Google Places Autocomplete dropdown styling */
+:global(.pac-container) {
+  background-color: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--border-radius) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3) !important;
+  margin-top: 4px !important;
+  z-index: 10000 !important;
+}
+
+:global(.pac-item) {
+  padding: 10px 14px !important;
+  border-top: 1px solid var(--border-color) !important;
+  cursor: pointer !important;
+  color: var(--text-primary) !important;
+  font-size: 14px !important;
+}
+
+:global(.pac-item:first-child) {
+  border-top: none !important;
+}
+
+:global(.pac-item:hover),
+:global(.pac-item-selected) {
+  background-color: var(--bg-secondary) !important;
+}
+
+:global(.pac-icon) {
+  margin-right: 10px !important;
+}
+
+:global(.pac-item-query) {
+  color: var(--text-primary) !important;
+  font-weight: 500 !important;
+}
+
+:global(.pac-matched) {
+  color: var(--accent-primary) !important;
+  font-weight: 600 !important;
 }
 </style>

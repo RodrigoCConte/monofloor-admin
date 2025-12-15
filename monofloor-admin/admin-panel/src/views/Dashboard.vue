@@ -7,10 +7,27 @@ import { dashboardApi } from '../api';
 const router = useRouter();
 const authStore = useAuthStore();
 
+// API URL for building photo URLs
+const API_URL = import.meta.env.VITE_API_URL || 'https://devoted-wholeness-production.up.railway.app';
+
+// Helper to get full photo URL
+const getPhotoUrl = (photoUrl: string | null | undefined): string | null => {
+  if (!photoUrl) return null;
+  if (photoUrl.startsWith('http')) return photoUrl;
+  return `${API_URL}${photoUrl}`;
+};
+
+// Get initials from name
+const getInitials = (name: string | null | undefined): string => {
+  if (!name) return '?';
+  return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+};
+
 const stats = ref<any>(null);
 const topApplicators = ref<any[]>([]);
 const onlineApplicators = ref<any[]>([]);
 const loading = ref(true);
+const error = ref<string | null>(null);
 
 const logout = () => {
   authStore.logout();
@@ -18,6 +35,8 @@ const logout = () => {
 };
 
 const loadData = async () => {
+  loading.value = true;
+  error.value = null;
   try {
     const [statsRes, topRes, onlineRes] = await Promise.all([
       dashboardApi.getStats(),
@@ -28,8 +47,9 @@ const loadData = async () => {
     stats.value = statsRes.data.data;
     topApplicators.value = topRes.data.data || [];
     onlineApplicators.value = onlineRes.data.data || [];
-  } catch (error) {
-    console.error('Error loading dashboard:', error);
+  } catch (err: any) {
+    console.error('Error loading dashboard:', err);
+    error.value = err.response?.data?.error?.message || err.message || 'Erro ao carregar dashboard';
   } finally {
     loading.value = false;
   }
@@ -46,13 +66,61 @@ onMounted(loadData);
         <span class="logo-badge">ADMIN</span>
       </div>
       <nav class="nav">
-        <router-link to="/" class="nav-link">Dashboard</router-link>
-        <router-link to="/applicators" class="nav-link">Aplicadores</router-link>
-        <router-link to="/projects" class="nav-link">Projetos</router-link>
-        <router-link to="/map" class="nav-link">Mapa</router-link>
+        <router-link to="/" class="nav-link">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="9"/>
+            <rect x="14" y="3" width="7" height="5"/>
+            <rect x="14" y="12" width="7" height="9"/>
+            <rect x="3" y="16" width="7" height="5"/>
+          </svg>
+          Dashboard
+        </router-link>
+        <router-link to="/applicators" class="nav-link">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Aplicadores
+        </router-link>
+        <router-link to="/projects" class="nav-link">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          Projetos
+        </router-link>
+        <router-link to="/contributions" class="nav-link">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="12" y1="18" x2="12" y2="12"/>
+            <line x1="9" y1="15" x2="15" y2="15"/>
+          </svg>
+          Solicitacoes
+        </router-link>
+        <router-link to="/campaigns" class="nav-link">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+          Campanhas
+        </router-link>
+        <router-link to="/map" class="nav-link">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+            <line x1="8" y1="2" x2="8" y2="18"/>
+            <line x1="16" y1="6" x2="16" y2="22"/>
+          </svg>
+          Mapa
+        </router-link>
       </nav>
       <div class="header-right">
-        <div class="user-avatar">{{ authStore.user?.name?.charAt(0) || 'A' }}</div>
+        <div class="user-avatar">
+          <img v-if="getPhotoUrl(authStore.user?.photoUrl)" :src="getPhotoUrl(authStore.user?.photoUrl)!" alt="Avatar" class="avatar-img" />
+          <span v-else>{{ getInitials(authStore.user?.name) }}</span>
+        </div>
         <span class="user-name">{{ authStore.user?.name }}</span>
         <button @click="logout" class="logout-btn">Sair</button>
       </div>
@@ -62,6 +130,11 @@ onMounted(loadData);
       <div v-if="loading" class="loading">
         <div class="loading-spinner"></div>
         <span>Carregando...</span>
+      </div>
+
+      <div v-else-if="error" class="error-container">
+        <div class="error-message">{{ error }}</div>
+        <button @click="loadData" class="retry-btn">Tentar novamente</button>
       </div>
 
       <template v-else>
@@ -119,7 +192,10 @@ onMounted(loadData);
             <ul v-else class="applicator-list">
               <li v-for="(app, index) in topApplicators" :key="app.id" class="applicator-item">
                 <div class="rank">{{ index + 1 }}</div>
-                <div class="applicator-avatar">{{ app.name?.charAt(0) || '?' }}</div>
+                <div class="applicator-avatar">
+                  <img v-if="getPhotoUrl(app.photoUrl)" :src="getPhotoUrl(app.photoUrl)!" alt="Avatar" class="avatar-img" />
+                  <span v-else>{{ getInitials(app.name) }}</span>
+                </div>
                 <div class="applicator-info">
                   <span class="applicator-name">{{ app.name }}</span>
                   <span class="applicator-role">{{ app.role }}</span>
@@ -144,11 +220,14 @@ onMounted(loadData);
               Nenhum aplicador online no momento
             </div>
             <ul v-else class="applicator-list">
-              <li v-for="app in onlineApplicators" :key="app.id" class="applicator-item">
-                <div class="applicator-avatar online">{{ app.name?.charAt(0) || '?' }}</div>
+              <li v-for="app in onlineApplicators" :key="app.checkinId" class="applicator-item">
+                <div class="applicator-avatar online">
+                  <img v-if="getPhotoUrl(app.user?.photoUrl)" :src="getPhotoUrl(app.user?.photoUrl)!" alt="Avatar" class="avatar-img" />
+                  <span v-else>{{ getInitials(app.user?.name) }}</span>
+                </div>
                 <div class="applicator-info">
-                  <span class="applicator-name">{{ app.name }}</span>
-                  <span class="project-tag">{{ app.currentProject || 'Sem projeto' }}</span>
+                  <span class="applicator-name">{{ app.user?.name || 'Sem nome' }}</span>
+                  <span class="project-tag">{{ app.project?.title || 'Sem projeto' }}</span>
                 </div>
                 <div class="online-indicator">
                   <span class="online-dot"></span>
@@ -205,13 +284,20 @@ onMounted(loadData);
 }
 
 .nav-link {
-  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
   border-radius: var(--border-radius);
   text-decoration: none;
   color: var(--text-secondary);
   font-weight: 500;
   font-size: 14px;
   transition: all 0.2s;
+}
+
+.nav-link svg {
+  flex-shrink: 0;
 }
 
 .nav-link:hover {
@@ -241,6 +327,13 @@ onMounted(loadData);
   font-weight: 600;
   font-size: 14px;
   color: #000;
+  overflow: hidden;
+}
+
+.user-avatar .avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .user-name {
@@ -291,6 +384,41 @@ onMounted(loadData);
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px;
+  gap: 20px;
+}
+
+.error-message {
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--accent-red);
+  padding: 16px 24px;
+  border-radius: var(--border-radius);
+  font-size: 14px;
+  text-align: center;
+}
+
+.retry-btn {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 12px 24px;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.retry-btn:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--text-tertiary);
 }
 
 .stats-section h2 {
@@ -489,6 +617,14 @@ onMounted(loadData);
   font-weight: 600;
   font-size: 14px;
   color: #000;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.applicator-avatar .avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .applicator-avatar.online {

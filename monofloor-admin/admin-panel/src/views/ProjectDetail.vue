@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { projectsApi, applicatorsApi } from '../api';
@@ -31,7 +31,34 @@ const formData = ref({
   m2Parede: null as number | null,
   m2Teto: null as number | null,
   mRodape: null as number | null,
+  // Telefones do responsável
+  responsiblePhones: [] as string[],
+  // Cronograma / Horarios
+  workStartTime: '' as string,
+  workEndTime: '' as string,
+  deadlineDate: '' as string,
+  estimatedDays: null as number | null,
+  allowSaturday: false,
+  allowSunday: false,
+  allowNightWork: false,
 });
+
+// Inline edit state for individual fields
+const editingField = ref<string | null>(null);
+
+// Work hours options for dropdown
+const workHoursOptions = [
+  '06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00', '09:30',
+  '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30',
+  '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
+  '18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00', '21:30', '22:00'
+];
+
+// Entry request (liberação na portaria)
+const showEntryRequestModal = ref(false);
+const selectedForEntry = ref<string[]>([]);
+const sendingEntryRequest = ref(false);
+const newResponsiblePhone = ref('');
 
 // Team management
 const team = ref<any[]>([]);
@@ -68,6 +95,334 @@ const inviteCounts = ref({
   expired: 0,
 });
 
+// Tasks / Schedule (Programacao)
+const tasks = ref<any[]>([]);
+const loadingTasks = ref(false);
+const taskStats = ref<any>(null);
+const showTaskModal = ref(false);
+const editingTask = ref<any>(null);
+const savingTask = ref(false);
+const generatingTasks = ref(false);
+
+// Gantt uses real tasks from backend
+const selectedTask = ref<any>(null);
+const showTaskEditor = ref(false);
+
+// Available task types with colors for dropdown
+const availableTaskTypes = [
+  { value: 'PREPARACAO', label: 'Preparacao', color: '#64748b' },
+  { value: 'LIMPEZA_INICIAL', label: 'Limpeza Inicial', color: '#475569' },
+  { value: 'NIVELAMENTO', label: 'Nivelamento', color: '#6b7280' },
+  { value: 'APLICACAO_PISO', label: 'Aplicacao Piso', color: '#c9a962' },
+  { value: 'APLICACAO_PAREDE', label: 'Aplicacao Parede', color: '#d4af37' },
+  { value: 'APLICACAO_TETO', label: 'Aplicacao Teto', color: '#b8860b' },
+  { value: 'RODAPE', label: 'Rodape', color: '#daa520' },
+  { value: 'LIXAMENTO', label: 'Lixamento', color: '#3b82f6' },
+  { value: 'SELADOR', label: 'Selador', color: '#8b5cf6' },
+  { value: 'CURA', label: 'Cura', color: '#22c55e' },
+  { value: 'ACABAMENTO_FINAL', label: 'Acabamento Final', color: '#10b981' },
+  { value: 'INSPECAO', label: 'Inspecao', color: '#f97316' },
+  { value: 'RETRABALHO', label: 'Retrabalho', color: '#ef4444' },
+  { value: 'CUSTOM', label: 'Personalizado', color: '#9ca3af' },
+];
+
+// Check if project has measurements for auto-generation
+const hasMeasurements = computed(() => {
+  if (!project.value) return false;
+  const m2Piso = Number(project.value.m2Piso) || 0;
+  const m2Parede = Number(project.value.m2Parede) || 0;
+  const m2Teto = Number(project.value.m2Teto) || 0;
+  return m2Piso > 0 || m2Parede > 0 || m2Teto > 0;
+});
+
+// Determine project scope from measurements
+const projectScope = computed(() => {
+  if (!project.value) return 'COMBINADO';
+  const m2Piso = Number(project.value.m2Piso) || 0;
+  const m2Parede = Number(project.value.m2Parede) || 0;
+  const m2Teto = Number(project.value.m2Teto) || 0;
+
+  const hasPiso = m2Piso > 0;
+  const hasParede = m2Parede > 0;
+  const hasTeto = m2Teto > 0;
+
+  if (hasPiso && !hasParede && !hasTeto) {
+    return 'PISO';
+  } else if (!hasPiso && (hasParede || hasTeto)) {
+    return 'PAREDE_TETO';
+  } else {
+    return 'COMBINADO';
+  }
+});
+
+const scopeLabels: Record<string, string> = {
+  'PISO': 'Piso',
+  'PAREDE_TETO': 'Parede/Teto',
+  'COMBINADO': 'Combinado'
+};
+
+const taskForm = ref({
+  title: '',
+  description: '',
+  taskType: 'CUSTOM',
+  startDate: '',
+  endDate: '',
+  estimatedHours: null as number | null,
+  status: 'PENDING',
+  color: '#c9a962',
+});
+
+const taskTypeLabels: Record<string, string> = {
+  PREPARACAO: 'Preparacao',
+  LIMPEZA_INICIAL: 'Limpeza Inicial',
+  NIVELAMENTO: 'Nivelamento',
+  APLICACAO_PISO: 'Aplicacao Piso',
+  APLICACAO_PAREDE: 'Aplicacao Parede',
+  APLICACAO_TETO: 'Aplicacao Teto',
+  RODAPE: 'Rodape',
+  LIXAMENTO: 'Lixamento',
+  SELADOR: 'Selador',
+  CURA: 'Cura',
+  ACABAMENTO_FINAL: 'Acabamento Final',
+  INSPECAO: 'Inspecao',
+  RETRABALHO: 'Retrabalho',
+  CUSTOM: 'Personalizado',
+};
+
+const taskStatusLabels: Record<string, string> = {
+  PENDING: 'Pendente',
+  IN_PROGRESS: 'Em Andamento',
+  COMPLETED: 'Concluido',
+  BLOCKED: 'Bloqueado',
+  CANCELLED: 'Cancelado',
+};
+
+const taskStatusColors: Record<string, string> = {
+  PENDING: '#6b7280',
+  IN_PROGRESS: '#3b82f6',
+  COMPLETED: '#22c55e',
+  BLOCKED: '#f97316',
+  CANCELLED: '#ef4444',
+};
+
+// Gantt start date (from project startedAt or first task or today)
+const ganttStartDate = computed(() => {
+  if (project.value?.startedAt) {
+    return new Date(project.value.startedAt);
+  }
+  // Check first task
+  if (tasks.value.length > 0 && tasks.value[0].startDate) {
+    return new Date(tasks.value[0].startDate);
+  }
+  return new Date();
+});
+
+// Gantt end date (from deadline or last task)
+const ganttEndDate = computed(() => {
+  if (project.value?.deadlineDate) {
+    return new Date(project.value.deadlineDate);
+  }
+  // Check last task
+  if (tasks.value.length > 0) {
+    const lastTask = tasks.value[tasks.value.length - 1];
+    if (lastTask.endDate) {
+      return new Date(lastTask.endDate);
+    }
+  }
+  // Default: 14 days from start
+  const end = new Date(ganttStartDate.value);
+  end.setDate(end.getDate() + 14);
+  return end;
+});
+
+// Calculate total days from start to end
+const totalGanttDays = computed(() => {
+  const start = ganttStartDate.value;
+  const end = ganttEndDate.value;
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return Math.max(diffDays + 1, 7); // Minimum 7 days
+});
+
+// Generate array of days for timeline header
+const ganttDaysArray = computed(() => {
+  const days: { date: Date; label: string; dayNum: number; isWeekend: boolean }[] = [];
+  const start = new Date(ganttStartDate.value);
+  start.setHours(0, 0, 0, 0);
+
+  for (let i = 0; i < totalGanttDays.value; i++) {
+    const date = new Date(start);
+    date.setDate(date.getDate() + i);
+    const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'] as const;
+    days.push({
+      date,
+      label: dayNames[date.getDay()] || 'Seg',
+      dayNum: date.getDate(),
+      isWeekend: date.getDay() === 0 || date.getDay() === 6,
+    });
+  }
+  return days;
+});
+
+// Calculate task offset (days from start) based on startDate
+const getTaskOffset = (task: any) => {
+  if (!task.startDate) return 0;
+  const start = new Date(ganttStartDate.value);
+  start.setHours(0, 0, 0, 0);
+  const taskStart = new Date(task.startDate);
+  taskStart.setHours(0, 0, 0, 0);
+  const diffTime = taskStart.getTime() - start.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  return Math.max(0, diffDays);
+};
+
+// Calculate task duration in days
+const getTaskDuration = (task: any) => {
+  if (!task.startDate || !task.endDate) return 1;
+  const start = new Date(task.startDate);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(task.endDate);
+  end.setHours(0, 0, 0, 0);
+  const diffTime = end.getTime() - start.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return Math.max(1, diffDays + 1);
+};
+
+// Calculate task bar width in pixels
+const getTaskWidth = (task: any) => {
+  const duration = getTaskDuration(task);
+  const dayWidth = 40; // pixels per day
+  return Math.max(60, duration * dayWidth);
+};
+
+// Calculate task bar left offset in pixels
+const getTaskLeft = (task: any) => {
+  const offset = getTaskOffset(task);
+  const dayWidth = 40;
+  return offset * dayWidth;
+};
+
+// Auto-generate tasks when no tasks exist but we have deadline and measurements
+const autoGenerateTasks = async () => {
+  // Only auto-generate if no tasks exist
+  if (tasks.value.length > 0) return;
+
+  // Check if we have deadline
+  if (!project.value?.deadlineDate && !project.value?.estimatedDays) return;
+
+  // Check if we have measurements
+  if (!hasMeasurements.value) return;
+
+  // Auto-generate
+  generatingTasks.value = true;
+  try {
+    await projectsApi.generateTasks(route.params.id as string);
+    await loadTasks();
+  } catch (error) {
+    console.error('Auto-generate tasks error:', error);
+  } finally {
+    generatingTasks.value = false;
+  }
+};
+
+// Delete task from Gantt
+const deleteTaskFromGantt = async (taskId: string) => {
+  if (!confirm('Remover esta etapa?')) return;
+  try {
+    await projectsApi.deleteTask(route.params.id as string, taskId);
+    await loadTasks();
+  } catch (error: any) {
+    console.error('Error deleting task:', error);
+    alert('Erro ao remover tarefa');
+  }
+};
+
+// Legacy function placeholder - sync removed
+const syncGanttToTasks = async () => {
+  // No longer needed - tasks come from backend
+};
+
+// Legacy function placeholder
+const initializeBlocksFromTasks = () => {
+  // No longer needed - tasks are used directly
+};
+
+// Delete task helper (old reference)
+const deleteBlock = async (taskId: string) => {
+  await deleteTaskFromGantt(taskId);
+};
+
+// Days dropdown options (1-30 days)
+const availableDays = Array.from({ length: 30 }, (_, i) => i + 1);
+
+// Selected task for editing in panel
+const selectedBlock = ref<any>(null);
+const showBlockEditor = ref(false);
+
+// Open task editor panel
+const openBlockEditor = (task: any) => {
+  selectedBlock.value = {
+    ...task,
+    taskType: task.taskType || 'CUSTOM',
+    days: getTaskDuration(task),
+    label: task.title,
+  };
+  showBlockEditor.value = true;
+};
+
+// Save task changes from editor
+const saveBlockChanges = async () => {
+  if (!selectedBlock.value) return;
+  try {
+    const taskType = availableTaskTypes.find(t => t.value === selectedBlock.value.taskType);
+    await projectsApi.updateTask(route.params.id as string, selectedBlock.value.id, {
+      title: taskType?.label || selectedBlock.value.title,
+      taskType: selectedBlock.value.taskType,
+      color: taskType?.color || selectedBlock.value.color,
+    });
+    await loadTasks();
+    showBlockEditor.value = false;
+    selectedBlock.value = null;
+  } catch (error) {
+    console.error('Error updating task:', error);
+  }
+};
+
+// Task type change handler
+const onTaskTypeChange = () => {
+  if (!selectedBlock.value) return;
+  const taskType = availableTaskTypes.find(t => t.value === selectedBlock.value.taskType);
+  if (taskType) {
+    selectedBlock.value.color = taskType.color;
+    selectedBlock.value.label = taskType.label;
+  }
+};
+
+// Placeholder for inline task type change
+const onInlineTaskTypeChange = async (task: any, newTaskType: string) => {
+  const taskType = availableTaskTypes.find(t => t.value === newTaskType);
+  if (!taskType) return;
+  try {
+    await projectsApi.updateTask(route.params.id as string, task.id, {
+      title: taskType.label,
+      taskType: newTaskType,
+      color: taskType.color,
+    });
+    await loadTasks();
+  } catch (error) {
+    console.error('Error updating task type:', error);
+  }
+};
+
+// Drag and drop placeholders (disabled for now - dates controlled by deadline)
+const draggedIndex = ref<number | null>(null);
+const dragOverIndex = ref<number | null>(null);
+const onDragStart = (index: number, event: DragEvent) => {};
+const onDragOver = (index: number, event: DragEvent) => { event.preventDefault(); };
+const onDragLeave = () => {};
+const onDrop = (targetIndex: number) => {};
+const onDragEnd = () => {};
+
 const logout = () => {
   authStore.logout();
   router.push('/login');
@@ -96,7 +451,20 @@ const loadProject = async () => {
       m2Parede: project.value.m2Parede,
       m2Teto: project.value.m2Teto,
       mRodape: project.value.mRodape,
+      // Telefones do responsavel
+      responsiblePhones: project.value.responsiblePhones || [],
+      // Cronograma / Horarios
+      workStartTime: project.value.workStartTime || '08:00',
+      workEndTime: project.value.workEndTime || '17:00',
+      deadlineDate: project.value.deadlineDate ? project.value.deadlineDate.split('T')[0] : '',
+      estimatedDays: project.value.estimatedDays,
+      allowSaturday: project.value.allowSaturday || false,
+      allowSunday: project.value.allowSunday || false,
+      allowNightWork: project.value.allowNightWork || false,
     };
+
+    // Load checkins for days in progress calculation
+    await loadCheckins();
 
     // Set team from response
     team.value = project.value.team || [];
@@ -118,11 +486,35 @@ const loadProject = async () => {
 const saveProject = async () => {
   saving.value = true;
   try {
-    await projectsApi.update(route.params.id as string, formData.value);
+    // Clean data - remove null/undefined values and convert empty strings
+    const cleanData: Record<string, any> = {};
+    for (const [key, value] of Object.entries(formData.value)) {
+      // Always include arrays (even empty ones like responsiblePhones: [])
+      if (Array.isArray(value)) {
+        cleanData[key] = value;
+      } else if (value !== null && value !== undefined && value !== '') {
+        // Convert numeric fields to numbers
+        if (['m2Total', 'm2Piso', 'm2Parede', 'm2Teto', 'mRodape', 'latitude', 'longitude', 'geofenceRadius', 'estimatedHours'].includes(key)) {
+          cleanData[key] = Number(value);
+        } else {
+          cleanData[key] = value;
+        }
+      }
+    }
+    console.log('Saving project with data:', JSON.stringify(cleanData, null, 2));
+    await projectsApi.update(route.params.id as string, cleanData);
     await loadProject();
     editMode.value = false;
   } catch (error: any) {
-    alert('Erro ao salvar: ' + (error.response?.data?.error || 'Erro desconhecido'));
+    console.error('Save error:', error.response?.data);
+    const errData = error.response?.data?.error;
+    let errMsg = typeof errData === 'object' ? errData?.message : errData;
+    // Add validation details if available
+    if (errData?.details?.length > 0) {
+      const fields = errData.details.map((d: any) => `${d.path}: ${d.msg}`).join(', ');
+      errMsg += ` (${fields})`;
+    }
+    alert('Erro ao salvar: ' + (errMsg || error.message || 'Erro desconhecido'));
   } finally {
     saving.value = false;
   }
@@ -130,6 +522,7 @@ const saveProject = async () => {
 
 const cancelEdit = () => {
   editMode.value = false;
+  editingField.value = null;
   // Reset form data
   if (project.value) {
     formData.value = {
@@ -148,7 +541,212 @@ const cancelEdit = () => {
       m2Parede: project.value.m2Parede,
       m2Teto: project.value.m2Teto,
       mRodape: project.value.mRodape,
+      // Telefones do responsavel
+      responsiblePhones: project.value.responsiblePhones || [],
+      // Cronograma / Horarios
+      workStartTime: project.value.workStartTime || '',
+      workEndTime: project.value.workEndTime || '',
+      deadlineDate: project.value.deadlineDate ? project.value.deadlineDate.split('T')[0] : '',
+      estimatedDays: project.value.estimatedDays,
+      allowSaturday: project.value.allowSaturday || false,
+      allowSunday: project.value.allowSunday || false,
+      allowNightWork: project.value.allowNightWork || false,
     };
+  }
+};
+
+// Start inline editing for a single field
+const startFieldEdit = (fieldName: string) => {
+  // Initialize formData with current project value before entering edit mode
+  if (project.value) {
+    if (fieldName === 'workStartTime') {
+      formData.value.workStartTime = project.value.workStartTime || '08:00';
+    } else if (fieldName === 'workEndTime') {
+      formData.value.workEndTime = project.value.workEndTime || '17:00';
+    } else if (fieldName === 'deadlineDate') {
+      formData.value.deadlineDate = project.value.deadlineDate ? project.value.deadlineDate.split('T')[0] : '';
+    } else if (fieldName === 'estimatedDays') {
+      formData.value.estimatedDays = project.value.estimatedDays;
+    }
+  }
+  editingField.value = fieldName;
+};
+
+// Save single field inline
+const saveFieldInline = async (fieldName: string, event?: Event) => {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  if (saving.value) return; // Prevent double-click
+
+  saving.value = true;
+  try {
+    const value = formData.value[fieldName as keyof typeof formData.value];
+    const updateData: Record<string, any> = {};
+
+    // Convert numeric fields
+    if (['estimatedDays'].includes(fieldName)) {
+      updateData[fieldName] = value ? Number(value) : null;
+    } else {
+      updateData[fieldName] = value;
+    }
+
+    await projectsApi.update(route.params.id as string, updateData);
+
+    // Update local project value instead of full reload
+    if (project.value) {
+      (project.value as any)[fieldName] = updateData[fieldName];
+    }
+
+    // Sync tasks when deadline or estimated days changes
+    if (fieldName === 'deadlineDate' || fieldName === 'estimatedDays') {
+      try {
+        const syncData: { deadlineDate?: string; estimatedDays?: number } = {};
+        if (fieldName === 'deadlineDate' && value) {
+          syncData.deadlineDate = value as string;
+        } else if (fieldName === 'estimatedDays' && value) {
+          syncData.estimatedDays = Number(value);
+        }
+
+        if (Object.keys(syncData).length > 0) {
+          const response = await projectsApi.syncDeadline(route.params.id as string, syncData);
+          // Update local estimatedDays if it was calculated
+          if (response.data.data?.estimatedDays && project.value) {
+            project.value.estimatedDays = response.data.data.estimatedDays;
+            formData.value.estimatedDays = response.data.data.estimatedDays;
+          }
+          // Update local deadlineDate if it was calculated
+          if (response.data.data?.deadlineDate && project.value) {
+            project.value.deadlineDate = response.data.data.deadlineDate;
+            formData.value.deadlineDate = response.data.data.deadlineDate.split('T')[0];
+          }
+          // Reload tasks to reflect changes
+          await loadTasks();
+        }
+      } catch (syncError: any) {
+        console.error('Sync deadline error:', syncError);
+        // Don't show alert for sync errors, just log them
+      }
+    }
+
+    editingField.value = null;
+  } catch (error: any) {
+    console.error('Save field error:', error);
+    // Revert the value on error
+    if (project.value) {
+      formData.value[fieldName as keyof typeof formData.value] = (project.value as any)[fieldName];
+    }
+    alert('Erro ao salvar: ' + (error.response?.data?.error?.message || error.message));
+  } finally {
+    saving.value = false;
+  }
+};
+
+// Toggle boolean field and save
+const toggleAndSave = async (fieldName: 'allowSaturday' | 'allowSunday' | 'allowNightWork', event: Event) => {
+  event.preventDefault();
+  event.stopPropagation();
+
+  // Toggle the value
+  formData.value[fieldName] = !formData.value[fieldName];
+
+  // Save
+  await saveFieldInline(fieldName);
+};
+
+// Cancel inline field edit
+const cancelFieldEdit = () => {
+  editingField.value = null;
+  // Reset the specific field from project value
+  if (project.value) {
+    formData.value.workStartTime = project.value.workStartTime || '08:00';
+    formData.value.workEndTime = project.value.workEndTime || '17:00';
+    formData.value.deadlineDate = project.value.deadlineDate ? project.value.deadlineDate.split('T')[0] : '';
+    formData.value.estimatedDays = project.value.estimatedDays;
+    formData.value.allowSaturday = project.value.allowSaturday || false;
+    formData.value.allowSunday = project.value.allowSunday || false;
+    formData.value.allowNightWork = project.value.allowNightWork || false;
+  }
+};
+
+// Responsible phones functions
+const addResponsiblePhone = () => {
+  const phone = newResponsiblePhone.value.trim().replace(/\D/g, '');
+  if (phone && phone.length >= 10 && !formData.value.responsiblePhones.includes(phone)) {
+    formData.value.responsiblePhones.push(phone);
+    newResponsiblePhone.value = '';
+  }
+};
+
+const removeResponsiblePhone = (phone: string) => {
+  const index = formData.value.responsiblePhones.indexOf(phone);
+  if (index > -1) {
+    formData.value.responsiblePhones.splice(index, 1);
+  }
+};
+
+const formatPhoneDisplay = (phone: string) => {
+  const cleaned = phone.replace(/\D/g, '');
+  if (cleaned.length === 11) {
+    return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`;
+  } else if (cleaned.length === 10) {
+    return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
+  }
+  return phone;
+};
+
+// Entry request functions
+const openEntryRequestModal = async () => {
+  if (team.value.length === 0) {
+    await loadTeam();
+  }
+  selectedForEntry.value = team.value.map((m: any) => m.id); // Pre-select all team members
+  showEntryRequestModal.value = true;
+};
+
+const toggleEntryApplicator = (userId: string) => {
+  const index = selectedForEntry.value.indexOf(userId);
+  if (index === -1) {
+    selectedForEntry.value.push(userId);
+  } else {
+    selectedForEntry.value.splice(index, 1);
+  }
+};
+
+const sendEntryRequest = async () => {
+  if (selectedForEntry.value.length === 0) {
+    alert('Selecione pelo menos um aplicador');
+    return;
+  }
+
+  if (!formData.value.responsiblePhones || formData.value.responsiblePhones.length === 0) {
+    alert('Adicione pelo menos um telefone de responsavel no projeto');
+    return;
+  }
+
+  sendingEntryRequest.value = true;
+  try {
+    const response = await projectsApi.requestEntry(route.params.id as string, selectedForEntry.value);
+    const result = response.data?.data?.results;
+
+    if (result?.sentTo && result.sentTo.length > 0) {
+      alert(`Solicitacao enviada com sucesso para ${result.sentTo.length} telefone(s)!`);
+    } else if (response.data?.success) {
+      alert('Solicitacao enviada com sucesso!');
+    } else {
+      alert('Erro ao enviar solicitacao: nenhum telefone recebeu a mensagem');
+    }
+
+    showEntryRequestModal.value = false;
+    selectedForEntry.value = [];
+  } catch (error: any) {
+    const errData = error.response?.data?.error;
+    const errMsg = typeof errData === 'object' ? errData?.message : errData;
+    alert('Erro ao enviar solicitacao: ' + (errMsg || error.message || 'Erro desconhecido'));
+  } finally {
+    sendingEntryRequest.value = false;
   }
 };
 
@@ -200,7 +798,9 @@ const addTeamMember = async () => {
     await loadTeam();
     showAddMemberModal.value = false;
   } catch (error: any) {
-    alert('Erro ao adicionar: ' + (error.response?.data?.error || 'Erro desconhecido'));
+    const errData = error.response?.data?.error;
+    const errMsg = typeof errData === 'object' ? errData?.message : errData;
+    alert('Erro ao adicionar: ' + (errMsg || error.message || 'Erro desconhecido'));
   } finally {
     addingMember.value = false;
   }
@@ -214,7 +814,9 @@ const removeTeamMember = async (userId: string) => {
     await projectsApi.removeTeamMember(route.params.id as string, userId);
     await loadTeam();
   } catch (error: any) {
-    alert('Erro ao remover: ' + (error.response?.data?.error || 'Erro desconhecido'));
+    const errData = error.response?.data?.error;
+    const errMsg = typeof errData === 'object' ? errData?.message : errData;
+    alert('Erro ao remover: ' + (errMsg || error.message || 'Erro desconhecido'));
   } finally {
     removingMember.value = null;
   }
@@ -273,7 +875,9 @@ const saveNightShiftConfig = async () => {
     await loadProject();
     alert('Configuracao de turno noturno salva!');
   } catch (error: any) {
-    alert('Erro ao salvar: ' + (error.response?.data?.error || 'Erro desconhecido'));
+    const errData = error.response?.data?.error;
+    const errMsg = typeof errData === 'object' ? errData?.message : errData;
+    alert('Erro ao salvar: ' + (errMsg || error.message || 'Erro desconhecido'));
   }
 };
 
@@ -306,7 +910,9 @@ const sendInvites = async () => {
     await loadNightShiftInvites();
     showInviteModal.value = false;
   } catch (error: any) {
-    alert('Erro ao enviar convites: ' + (error.response?.data?.error || 'Erro desconhecido'));
+    const errData = error.response?.data?.error;
+    const errMsg = typeof errData === 'object' ? errData?.message : errData;
+    alert('Erro ao enviar convites: ' + (errMsg || error.message || 'Erro desconhecido'));
   } finally {
     sendingInvites.value = false;
   }
@@ -319,8 +925,190 @@ const cancelInvite = async (inviteId: string) => {
     await projectsApi.cancelNightShiftInvite(route.params.id as string, inviteId);
     await loadNightShiftInvites();
   } catch (error: any) {
-    alert('Erro ao cancelar: ' + (error.response?.data?.error || 'Erro desconhecido'));
+    const errData = error.response?.data?.error;
+    const errMsg = typeof errData === 'object' ? errData?.message : errData;
+    alert('Erro ao cancelar: ' + (errMsg || error.message || 'Erro desconhecido'));
   }
+};
+
+// Task Functions
+const loadTasks = async () => {
+  loadingTasks.value = true;
+  try {
+    const [tasksResponse, statsResponse] = await Promise.all([
+      projectsApi.getTasks(route.params.id as string),
+      projectsApi.getTasksStats(route.params.id as string),
+    ]);
+    tasks.value = tasksResponse.data.data || [];
+    taskStats.value = statsResponse.data.data || null;
+    // Initialize gantt blocks from existing tasks
+    initializeBlocksFromTasks();
+  } catch (error) {
+    console.error('Error loading tasks:', error);
+  } finally {
+    loadingTasks.value = false;
+  }
+};
+
+const openTaskModal = (task?: any) => {
+  if (task) {
+    editingTask.value = task;
+    taskForm.value = {
+      title: task.title || '',
+      description: task.description || '',
+      taskType: task.taskType || 'CUSTOM',
+      startDate: task.startDate ? task.startDate.split('T')[0] : '',
+      endDate: task.endDate ? task.endDate.split('T')[0] : '',
+      estimatedHours: task.estimatedHours,
+      status: task.status || 'PENDING',
+      color: task.color || '#c9a962',
+    };
+  } else {
+    editingTask.value = null;
+    taskForm.value = {
+      title: '',
+      description: '',
+      taskType: 'CUSTOM',
+      startDate: '',
+      endDate: '',
+      estimatedHours: null,
+      status: 'PENDING',
+      color: '#c9a962',
+    };
+  }
+  showTaskModal.value = true;
+};
+
+const saveTask = async () => {
+  if (!taskForm.value.title) {
+    alert('Titulo e obrigatorio');
+    return;
+  }
+
+  savingTask.value = true;
+  try {
+    const data: any = {
+      title: taskForm.value.title,
+      description: taskForm.value.description || undefined,
+      taskType: taskForm.value.taskType,
+      status: taskForm.value.status,
+      color: taskForm.value.color,
+    };
+
+    if (taskForm.value.startDate) {
+      data.startDate = taskForm.value.startDate;
+    }
+    if (taskForm.value.endDate) {
+      data.endDate = taskForm.value.endDate;
+    }
+    if (taskForm.value.estimatedHours) {
+      data.estimatedHours = taskForm.value.estimatedHours;
+    }
+
+    if (editingTask.value) {
+      await projectsApi.updateTask(route.params.id as string, editingTask.value.id, data);
+    } else {
+      await projectsApi.createTask(route.params.id as string, data);
+    }
+
+    await loadTasks();
+    showTaskModal.value = false;
+  } catch (error: any) {
+    const errData = error.response?.data?.error;
+    const errMsg = typeof errData === 'object' ? errData?.message : errData;
+    alert('Erro ao salvar: ' + (errMsg || error.message || 'Erro desconhecido'));
+  } finally {
+    savingTask.value = false;
+  }
+};
+
+const deleteTask = async (taskId: string) => {
+  if (!confirm('Tem certeza que deseja excluir esta tarefa?')) return;
+
+  try {
+    await projectsApi.deleteTask(route.params.id as string, taskId);
+    await loadTasks();
+  } catch (error: any) {
+    const errData = error.response?.data?.error;
+    const errMsg = typeof errData === 'object' ? errData?.message : errData;
+    alert('Erro ao excluir: ' + (errMsg || error.message || 'Erro desconhecido'));
+  }
+};
+
+const generateTasks = async () => {
+  if (!confirm('Gerar tarefas automaticamente baseado nas metragens e prazo do projeto?')) return;
+
+  generatingTasks.value = true;
+  try {
+    const response = await projectsApi.generateTasks(route.params.id as string);
+
+    // Update local project values from response
+    if (response.data.data) {
+      const { scope, estimatedDays, deadlineDate, count } = response.data.data;
+      if (project.value) {
+        if (estimatedDays) {
+          project.value.estimatedDays = estimatedDays;
+          formData.value.estimatedDays = estimatedDays;
+        }
+        if (deadlineDate) {
+          project.value.deadlineDate = deadlineDate;
+          formData.value.deadlineDate = deadlineDate.split('T')[0];
+        }
+      }
+
+      const scopeLabels: Record<string, string> = {
+        'PISO': 'Piso',
+        'PAREDE_TETO': 'Parede/Teto',
+        'COMBINADO': 'Combinado'
+      };
+      alert(`${count} tarefas geradas para escopo "${scopeLabels[scope] || scope}"!`);
+    } else {
+      alert('Tarefas geradas com sucesso!');
+    }
+
+    await loadTasks();
+  } catch (error: any) {
+    const errData = error.response?.data?.error;
+    const errMsg = typeof errData === 'object' ? errData?.message : errData;
+    alert('Erro ao gerar tarefas: ' + (errMsg || error.message || 'Erro desconhecido'));
+  } finally {
+    generatingTasks.value = false;
+  }
+};
+
+const updateTaskStatus = async (task: any, newStatus: string) => {
+  try {
+    await projectsApi.updateTask(route.params.id as string, task.id, { status: newStatus });
+    await loadTasks();
+  } catch (error: any) {
+    console.error('Error updating task status:', error);
+  }
+};
+
+const getGanttWidth = (task: any) => {
+  if (!task.startDate || !task.endDate) return 100;
+  const start = new Date(task.startDate).getTime();
+  const end = new Date(task.endDate).getTime();
+  const diff = (end - start) / (1000 * 60 * 60 * 24); // days
+  return Math.max(50, Math.min(diff * 30, 400)); // 30px per day, min 50, max 400
+};
+
+const getGanttOffset = (task: any, allTasks: any[]) => {
+  if (!task.startDate || allTasks.length === 0) return 0;
+  const taskStart = new Date(task.startDate).getTime();
+
+  // Find earliest start date
+  let earliest = Infinity;
+  for (const t of allTasks) {
+    if (t.startDate) {
+      const ts = new Date(t.startDate).getTime();
+      if (ts < earliest) earliest = ts;
+    }
+  }
+
+  if (earliest === Infinity) return 0;
+  const diff = (taskStart - earliest) / (1000 * 60 * 60 * 24); // days
+  return Math.max(0, diff * 30); // 30px per day
 };
 
 const getInviteStatusColor = (status: string) => {
@@ -392,6 +1180,31 @@ const progressPercent = computed(() => {
   return Math.min(100, (project.value.workedHours / project.value.estimatedHours) * 100);
 });
 
+// Calculate days in progress (unique days with check-ins)
+const daysInProgress = computed(() => {
+  if (!checkins.value || checkins.value.length === 0) return 0;
+  // Get unique dates from check-ins
+  const uniqueDates = new Set(
+    checkins.value.map((c: any) => {
+      const date = new Date(c.checkInAt);
+      return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    })
+  );
+  return uniqueDates.size;
+});
+
+// Calculate remaining days to deadline
+const daysToDeadline = computed(() => {
+  if (!project.value?.deadlineDate) return null;
+  const deadline = new Date(project.value.deadlineDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  deadline.setHours(0, 0, 0, 0);
+  const diffTime = deadline.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+});
+
 // Load data when tab changes
 const changeTab = async (tab: string) => {
   activeTab.value = tab;
@@ -403,6 +1216,10 @@ const changeTab = async (tab: string) => {
     await loadReports();
   } else if (tab === 'nightshift' && nightShiftInvites.value.length === 0 && project.value?.isNightShift) {
     await loadNightShiftInvites();
+  } else if (tab === 'schedule') {
+    await loadTasks();
+    // Auto-generate if no tasks and we have deadline + measurements
+    await autoGenerateTasks();
   }
 };
 
@@ -444,6 +1261,20 @@ onMounted(async () => {
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
           </svg>
           Projetos
+        </router-link>
+        <router-link to="/contributions" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+          </svg>
+          Solicitacoes
+        </router-link>
+        <router-link to="/campaigns" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+          Campanhas
         </router-link>
         <router-link to="/map" class="nav-link">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -521,6 +1352,13 @@ onMounted(async () => {
             </div>
           </div>
           <div class="project-actions">
+            <button v-if="!editMode" @click="openEntryRequestModal" class="btn btn-entry">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <line x1="9" y1="3" x2="9" y2="21"/>
+              </svg>
+              Solicitar Liberacao
+            </button>
             <button v-if="!editMode" @click="editMode = true" class="btn btn-primary">
               <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -590,6 +1428,19 @@ onMounted(async () => {
             Relatorios
           </button>
           <button
+            class="tab"
+            :class="{ active: activeTab === 'schedule' }"
+            @click="changeTab('schedule')"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            Programacao
+          </button>
+          <button
             v-if="project.isNightShift"
             class="tab tab-nightshift"
             :class="{ active: activeTab === 'nightshift' }"
@@ -655,13 +1506,54 @@ onMounted(async () => {
                     </select>
                     <span v-else class="field-value">{{ getStatusLabel(project.status) }}</span>
                   </div>
-                  <div class="field field-toggle">
-                    <label>Turno Noturno</label>
-                    <label v-if="editMode" class="toggle">
-                      <input type="checkbox" v-model="formData.isNightShift" />
-                      <span class="toggle-slider"></span>
-                    </label>
-                    <span v-else class="field-value">{{ project.isNightShift ? 'Sim' : 'Nao' }}</span>
+                  <div class="field">
+                    <label>Telefones do Responsavel</label>
+                    <div v-if="editMode" class="phones-edit">
+                      <div class="phones-list" v-if="formData.responsiblePhones.length > 0">
+                        <div v-for="phone in formData.responsiblePhones" :key="phone" class="phone-tag">
+                          <span>{{ formatPhoneDisplay(phone) }}</span>
+                          <button type="button" @click="removeResponsiblePhone(phone)" class="phone-remove">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <line x1="18" y1="6" x2="6" y2="18"/>
+                              <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="phone-add">
+                        <input
+                          v-model="newResponsiblePhone"
+                          type="tel"
+                          class="input"
+                          placeholder="Ex: 5541988888888"
+                          @keyup.enter="addResponsiblePhone"
+                        />
+                        <button type="button" @click="addResponsiblePhone" class="btn btn-secondary btn-sm">
+                          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                          </svg>
+                          Adicionar
+                        </button>
+                      </div>
+                    </div>
+                    <div v-else class="phones-display">
+                      <div v-if="project.responsiblePhones?.length > 0" class="phones-clickable">
+                        <a
+                          v-for="phone in project.responsiblePhones"
+                          :key="phone"
+                          :href="'https://wa.me/' + phone"
+                          target="_blank"
+                          class="phone-whatsapp-link"
+                        >
+                          <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                          </svg>
+                          {{ formatPhoneDisplay(phone) }}
+                        </a>
+                      </div>
+                      <span v-else class="field-value">-</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -785,6 +1677,129 @@ onMounted(async () => {
                 </div>
               </div>
 
+              <!-- Schedule Card (Cronograma) -->
+              <div class="info-card schedule-card">
+                <h3>Cronograma</h3>
+                <div class="schedule-grid">
+                  <!-- Horario de Entrada -->
+                  <div class="schedule-field">
+                    <div class="schedule-field-header">
+                      <label>Entrada</label>
+                    </div>
+                    <select
+                      v-model="formData.workStartTime"
+                      class="time-dropdown"
+                      @change="saveFieldInline('workStartTime', $event)"
+                    >
+                      <option v-for="time in workHoursOptions" :key="time" :value="time">{{ time }}</option>
+                    </select>
+                  </div>
+
+                  <!-- Horario de Saida -->
+                  <div class="schedule-field">
+                    <div class="schedule-field-header">
+                      <label>Saida</label>
+                    </div>
+                    <select
+                      v-model="formData.workEndTime"
+                      class="time-dropdown"
+                      @change="saveFieldInline('workEndTime', $event)"
+                    >
+                      <option v-for="time in workHoursOptions" :key="time" :value="time">{{ time }}</option>
+                    </select>
+                  </div>
+
+                  <!-- Prazo (Deadline) -->
+                  <div class="schedule-field">
+                    <div class="schedule-field-header">
+                      <label>Prazo</label>
+                    </div>
+                    <div class="schedule-value-row">
+                      <input
+                        v-model="formData.deadlineDate"
+                        type="date"
+                        class="date-input-inline"
+                        @change="saveFieldInline('deadlineDate', $event)"
+                      />
+                      <span v-if="daysToDeadline !== null" :class="['deadline-badge', daysToDeadline < 0 ? 'overdue' : daysToDeadline <= 3 ? 'warning' : 'ok']">
+                        {{ daysToDeadline < 0 ? Math.abs(daysToDeadline) + 'd atraso' : daysToDeadline === 0 ? 'Hoje' : daysToDeadline + 'd' }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Dias Estimados -->
+                  <div class="schedule-field">
+                    <div class="schedule-field-header">
+                      <label>Dias Estimados</label>
+                    </div>
+                    <div class="schedule-value-row">
+                      <input
+                        v-model.number="formData.estimatedDays"
+                        type="number"
+                        min="1"
+                        class="number-input-inline"
+                        placeholder="-"
+                        @change="saveFieldInline('estimatedDays', $event)"
+                      />
+                      <span class="input-suffix">dias</span>
+                    </div>
+                  </div>
+
+                  <!-- Dias em Andamento (calculado) -->
+                  <div class="schedule-field readonly">
+                    <div class="schedule-field-header">
+                      <label>Dias em Andamento</label>
+                    </div>
+                    <span class="schedule-value highlight">{{ daysInProgress }} dias</span>
+                  </div>
+
+                  <!-- Sabado -->
+                  <div class="schedule-field">
+                    <div class="schedule-field-header">
+                      <label>Sabado</label>
+                    </div>
+                    <button
+                      type="button"
+                      class="toggle-btn"
+                      :class="{ active: formData.allowSaturday }"
+                      @click="toggleAndSave('allowSaturday', $event)"
+                    >
+                      {{ formData.allowSaturday ? 'Sim' : 'Nao' }}
+                    </button>
+                  </div>
+
+                  <!-- Domingo -->
+                  <div class="schedule-field">
+                    <div class="schedule-field-header">
+                      <label>Domingo</label>
+                    </div>
+                    <button
+                      type="button"
+                      class="toggle-btn"
+                      :class="{ active: formData.allowSunday }"
+                      @click="toggleAndSave('allowSunday', $event)"
+                    >
+                      {{ formData.allowSunday ? 'Sim' : 'Nao' }}
+                    </button>
+                  </div>
+
+                  <!-- Noturno -->
+                  <div class="schedule-field">
+                    <div class="schedule-field-header">
+                      <label>Noturno</label>
+                    </div>
+                    <button
+                      type="button"
+                      class="toggle-btn"
+                      :class="{ active: formData.allowNightWork }"
+                      @click="toggleAndSave('allowNightWork', $event)"
+                    >
+                      {{ formData.allowNightWork ? 'Sim' : 'Nao' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <!-- Hours Card -->
               <div class="info-card">
                 <h3>Horas</h3>
@@ -863,13 +1878,22 @@ onMounted(async () => {
           <div v-if="activeTab === 'team'" class="team-tab">
             <div class="team-header">
               <h3>Equipe do Projeto</h3>
-              <button @click="openAddMemberModal" class="btn btn-primary">
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="12" y1="5" x2="12" y2="19"/>
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-                Adicionar Aplicador
-              </button>
+              <div class="team-actions">
+                <button @click="openEntryRequestModal" class="btn btn-entry">
+                  <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="9" y1="3" x2="9" y2="21"/>
+                  </svg>
+                  Solicitar Liberacao na Portaria
+                </button>
+                <button @click="openAddMemberModal" class="btn btn-primary">
+                  <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  Adicionar Aplicador
+                </button>
+              </div>
             </div>
 
             <div v-if="loadingTeam" class="loading-inline">
@@ -1022,6 +2046,225 @@ onMounted(async () => {
             </div>
           </div>
 
+          <!-- Schedule Tab (Programacao / Gantt) -->
+          <div v-if="activeTab === 'schedule'" class="schedule-tab">
+            <div class="schedule-header">
+              <h3>Programacao de Tarefas</h3>
+              <div class="schedule-actions">
+                <span v-if="hasMeasurements" class="scope-badge" :class="'scope-' + projectScope.toLowerCase()">
+                  Escopo: {{ scopeLabels[projectScope] }}
+                </span>
+                <button @click="generateTasks" class="btn btn-primary" :disabled="generatingTasks || !hasMeasurements">
+                  <div v-if="generatingTasks" class="btn-spinner-small"></div>
+                  <svg v-else class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                  </svg>
+                  {{ generatingTasks ? 'Gerando...' : 'Gerar Etapas' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Total Days Summary -->
+            <div class="gantt-summary">
+              <div class="summary-item">
+                <span class="summary-label">Escopo:</span>
+                <span class="summary-value scope-value">{{ scopeLabels[projectScope] }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">Etapas:</span>
+                <span class="summary-value">{{ tasks.length }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">Dias:</span>
+                <span class="summary-value">{{ totalGanttDays }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">Horas:</span>
+                <span class="summary-value">{{ totalGanttDays * 8 }}h</span>
+              </div>
+            </div>
+
+            <!-- Loading State -->
+            <div v-if="loadingTasks" class="loading-inline">
+              <div class="loading-spinner-small"></div>
+              <span>Carregando tarefas...</span>
+            </div>
+
+            <!-- Traditional Gantt Chart -->
+            <div class="gantt-traditional">
+              <!-- Timeline Header -->
+              <div class="gantt-header">
+                <div class="gantt-drag-column"></div>
+                <div class="gantt-task-column">ETAPA</div>
+                <div class="gantt-timeline-header">
+                  <div
+                    v-for="(day, index) in ganttDaysArray"
+                    :key="index"
+                    class="gantt-day-cell"
+                    :class="{ 'gantt-day-weekend': day.date.getDay() === 0 || day.date.getDay() === 6 }"
+                  >
+                    <span class="day-num">{{ day.dayNum }}</span>
+                    <span class="day-label">{{ day.label }}</span>
+                  </div>
+                </div>
+                <div class="gantt-days-column">DIAS</div>
+              </div>
+
+              <!-- Task Rows -->
+              <div class="gantt-body">
+                <!-- Empty state when no tasks -->
+                <div v-if="tasks.length === 0" class="gantt-empty-state">
+                  <p v-if="!hasMeasurements">
+                    Adicione metragens (m² Piso, Parede ou Teto) para gerar etapas automaticamente.
+                  </p>
+                  <p v-else-if="!project?.deadlineDate && !project?.estimatedDays">
+                    Defina um prazo para gerar as etapas automaticamente.
+                  </p>
+                  <p v-else>
+                    Clique em "Gerar Etapas" para criar o cronograma baseado no escopo: <strong>{{ scopeLabels[projectScope] }}</strong>
+                  </p>
+                </div>
+
+                <template v-for="(task, index) in tasks" :key="task.id">
+                  <!-- Task Row -->
+                  <div
+                    class="gantt-row-traditional"
+                    :class="{
+                      'gantt-row-selected': selectedBlock?.id === task.id,
+                      'gantt-row-dragging': draggedIndex === index,
+                      'gantt-row-drag-over': dragOverIndex === index
+                    }"
+                    draggable="false"
+                    @click="openBlockEditor(task)"
+                  >
+                    <!-- Sort Order -->
+                    <div class="drag-handle" @click.stop>
+                      <span class="task-order">{{ task.sortOrder || index + 1 }}</span>
+                    </div>
+
+                    <!-- Task Name -->
+                    <div class="gantt-task-cell" @click.stop>
+                      <div class="task-color-dot" :style="{ backgroundColor: task.color || '#c9a962' }"></div>
+                      <span class="task-title">{{ task.title }}</span>
+                    </div>
+
+                    <!-- Timeline Bar -->
+                    <div class="gantt-timeline-cell">
+                      <div class="timeline-track">
+                        <div
+                          class="timeline-bar"
+                          :style="{
+                            backgroundColor: task.color || '#c9a962',
+                            left: getTaskLeft(task) + 'px',
+                            width: Math.max(getTaskWidth(task) - 4, 30) + 'px',
+                            opacity: task.status === 'COMPLETED' ? 0.6 : 1
+                          }"
+                        >
+                          <span class="bar-label">{{ getTaskDuration(task) }}d</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Days Count -->
+                    <div class="gantt-days-cell">
+                      <span class="days-value">{{ getTaskDuration(task) }}</span>
+                    </div>
+
+                    <!-- Delete button -->
+                    <button class="gantt-delete-btn" @click.stop="deleteBlock(task.id)" title="Remover etapa">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- Block Editor Panel -->
+            <div v-if="showBlockEditor && selectedBlock" class="block-editor-panel">
+              <div class="editor-header">
+                <h4>Editar Etapa</h4>
+                <button class="close-btn" @click="showBlockEditor = false">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+              <div class="editor-content">
+                <!-- Etapa Dropdown -->
+                <div class="editor-field">
+                  <label>Tipo de Etapa</label>
+                  <select
+                    v-model="selectedBlock.taskType"
+                    class="editor-select"
+                    @change="onTaskTypeChange"
+                  >
+                    <option
+                      v-for="type in availableTaskTypes"
+                      :key="type.value"
+                      :value="type.value"
+                    >
+                      {{ type.label }}
+                    </option>
+                  </select>
+                </div>
+
+                <!-- Dias Dropdown -->
+                <div class="editor-field">
+                  <label>Dias de Trabalho</label>
+                  <select v-model.number="selectedBlock.days" class="editor-select">
+                    <option
+                      v-for="day in availableDays"
+                      :key="day"
+                      :value="day"
+                    >
+                      {{ day }} {{ day === 1 ? 'dia' : 'dias' }}
+                    </option>
+                  </select>
+                </div>
+
+                <!-- Preview -->
+                <div class="editor-preview">
+                  <div class="preview-label">Preview:</div>
+                  <div class="preview-row">
+                    <div class="preview-color" :style="{ backgroundColor: selectedBlock.color }"></div>
+                    <span class="preview-name">{{ selectedBlock.label }}</span>
+                    <span class="preview-days">{{ selectedBlock.days }}d = {{ selectedBlock.days * 8 }}h</span>
+                  </div>
+                  <div
+                    v-if="selectedBlock.days > 0"
+                    class="preview-bar"
+                    :style="{
+                      backgroundColor: selectedBlock.color,
+                      width: Math.min(selectedBlock.days * 40, 300) + 'px'
+                    }"
+                  ></div>
+                </div>
+                <!-- Action Buttons -->
+                <div class="editor-actions">
+                  <button class="btn btn-danger" @click="deleteBlock(selectedBlock.id)">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="3,6 5,6 21,6"/>
+                      <path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2v2"/>
+                    </svg>
+                    Eliminar
+                  </button>
+                  <div class="editor-actions-right">
+                    <button class="btn btn-secondary" @click="showBlockEditor = false">
+                      Cancelar
+                    </button>
+                    <button class="btn btn-primary" @click="saveBlockChanges">
+                      Aplicar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Night Shift Tab -->
           <div v-if="activeTab === 'nightshift'" class="nightshift-tab">
             <!-- Night Shift Config -->
@@ -1168,6 +2411,103 @@ onMounted(async () => {
       </template>
     </main>
 
+    <!-- Task Modal -->
+    <div v-if="showTaskModal" class="modal-overlay" @click="showTaskModal = false">
+      <div class="modal modal-large" @click.stop>
+        <div class="modal-header">
+          <h3>{{ editingTask ? 'Editar Tarefa' : 'Nova Tarefa' }}</h3>
+          <button class="modal-close" @click="showTaskModal = false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="field field-full">
+              <label>Titulo *</label>
+              <input
+                v-model="taskForm.title"
+                type="text"
+                class="input"
+                placeholder="Nome da tarefa"
+              />
+            </div>
+            <div class="field">
+              <label>Tipo de Tarefa</label>
+              <select v-model="taskForm.taskType" class="input">
+                <option v-for="(label, key) in taskTypeLabels" :key="key" :value="key">
+                  {{ label }}
+                </option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Status</label>
+              <select v-model="taskForm.status" class="input">
+                <option v-for="(label, key) in taskStatusLabels" :key="key" :value="key">
+                  {{ label }}
+                </option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Data Inicio</label>
+              <input
+                v-model="taskForm.startDate"
+                type="date"
+                class="input"
+              />
+            </div>
+            <div class="field">
+              <label>Data Fim</label>
+              <input
+                v-model="taskForm.endDate"
+                type="date"
+                class="input"
+              />
+            </div>
+            <div class="field">
+              <label>Horas Estimadas</label>
+              <input
+                v-model.number="taskForm.estimatedHours"
+                type="number"
+                step="0.5"
+                min="0"
+                class="input"
+                placeholder="Ex: 8"
+              />
+            </div>
+            <div class="field">
+              <label>Cor</label>
+              <input
+                v-model="taskForm.color"
+                type="color"
+                class="input input-color"
+              />
+            </div>
+            <div class="field field-full">
+              <label>Descricao</label>
+              <textarea
+                v-model="taskForm.description"
+                class="input textarea"
+                rows="3"
+                placeholder="Descricao da tarefa (opcional)"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showTaskModal = false">
+            Cancelar
+          </button>
+          <button class="btn btn-primary" @click="saveTask" :disabled="savingTask">
+            <div v-if="savingTask" class="btn-spinner-small"></div>
+            {{ savingTask ? 'Salvando...' : (editingTask ? 'Salvar' : 'Criar') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Add Member Modal -->
     <div v-if="showAddMemberModal" class="modal-overlay" @click="showAddMemberModal = false">
       <div class="modal" @click.stop>
@@ -1278,6 +2618,91 @@ onMounted(async () => {
           >
             <div v-if="sendingInvites" class="btn-spinner"></div>
             {{ sendingInvites ? 'Enviando...' : 'Enviar Convites' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Entry Request Modal -->
+    <div v-if="showEntryRequestModal" class="modal-overlay" @click="showEntryRequestModal = false">
+      <div class="modal modal-lg" @click.stop>
+        <div class="modal-header">
+          <h3>Solicitar Liberacao na Portaria</h3>
+          <button class="modal-close" @click="showEntryRequestModal = false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="entry-info">
+            <div class="entry-info-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+              <span>{{ project?.title }}</span>
+            </div>
+            <div class="entry-info-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                <circle cx="12" cy="10" r="3"/>
+              </svg>
+              <span>{{ project?.endereco || 'Endereco nao informado' }}</span>
+            </div>
+            <div class="entry-info-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+              </svg>
+              <span v-if="formData.responsiblePhones?.length > 0">
+                {{ formData.responsiblePhones.length }} telefone(s) do responsavel
+              </span>
+              <span v-else class="warning-text">Nenhum telefone cadastrado</span>
+            </div>
+          </div>
+
+          <p class="modal-hint">Selecione os aplicadores que terao acesso liberado:</p>
+
+          <div v-if="team.length === 0" class="empty-state-small">
+            <p>Nenhum membro na equipe</p>
+          </div>
+
+          <div v-else class="invitee-list">
+            <div
+              v-for="member in team"
+              :key="member.id"
+              class="invitee-item"
+              :class="{ selected: selectedForEntry.includes(member.id) }"
+              @click="toggleEntryApplicator(member.id)"
+            >
+              <div class="invitee-checkbox">
+                <svg v-if="selectedForEntry.includes(member.id)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <div class="invitee-avatar">
+                {{ member.name?.charAt(0) || '?' }}
+              </div>
+              <div class="invitee-details">
+                <span class="invitee-name">{{ member.name }}</span>
+                <span class="invitee-role">{{ getRoleLabel(member.projectRole) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="selectedForEntry.length > 0" class="selected-count entry-count">
+            {{ selectedForEntry.length }} aplicador(es) selecionado(s)
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showEntryRequestModal = false">Cancelar</button>
+          <button
+            class="btn btn-entry"
+            @click="sendEntryRequest"
+            :disabled="selectedForEntry.length === 0 || sendingEntryRequest || !formData.responsiblePhones?.length"
+          >
+            <div v-if="sendingEntryRequest" class="btn-spinner"></div>
+            {{ sendingEntryRequest ? 'Enviando...' : 'Enviar Solicitacao' }}
           </button>
         </div>
       </div>
@@ -1662,6 +3087,329 @@ onMounted(async () => {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+/* Schedule Card (Cronograma) */
+.schedule-card {
+  grid-column: span 2;
+}
+
+.schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.schedule-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+}
+
+.schedule-field.readonly {
+  background: rgba(201, 169, 98, 0.05);
+  border-color: rgba(201, 169, 98, 0.2);
+}
+
+.time-dropdown {
+  /* Parece texto, mas é dropdown */
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent-color);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-align: center;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+.time-dropdown:hover {
+  background: rgba(201, 169, 98, 0.1);
+  border-radius: 4px;
+}
+
+.time-dropdown:focus {
+  outline: none;
+}
+
+.time-dropdown option {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+/* Date Input Inline - mesma aparência do time-dropdown */
+.date-input-inline {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent-color);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.date-input-inline:hover {
+  background: rgba(201, 169, 98, 0.1);
+  border-radius: 4px;
+}
+
+.date-input-inline:focus {
+  outline: none;
+}
+
+/* Number Input Inline */
+.number-input-inline {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent-color);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  width: 50px;
+  text-align: left;
+}
+
+.number-input-inline:hover {
+  background: rgba(201, 169, 98, 0.1);
+  border-radius: 4px;
+}
+
+.number-input-inline:focus {
+  outline: none;
+}
+
+.number-input-inline::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* Remover setas do input number */
+.number-input-inline::-webkit-outer-spin-button,
+.number-input-inline::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.number-input-inline[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* Schedule Value Row - para input + badge/suffix na mesma linha */
+.schedule-value-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input-suffix {
+  font-size: 14px;
+  color: var(--text-tertiary);
+}
+
+/* Toggle Button - mesma estética dos outros valores */
+.toggle-btn {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 12px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.toggle-btn:hover {
+  background: rgba(201, 169, 98, 0.1);
+}
+
+.toggle-btn.active {
+  color: var(--accent-color);
+}
+
+.schedule-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.schedule-field-header label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.edit-field-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  transition: all 0.2s;
+  opacity: 0.6;
+}
+
+.edit-field-btn:hover {
+  opacity: 1;
+  background: rgba(201, 169, 98, 0.1);
+  color: var(--accent-color);
+}
+
+.edit-field-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.schedule-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.schedule-value.highlight {
+  color: var(--accent-color);
+}
+
+.schedule-value-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.deadline-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  width: fit-content;
+}
+
+.deadline-badge.ok {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+}
+
+.deadline-badge.warning {
+  background: rgba(249, 115, 22, 0.1);
+  color: #f97316;
+}
+
+.deadline-badge.overdue {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.schedule-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.schedule-badge.allowed {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.schedule-badge.not-allowed {
+  background: rgba(107, 114, 128, 0.15);
+  color: var(--text-tertiary);
+}
+
+/* Inline Edit Group */
+.inline-edit-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input-sm {
+  padding: 6px 10px;
+  font-size: 13px;
+  height: 32px;
+}
+
+.btn-inline-save,
+.btn-inline-cancel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-inline-save {
+  background: var(--accent-color);
+  color: #000;
+}
+
+.btn-inline-save:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+
+.btn-inline-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-inline-cancel {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.btn-inline-cancel:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.btn-inline-save svg,
+.btn-inline-cancel svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 1200px) {
+  .schedule-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .schedule-card {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 900px) {
+  .schedule-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .schedule-grid {
+    grid-template-columns: 1fr;
+  }
+  .schedule-card {
+    grid-column: span 1;
+  }
 }
 
 .info-fields {
@@ -2524,5 +4272,1066 @@ onMounted(async () => {
 
 .empty-state-small p {
   margin: 0;
+}
+
+/* Phone management styles */
+.phones-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.phones-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.phone-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.phone-tag.readonly {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: var(--accent-green);
+}
+
+.phone-remove {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.1);
+  border: none;
+  color: var(--accent-red);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.phone-remove:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.phone-remove svg {
+  width: 12px;
+  height: 12px;
+}
+
+.phone-add {
+  display: flex;
+  gap: 8px;
+}
+
+.phone-add .input {
+  flex: 1;
+}
+
+.btn-sm {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.phones-display {
+  min-height: 24px;
+}
+
+/* Clickable WhatsApp phones */
+.phones-clickable {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.phone-whatsapp-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(37, 211, 102, 0.1);
+  border: 1px solid rgba(37, 211, 102, 0.3);
+  border-radius: 20px;
+  font-size: 13px;
+  color: #25d366;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.phone-whatsapp-link:hover {
+  background: rgba(37, 211, 102, 0.2);
+  border-color: rgba(37, 211, 102, 0.5);
+  transform: translateY(-1px);
+}
+
+.phone-whatsapp-link svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* Team actions */
+.team-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Entry request button */
+.btn-entry {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+}
+
+.btn-entry:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.btn-entry:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Entry info in modal */
+.entry-info {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.entry-info-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.entry-info-item svg {
+  width: 18px;
+  height: 18px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.entry-info-item .warning-text {
+  color: var(--accent-orange);
+}
+
+.entry-count {
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--accent-green);
+}
+
+.invitee-role {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+/* Schedule Tab / Gantt Styles */
+.schedule-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.schedule-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.schedule-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.schedule-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.task-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 12px;
+}
+
+.stat-card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  border: 1px solid var(--border-color);
+}
+
+.stat-value {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.stat-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.stat-pending .stat-value {
+  color: #6b7280;
+}
+
+.stat-progress .stat-value {
+  color: #3b82f6;
+}
+
+.stat-completed .stat-value {
+  color: #22c55e;
+}
+
+.gantt-container {
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.gantt-chart {
+  min-width: 100%;
+  overflow-x: auto;
+}
+
+.gantt-row {
+  display: grid;
+  grid-template-columns: 200px 1fr 120px;
+  gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  align-items: center;
+}
+
+.gantt-row:last-child {
+  border-bottom: none;
+}
+
+.gantt-row:hover {
+  background: rgba(201, 169, 98, 0.05);
+}
+
+.gantt-task-info {
+  min-width: 0;
+}
+
+.task-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.task-title {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+}
+
+.task-type {
+  color: var(--accent-color);
+}
+
+/* Gantt Empty State */
+.gantt-empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-tertiary);
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin: 16px 0;
+}
+
+.gantt-empty-state p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.gantt-empty-state strong {
+  color: var(--accent-color);
+}
+
+/* Scope Badge */
+.scope-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.scope-badge.scope-piso {
+  background: rgba(201, 169, 98, 0.2);
+  color: #c9a962;
+}
+
+.scope-badge.scope-parede_teto {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+}
+
+.scope-badge.scope-combinado {
+  background: rgba(139, 92, 246, 0.2);
+  color: #8b5cf6;
+}
+
+/* Task Order Number */
+.task-order {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+/* Scope Value in Summary */
+.scope-value {
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+.gantt-bar-container {
+  min-width: 300px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+}
+
+.gantt-bar {
+  height: 100%;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  min-width: 50px;
+}
+
+.gantt-bar:hover {
+  filter: brightness(1.1);
+}
+
+.gantt-bar-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #000;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gantt-task-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.status-select {
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.status-select:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.edit-btn,
+.delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+/* Gantt Summary Styles */
+.gantt-summary {
+  display: flex;
+  gap: 24px;
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 16px 24px;
+  border: 1px solid var(--border-color);
+}
+
+.summary-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary-label {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.summary-value {
+  font-weight: 600;
+  color: var(--accent-color);
+  font-size: 16px;
+}
+
+/* Generate Button Style */
+.btn-generate {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* Traditional Gantt Chart Styles */
+.gantt-traditional {
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.gantt-header {
+  display: grid;
+  grid-template-columns: 32px 180px 1fr 70px 36px;
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.gantt-drag-column {
+  width: 32px;
+}
+
+.gantt-task-column {
+  padding: 12px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: flex-end;
+}
+
+.gantt-days-column {
+  padding: 12px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-left: 1px solid var(--border-color);
+}
+
+.gantt-timeline-header {
+  display: flex;
+  overflow-x: auto;
+  border-left: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+}
+
+.gantt-day-cell {
+  min-width: 40px;
+  max-width: 40px;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.gantt-day-cell:last-child {
+  border-right: none;
+}
+
+.gantt-day-weekend {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.day-num {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.day-label {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+/* Gantt Body */
+.gantt-body {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.gantt-row-traditional {
+  display: grid;
+  grid-template-columns: 32px 180px 1fr 70px 36px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: default;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.15s;
+}
+
+/* Drag Handle */
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: var(--text-secondary);
+  opacity: 0.4;
+  transition: opacity 0.2s, color 0.2s;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.gantt-row-traditional:hover .drag-handle {
+  opacity: 1;
+  color: var(--accent-color);
+}
+
+/* Drag States */
+.gantt-row-dragging {
+  opacity: 0.5;
+  background: rgba(201, 169, 98, 0.1);
+  transform: scale(0.98);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.gantt-row-drag-over {
+  background: rgba(201, 169, 98, 0.15);
+  border-top: 2px solid var(--accent-color);
+}
+
+
+.gantt-row-traditional:last-child {
+  border-bottom: none;
+}
+
+.gantt-row-traditional:hover {
+  background: rgba(201, 169, 98, 0.05);
+}
+
+.gantt-row-selected {
+  background: rgba(201, 169, 98, 0.1);
+}
+
+.gantt-task-cell {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-right: 1px solid var(--border-color);
+}
+
+.task-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.task-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gantt-timeline-cell {
+  padding: 8px 0;
+  overflow-x: auto;
+  border-right: 1px solid var(--border-color);
+}
+
+.timeline-track {
+  position: relative;
+  height: 28px;
+  background: repeating-linear-gradient(
+    to right,
+    transparent,
+    transparent 39px,
+    rgba(255, 255, 255, 0.03) 39px,
+    rgba(255, 255, 255, 0.03) 40px
+  );
+  min-width: calc(var(--total-days, 14) * 40px);
+}
+
+.timeline-bar {
+  position: absolute;
+  top: 2px;
+  height: 24px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.timeline-bar:hover {
+  transform: scaleY(1.1);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+}
+
+.bar-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #000;
+  text-shadow: 0 0 2px rgba(255, 255, 255, 0.3);
+}
+
+.gantt-days-cell {
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.days-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-color);
+}
+
+/* Inline Select Dropdowns in Gantt */
+.gantt-inline-select {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+  padding-right: 20px;
+}
+
+.gantt-inline-select:hover {
+  background-color: rgba(201, 169, 98, 0.1);
+  border-color: var(--border-color);
+}
+
+.gantt-inline-select:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  background-color: rgba(201, 169, 98, 0.15);
+}
+
+.gantt-inline-select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 8px;
+}
+
+.task-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.days-select {
+  width: 100%;
+  height: 100%;
+  min-height: 36px;
+  text-align: center;
+  text-align-last: center;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--accent-color);
+  background-position: right 6px center;
+  padding: 6px 24px 6px 8px;
+}
+
+/* Delete button in Gantt row */
+.gantt-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: auto;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.4;
+  transition: all 0.2s;
+}
+
+.gantt-delete-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.gantt-row-traditional:hover .gantt-delete-btn {
+  opacity: 1;
+}
+
+.gantt-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+/* Block Editor Panel */
+.block-editor-panel {
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 2px solid var(--accent-color);
+  overflow: hidden;
+  margin-top: 16px;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: rgba(201, 169, 98, 0.1);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.editor-header h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent-color);
+}
+
+.close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.close-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.editor-content {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editor-field label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.days-input-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.days-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--accent-color);
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  font-size: 20px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.days-btn:hover {
+  background: #d4af37;
+  transform: scale(1.05);
+}
+
+.days-input {
+  width: 80px;
+  height: 40px;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 600;
+  background: var(--input-bg);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+}
+
+.days-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.status-select-full {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.status-select-full:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+/* Editor Select Dropdown */
+.editor-select {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 12px center;
+  background-repeat: no-repeat;
+  background-size: 16px;
+}
+
+.editor-select:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.editor-preview {
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preview-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.preview-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.preview-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.preview-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.preview-days {
+  font-size: 13px;
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+.preview-bar {
+  height: 24px;
+  border-radius: 4px;
+  min-width: 40px;
+  transition: width 0.3s ease;
+}
+
+.editor-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.editor-actions-right {
+  display: flex;
+  gap: 12px;
+}
+
+/* Danger Button */
+.btn-danger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid #ef4444;
+  border-radius: 8px;
+  color: #ef4444;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.btn-danger .btn-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.edit-btn:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.edit-btn svg,
+.delete-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Modal large */
+.modal-large {
+  max-width: 600px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.field-full {
+  grid-column: 1 / -1;
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.input-color {
+  height: 40px;
+  padding: 4px;
+  cursor: pointer;
 }
 </style>

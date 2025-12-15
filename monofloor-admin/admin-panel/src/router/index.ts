@@ -38,6 +38,26 @@ const routes = [
     component: () => import('../views/Map.vue'),
     meta: { requiresAuth: true },
   },
+  {
+    path: '/contributions',
+    name: 'Contributions',
+    component: () => import('../views/Contributions.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/campaigns',
+    name: 'Campaigns',
+    component: () => import('../views/Campaigns.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/badges',
+    redirect: '/campaigns',
+  },
+  {
+    path: '/dashboard',
+    redirect: '/',
+  },
 ];
 
 const router = createRouter({

@@ -54,8 +54,11 @@ export const applicatorsApi = {
   approve: (id: string) => api.post(`/api/admin/applicators/${id}/approve`),
   reject: (id: string, reason: string) =>
     api.post(`/api/admin/applicators/${id}/reject`, { reason }),
+  updateRole: (id: string, role: string) =>
+    api.put(`/api/admin/applicators/${id}/role`, { role }),
   assignProject: (id: string, projectId: string, projectRole: string) =>
     api.post(`/api/admin/applicators/${id}/assign-project`, { projectId, projectRole }),
+  delete: (id: string) => api.delete(`/api/admin/applicators/${id}`),
 };
 
 // Projects API
@@ -95,6 +98,35 @@ export const projectsApi = {
     api.post(`/api/admin/projects/${id}/night-shift/invites`, { userIds }),
   cancelNightShiftInvite: (projectId: string, inviteId: string) =>
     api.delete(`/api/admin/projects/${projectId}/night-shift/invites/${inviteId}`),
+  // Entry Request (Liberacao na Portaria)
+  requestEntry: (id: string, userIds: string[]) =>
+    api.post(`/api/admin/projects/${id}/request-entry`, { userIds }),
+  // Tasks / Gantt
+  getTasks: (id: string, status?: string) =>
+    api.get(`/api/admin/projects/${id}/tasks`, { params: { status } }),
+  getTask: (projectId: string, taskId: string) =>
+    api.get(`/api/admin/projects/${projectId}/tasks/${taskId}`),
+  createTask: (projectId: string, data: any) =>
+    api.post(`/api/admin/projects/${projectId}/tasks`, data),
+  updateTask: (projectId: string, taskId: string, data: any) =>
+    api.put(`/api/admin/projects/${projectId}/tasks/${taskId}`, data),
+  deleteTask: (projectId: string, taskId: string) =>
+    api.delete(`/api/admin/projects/${projectId}/tasks/${taskId}`),
+  generateTasks: (projectId: string, scope?: 'PISO' | 'PAREDE_TETO' | 'COMBINADO') =>
+    api.post(`/api/admin/projects/${projectId}/tasks/generate`, scope ? { scope } : {}),
+  syncDeadline: (projectId: string, data: { deadlineDate?: string; estimatedDays?: number }) =>
+    api.post(`/api/admin/projects/${projectId}/tasks/sync-deadline`, data),
+  getScope: (projectId: string) =>
+    api.get(`/api/admin/projects/${projectId}/tasks/scope`),
+  reorderTasks: (projectId: string, taskIds: string[]) =>
+    api.put(`/api/admin/projects/${projectId}/tasks/reorder`, { taskIds }),
+  getTasksStats: (projectId: string) =>
+    api.get(`/api/admin/projects/${projectId}/tasks/stats`),
+};
+
+// Tasks API (standalone for task-types)
+export const tasksApi = {
+  getTaskTypes: () => api.get('/api/admin/projects/task-types'),
 };
 
 // Reports API
@@ -115,4 +147,96 @@ export const locationsApi = {
   getById: (userId: string) => api.get(`/api/admin/locations/${userId}`),
   getHistory: (userId: string, hours?: number) =>
     api.get(`/api/admin/locations/${userId}/history`, { params: { hours } }),
+};
+
+// Contributions API
+export const contributionsApi = {
+  getAll: (params?: { status?: string; page?: number; limit?: number }) =>
+    api.get('/api/admin/contributions', { params }),
+  getPendingCount: () => api.get('/api/admin/contributions/pending-count'),
+  approve: (id: string) => api.post(`/api/admin/contributions/${id}/approve`),
+  reject: (id: string) => api.post(`/api/admin/contributions/${id}/reject`),
+};
+
+// Campaigns API
+export const campaignsApi = {
+  getAll: (params?: { status?: string; page?: number; limit?: number }) =>
+    api.get('/api/admin/campaigns', { params }),
+  getById: (id: string) => api.get(`/api/admin/campaigns/${id}`),
+  create: (data: any) => api.post('/api/admin/campaigns', data),
+  update: (id: string, data: any) => api.put(`/api/admin/campaigns/${id}`, data),
+  delete: (id: string) => api.delete(`/api/admin/campaigns/${id}`),
+  launch: (id: string) => api.post(`/api/admin/campaigns/${id}/launch`),
+  // Slides
+  addSlide: (id: string, data: any) => api.post(`/api/admin/campaigns/${id}/slides`, data),
+  updateSlide: (id: string, slideId: string, data: any) =>
+    api.put(`/api/admin/campaigns/${id}/slides/${slideId}`, data),
+  deleteSlide: (id: string, slideId: string) =>
+    api.delete(`/api/admin/campaigns/${id}/slides/${slideId}`),
+  reorderSlides: (id: string, slideIds: string[]) =>
+    api.post(`/api/admin/campaigns/${id}/slides/reorder`, { slideIds }),
+  // Import/Export
+  import: (data: any) => api.post('/api/admin/campaigns/import', data),
+  export: (id: string) => api.get(`/api/admin/campaigns/export/${id}`),
+  // Upload
+  uploadMedia: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/api/admin/campaigns/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  // Winners
+  saveWinners: (id: string, winners: { userId: string; position: number; xpAwarded: number }[]) =>
+    api.post(`/api/admin/campaigns/${id}/winners`, { winners }),
+  notifyWinners: (id: string, winnerIds: string[]) =>
+    api.post(`/api/admin/campaigns/${id}/winners/notify`, { winnerIds }),
+  // Resend banner to non-participants
+  resendBanner: (id: string) =>
+    api.post(`/api/admin/campaigns/${id}/resend`),
+  // Remove participant from campaign
+  removeParticipant: (campaignId: string, userId: string) =>
+    api.delete(`/api/admin/campaigns/${campaignId}/participants/${userId}`),
+};
+
+// Badges API
+export const badgesApi = {
+  getAll: (params?: { category?: string; rarity?: string; isActive?: boolean }) =>
+    api.get('/api/admin/badges', { params }),
+  getById: (id: string) => api.get(`/api/admin/badges/${id}`),
+  create: (data: { name: string; description?: string; iconUrl: string; color?: string; category?: string; rarity?: string }) =>
+    api.post('/api/admin/badges', data),
+  update: (id: string, data: any) => api.put(`/api/admin/badges/${id}`, data),
+  delete: (id: string) => api.delete(`/api/admin/badges/${id}`),
+  uploadIcon: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/api/admin/badges/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  award: (id: string, userIds: string[]) =>
+    api.post(`/api/admin/badges/${id}/award`, { userIds }),
+  revoke: (badgeId: string, userId: string) =>
+    api.delete(`/api/admin/badges/${badgeId}/revoke/${userId}`),
+};
+
+// Notifications API
+export const notificationsApi = {
+  getAll: (params?: { isActive?: boolean; limit?: number; offset?: number }) =>
+    api.get('/api/admin/notifications', { params }),
+  getById: (id: string) => api.get(`/api/admin/notifications/${id}`),
+  create: (data: { title: string; message: string; videoUrl?: string; videoDuration?: number; xpReward?: number }) =>
+    api.post('/api/admin/notifications', data),
+  update: (id: string, data: any) => api.put(`/api/admin/notifications/${id}`, data),
+  delete: (id: string) => api.delete(`/api/admin/notifications/${id}`),
+  send: (id: string) => api.post(`/api/admin/notifications/${id}/send`),
+  getStats: (id: string) => api.get(`/api/admin/notifications/${id}/stats`),
+  uploadVideo: (file: File) => {
+    const formData = new FormData();
+    formData.append('video', file);
+    return api.post('/api/admin/notifications/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
