@@ -1,0 +1,40 @@
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE
+*.code-workspace
+.vscode/
+.idea/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Screenshots and media in root
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.mp4
+*.mov
+*.ttf
+*.otf
+*.woff
+*.woff2
+
+# Test files
+screenshots/
+capture-screenshots.js
+
+# Privacy policy and terms (can be added separately if needed)
+politica-privacidade.html
+termos-de-uso.html
+store-description.md
