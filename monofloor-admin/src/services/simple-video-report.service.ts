@@ -105,10 +105,8 @@ export class SimpleVideoReportService {
         console.log('[SimpleReport] 🤖 Processando transcrição com Claude Opus 4.5...');
 
         // Carregar conhecimento técnico Monofloor (JUTOR)
-        const jutorKnowledge = await fs.readFile(
-            '/Users/rodrigoconte/Downloads/JUTOR_PROMPT_COMPLETO (2).txt',
-            'utf-8'
-        );
+        const jutorPath = path.join(__dirname, '../../data/jutor-knowledge.txt');
+        const jutorKnowledge = await fs.readFile(jutorPath, 'utf-8');
 
         const prompt = `Você é um especialista técnico da Monofloor Revestimentos.
 
