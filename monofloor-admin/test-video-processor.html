@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processador de Vídeos - Monofloor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #c9a962;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+
+        .subtitle {
+            color: #aaa;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-section {
+            margin-bottom: 30px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #c9a962;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="date"] {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(201, 169, 98, 0.3);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        input[type="text"]:focus,
+        input[type="date"]:focus {
+            outline: none;
+            border-color: #c9a962;
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .file-upload {
+            margin-top: 20px;
+            padding: 30px;
+            border: 2px dashed rgba(201, 169, 98, 0.5);
+            border-radius: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .file-upload:hover {
+            border-color: #c9a962;
+            background: rgba(201, 169, 98, 0.1);
+        }
+
+        .file-upload input {
+            display: none;
+        }
+
+        .file-list {
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+
+        .file-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 14px 30px;
+            background: linear-gradient(135deg, #c9a962 0%, #b89752 100%);
+            border: none;
+            border-radius: 8px;
+            color: #000;
+            font-weight: 700;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 20px;
+            width: 100%;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(201, 169, 98, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status.info {
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.5);
+            color: #60a5fa;
+            display: block;
+        }
+
+        .status.success {
+            background: rgba(34, 197, 94, 0.2);
+            border: 1px solid rgba(34, 197, 94, 0.5);
+            color: #4ade80;
+            display: block;
+        }
+
+        .status.error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.5);
+            color: #f87171;
+            display: block;
+        }
+
+        .progress {
+            margin-top: 15px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #c9a962 0%, #b89752 100%);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Processador de Vídeos</h1>
+        <p class="subtitle">Sistema de relatórios técnicos com IA (Whisper + Claude Opus 4.5)</p>
+
+        <form id="videoForm">
+            <div class="form-section">
+                <label>Nome do Projeto</label>
+                <input type="text" id="projectName" required placeholder="Ex: Obra Erika Casão">
+            </div>
+
+            <div class="grid">
+                <div class="form-section">
+                    <label>Nome do Técnico</label>
+                    <input type="text" id="technicianName" required placeholder="Ex: João Silva">
+                </div>
+
+                <div class="form-section">
+                    <label>Data da Visita</label>
+                    <input type="date" id="visitDate" required>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <label>Nome do Cliente</label>
+                <input type="text" id="clientName" required placeholder="Ex: Erika Casão">
+            </div>
+
+            <div class="form-section">
+                <label>Endereço da Obra</label>
+                <input type="text" id="address" required placeholder="Ex: Rua das Flores, 123 - Centro">
+            </div>
+
+            <div class="form-section">
+                <label>Vídeos (MP4, MOV, AVI)</label>
+                <div class="file-upload" onclick="document.getElementById('videoFiles').click()">
+                    <input type="file" id="videoFiles" accept="video/*" multiple>
+                    <p>📁 Clique para selecionar vídeos</p>
+                    <p style="font-size: 12px; color: #aaa; margin-top: 10px;">Suporta múltiplos arquivos</p>
+                </div>
+                <div id="fileList" class="file-list" style="display: none;"></div>
+            </div>
+
+            <button type="submit" class="btn" id="submitBtn">
+                🚀 Gerar Relatório
+            </button>
+        </form>
+
+        <div id="status" class="status"></div>
+        <div class="progress" id="progress">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+    </div>
+
+    <script>
+        // Toggle para usar local ou produção
+        const USE_PRODUCTION = false; // Mudar para true quando Railway estiver funcionando
+        const API_URL = USE_PRODUCTION
+            ? 'https://devoted-wholeness-production.up.railway.app/api/admin/reports'
+            : 'http://localhost:3000/api/admin/reports';
+        let selectedFiles = [];
+
+        // Set today's date as default
+        document.getElementById('visitDate').valueAsDate = new Date();
+
+        // Handle file selection
+        document.getElementById('videoFiles').addEventListener('change', (e) => {
+            selectedFiles = Array.from(e.target.files);
+            const fileList = document.getElementById('fileList');
+
+            if (selectedFiles.length > 0) {
+                fileList.style.display = 'block';
+                fileList.innerHTML = `
+                    <strong>${selectedFiles.length} vídeo(s) selecionado(s):</strong>
+                    ${selectedFiles.map((f, i) => `
+                        <div class="file-item">
+                            <span>📹 ${f.name}</span>
+                            <span style="color: #aaa; font-size: 12px;">${(f.size / 1024 / 1024).toFixed(2)} MB</span>
+                        </div>
+                    `).join('')}
+                `;
+            } else {
+                fileList.style.display = 'none';
+            }
+        });
+
+        // Handle form submission
+        document.getElementById('videoForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (selectedFiles.length === 0) {
+                showStatus('error', '❌ Por favor, selecione pelo menos um vídeo');
+                return;
+            }
+
+            const formData = new FormData();
+
+            // Add project info
+            formData.append('projectName', document.getElementById('projectName').value);
+            formData.append('technicianName', document.getElementById('technicianName').value);
+            formData.append('visitDate', document.getElementById('visitDate').value);
+            formData.append('clientName', document.getElementById('clientName').value);
+            formData.append('address', document.getElementById('address').value);
+
+            // Disable submit button
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ Processando...';
+
+            showStatus('info', '🎵 Extraindo áudio dos vídeos...');
+            showProgress();
+
+            try {
+                const endpoint = selectedFiles.length === 1
+                    ? `${API_URL}/simple-video`
+                    : `${API_URL}/simple-video-multiple`;
+
+                // Add video files with correct field name
+                if (selectedFiles.length === 1) {
+                    formData.append('video', selectedFiles[0]); // Singular for single video
+                } else {
+                    selectedFiles.forEach(file => {
+                        formData.append('videos', file); // Plural for multiple
+                    });
+                }
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Erro HTTP: ${response.status}`);
+                }
+
+                // Download the DOCX file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `relatorio-${document.getElementById('projectName').value}-${Date.now()}.docx`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                showStatus('success', '✅ Relatório gerado com sucesso! Download iniciado.');
+                hideProgress();
+
+            } catch (error) {
+                console.error('Erro:', error);
+                showStatus('error', `❌ Erro ao processar vídeos: ${error.message}`);
+                hideProgress();
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🚀 Gerar Relatório';
+            }
+        });
+
+        function showStatus(type, message) {
+            const status = document.getElementById('status');
+            status.className = `status ${type}`;
+            status.textContent = message;
+        }
+
+        function showProgress() {
+            document.getElementById('progress').style.display = 'block';
+            animateProgress();
+        }
+
+        function hideProgress() {
+            document.getElementById('progress').style.display = 'none';
+            document.getElementById('progressBar').style.width = '0%';
+        }
+
+        function animateProgress() {
+            const progressBar = document.getElementById('progressBar');
+            let width = 0;
+            const interval = setInterval(() => {
+                width += 1;
+                progressBar.style.width = `${Math.min(width, 95)}%`;
+                if (width >= 95) {
+                    clearInterval(interval);
+                }
+            }, 200);
+        }
+    </script>
+</body>
+</html>

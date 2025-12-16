@@ -435,10 +435,9 @@
                 </div>
                 <div class="nav-item" onclick="navigateTo('screen-learn')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-                        <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                     </svg>
-                    <span>Aprender</span>
+                    <span>+XP</span>
                 </div>
                 <div class="nav-item" onclick="navigateTo('screen-profile')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -617,10 +616,9 @@
                 </div>
                 <div class="nav-item" onclick="navigateTo('screen-learn')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-                        <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                     </svg>
-                    <span>Aprender</span>
+                    <span>+XP</span>
                 </div>
                 <div class="nav-item" onclick="navigateTo('screen-profile')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -820,10 +818,9 @@
                 </div>
                 <div class="nav-item" onclick="navigateTo('screen-learn')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-                        <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                     </svg>
-                    <span>Aprender</span>
+                    <span>+XP</span>
                 </div>
                 <div class="nav-item" onclick="navigateTo('screen-profile')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -963,53 +960,15 @@
         <div id="screen-learn" class="screen">
             <div class="header">
                 <div class="header-left">
-                    <h1 class="header-title">Academia</h1>
+                    <h1 class="header-title">+XP</h1>
                 </div>
                 <div class="header-right"></div>
             </div>
 
             <div class="content">
-                <!-- Coming Soon State -->
-                <div class="coming-soon-container">
-                    <div class="coming-soon-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-                            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-                        </svg>
-                    </div>
-                    <h2>Academia Monofloor</h2>
-                    <p class="coming-soon-subtitle">Em breve</p>
-                    <div class="coming-soon-features">
-                        <div class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                                <polyline points="22,4 12,14.01 9,11.01"/>
-                            </svg>
-                            <span>Trilhas de aprendizado</span>
-                        </div>
-                        <div class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                                <polyline points="22,4 12,14.01 9,11.01"/>
-                            </svg>
-                            <span>Videos e tutoriais</span>
-                        </div>
-                        <div class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                                <polyline points="22,4 12,14.01 9,11.01"/>
-                            </svg>
-                            <span>Conquistas e XP</span>
-                        </div>
-                        <div class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                                <polyline points="22,4 12,14.01 9,11.01"/>
-                            </svg>
-                            <span>Desafios semanais</span>
-                        </div>
-                    </div>
-                    <p class="coming-soon-note">Estamos preparando conteudos incriveis para voce evoluir na carreira!</p>
+                <!-- Ranking List -->
+                <div id="xp-ranking-list" class="xp-ranking-list">
+                    <!-- Populated by loadXPRanking() -->
                 </div>
             </div>
 
@@ -1037,10 +996,9 @@
                 </div>
                 <div class="nav-item active" onclick="navigateTo('screen-learn')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-                        <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                     </svg>
-                    <span>Aprender</span>
+                    <span>+XP</span>
                 </div>
                 <div class="nav-item" onclick="navigateTo('screen-profile')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1180,10 +1138,9 @@
                 </div>
                 <div class="nav-item" onclick="navigateTo('screen-learn')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-                        <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                     </svg>
-                    <span>Aprender</span>
+                    <span>+XP</span>
                 </div>
                 <div class="nav-item active" onclick="navigateTo('screen-profile')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

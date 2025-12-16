@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { projectsApi, applicatorsApi } from '../api';
+import html2canvas from 'html2canvas';
 
 const route = useRoute();
 const router = useRouter();
@@ -38,6 +39,7 @@ const formData = ref({
   workEndTime: '' as string,
   deadlineDate: '' as string,
   estimatedDays: null as number | null,
+  teamSize: null as number | null,
   allowSaturday: false,
   allowSunday: false,
   allowNightWork: false,
@@ -133,6 +135,23 @@ const hasMeasurements = computed(() => {
   const m2Parede = Number(project.value.m2Parede) || 0;
   const m2Teto = Number(project.value.m2Teto) || 0;
   return m2Piso > 0 || m2Parede > 0 || m2Teto > 0;
+});
+
+// Calculated m2Total (sum of all areas)
+const calculatedM2Total = computed(() => {
+  const piso = Number(formData.value.m2Piso) || 0;
+  const parede = Number(formData.value.m2Parede) || 0;
+  const teto = Number(formData.value.m2Teto) || 0;
+  return piso + parede + teto;
+});
+
+// Calculated m2Total from project (for display mode)
+const projectM2Total = computed(() => {
+  if (!project.value) return 0;
+  const piso = Number(project.value.m2Piso) || 0;
+  const parede = Number(project.value.m2Parede) || 0;
+  const teto = Number(project.value.m2Teto) || 0;
+  return piso + parede + teto;
 });
 
 // Determine project scope from measurements
@@ -235,32 +254,132 @@ const ganttEndDate = computed(() => {
   return end;
 });
 
-// Calculate total days from start to end
+// Calculate total WORK DAYS (sum of inputDays from all blocks)
+// This represents actual working days, not calendar days
 const totalGanttDays = computed(() => {
-  const start = ganttStartDate.value;
-  const end = ganttEndDate.value;
-  const diffTime = Math.abs(end.getTime() - start.getTime());
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return Math.max(diffDays + 1, 7); // Minimum 7 days
+  let totalDays = 0;
+  let i = 0;
+
+  while (i < tasks.value.length) {
+    const task = tasks.value[i];
+
+    // Get the inputDays for this block (group or single task)
+    const blockDays = Number(task.inputDays) || 1;
+    totalDays += blockDays;
+
+    // Skip grouped tasks (they share the same days)
+    if (isGroupedRow(i)) {
+      const groupSize = getGroupFromStart(i).length;
+      i += groupSize;
+    } else {
+      i++;
+    }
+  }
+
+  return totalDays;
 });
 
-// Generate array of days for timeline header
+// Calculate total number of BLOCKS (grouped tasks count as 1)
+const totalGanttBlocks = computed(() => {
+  let blockCount = 0;
+  let i = 0;
+  while (i < tasks.value.length) {
+    blockCount++;
+    // Skip grouped tasks
+    while (i < tasks.value.length && tasks.value[i].groupWithNext) {
+      i++;
+    }
+    i++;
+  }
+  return blockCount;
+});
+
+// Calculate total HOURS (sum of all task hours)
+const totalGanttHours = computed(() => {
+  let totalHours = 0;
+  let i = 0;
+  while (i < tasks.value.length) {
+    const task = tasks.value[i];
+
+    // Check if this is a grouped block
+    if (isGroupedRow(i)) {
+      totalHours += getTotalGroupHours(i);
+      // Skip all tasks in this group
+      const groupSize = getGroupFromStart(i).length;
+      i += groupSize;
+    } else {
+      // Single task
+      totalHours += calculateTaskHours(task);
+      i++;
+    }
+  }
+  return totalHours;
+});
+
+// Generate array of days for timeline header (SEPARATED Sat and Sun)
 const ganttDaysArray = computed(() => {
-  const days: { date: Date; label: string; dayNum: number; isWeekend: boolean }[] = [];
+  const days: {
+    date: Date;
+    label: string;
+    dayNum: number;
+    isSaturday: boolean;
+    isSunday: boolean;
+    isWorkDay: boolean;
+  }[] = [];
+
   const start = new Date(ganttStartDate.value);
   start.setHours(0, 0, 0, 0);
 
-  for (let i = 0; i < totalGanttDays.value; i++) {
-    const date = new Date(start);
-    date.setDate(date.getDate() + i);
-    const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'] as const;
-    days.push({
-      date,
-      label: dayNames[date.getDay()] || 'Seg',
-      dayNum: date.getDate(),
-      isWeekend: date.getDay() === 0 || date.getDay() === 6,
-    });
+  const allowSaturday = project.value?.allowSaturday || false;
+  const allowSunday = project.value?.allowSunday || false;
+
+  // Calculate end date by adding totalGanttDays work days to start
+  // This accounts for weekends properly
+  const totalWorkDaysNeeded = totalGanttDays.value;
+  let endDate = new Date(start);
+  let workDaysAdded = 0;
+
+  while (workDaysAdded < totalWorkDaysNeeded) {
+    const dayOfWeek = endDate.getDay();
+    const isSat = dayOfWeek === 6;
+    const isSun = dayOfWeek === 0;
+    const isWork = (!isSat && !isSun) || (isSat && allowSaturday) || (isSun && allowSunday);
+
+    if (isWork) {
+      workDaysAdded++;
+    }
+
+    if (workDaysAdded < totalWorkDaysNeeded) {
+      endDate.setDate(endDate.getDate() + 1);
+    }
   }
+
+  // Now generate ALL calendar days from start to end
+  const current = new Date(start);
+  const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'] as const;
+
+  while (current <= endDate) {
+    const dayOfWeek = current.getDay();
+    const isSaturday = dayOfWeek === 6;
+    const isSunday = dayOfWeek === 0;
+
+    // Determine if this is a work day based on project settings
+    const isWorkDay = (!isSaturday && !isSunday) ||
+                      (isSaturday && allowSaturday) ||
+                      (isSunday && allowSunday);
+
+    days.push({
+      date: new Date(current),
+      label: dayNames[dayOfWeek] || 'Seg',
+      dayNum: current.getDate(),
+      isSaturday,
+      isSunday,
+      isWorkDay,
+    });
+
+    current.setDate(current.getDate() + 1);
+  }
+
   return days;
 });
 
@@ -288,6 +407,31 @@ const getTaskDuration = (task: any) => {
   return Math.max(1, diffDays + 1);
 };
 
+// Calculate current day position for "today" indicator
+const todayIndicator = computed(() => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const start = new Date(ganttStartDate.value);
+  start.setHours(0, 0, 0, 0);
+
+  // Calculate days from start to today
+  const diffTime = today.getTime() - start.getTime();
+  const dayOffset = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+  // Check if today is within the visible timeline
+  const isVisible = dayOffset >= 0 && dayOffset < ganttDaysArray.value.length;
+
+  // Calculate position (40px per day, aligned with day cell)
+  const position = dayOffset * 40;
+
+  return {
+    isVisible,
+    position,
+    dayOffset,
+  };
+});
+
 // Calculate task bar width in pixels
 const getTaskWidth = (task: any) => {
   const duration = getTaskDuration(task);
@@ -302,28 +446,28 @@ const getTaskLeft = (task: any) => {
   return offset * dayWidth;
 };
 
-// Auto-generate tasks when no tasks exist but we have deadline and measurements
-const autoGenerateTasks = async () => {
-  // Only auto-generate if no tasks exist
-  if (tasks.value.length > 0) return;
+// Group tasks visually - tasks with groupWithNext will be rendered as a single block
+const groupedTasks = computed(() => {
+  const groups: Array<{ tasks: any[]; isGroup: boolean; id: string }> = [];
+  let currentGroup: any[] = [];
 
-  // Check if we have deadline
-  if (!project.value?.deadlineDate && !project.value?.estimatedDays) return;
+  for (let i = 0; i < tasks.value.length; i++) {
+    const task = tasks.value[i];
+    currentGroup.push(task);
 
-  // Check if we have measurements
-  if (!hasMeasurements.value) return;
-
-  // Auto-generate
-  generatingTasks.value = true;
-  try {
-    await projectsApi.generateTasks(route.params.id as string);
-    await loadTasks();
-  } catch (error) {
-    console.error('Auto-generate tasks error:', error);
-  } finally {
-    generatingTasks.value = false;
+    // If this task doesn't group with next, close the group
+    if (!task.groupWithNext || i === tasks.value.length - 1) {
+      groups.push({
+        tasks: [...currentGroup],
+        isGroup: currentGroup.length > 1,
+        id: currentGroup[0].id + '-group',
+      });
+      currentGroup = [];
+    }
   }
-};
+
+  return groups;
+});
 
 // Delete task from Gantt
 const deleteTaskFromGantt = async (taskId: string) => {
@@ -342,9 +486,140 @@ const syncGanttToTasks = async () => {
   // No longer needed - tasks come from backend
 };
 
-// Legacy function placeholder
-const initializeBlocksFromTasks = () => {
-  // No longer needed - tasks are used directly
+/**
+ * Check if a task is a "cura" (curing) process
+ * Cura tasks are passive and should not be grouped with other tasks
+ */
+const isCuraTask = (task: any): boolean => {
+  if (task.isCura === true) return true;
+  if (task.consumesResources === false) return true;
+  const title = (task.title || '').toLowerCase();
+  return title.includes('cura');
+};
+
+/**
+ * Add work days to a date, respecting weekends
+ */
+const addWorkDays = (date: Date, days: number, allowSaturday: boolean, allowSunday: boolean): Date => {
+  const result = new Date(date);
+  let daysAdded = 0;
+
+  while (daysAdded < days) {
+    result.setDate(result.getDate() + 1);
+    const dayOfWeek = result.getDay();
+    const isSaturday = dayOfWeek === 6;
+    const isSunday = dayOfWeek === 0;
+
+    // Only count work days
+    if (
+      (!isSaturday && !isSunday) ||
+      (isSaturday && allowSaturday) ||
+      (isSunday && allowSunday)
+    ) {
+      daysAdded++;
+    }
+  }
+
+  return result;
+};
+
+/**
+ * Reorganize Gantt timeline: redistribute dates sequentially
+ * Each task/group gets its own time block on the timeline
+ * EXCEPT: Tasks with groupWithNext=true share dates with the next task
+ */
+const autoGrouping = ref(false);
+const initializeBlocksFromTasks = async () => {
+  if (tasks.value.length === 0 || autoGrouping.value || !project.value) return;
+
+  let needsUpdate = false;
+  const updates: Promise<any>[] = [];
+
+  // Get project settings
+  const allowSaturday = project.value.allowSaturday || false;
+  const allowSunday = project.value.allowSunday || false;
+
+  // Start from project start date or today
+  let currentDate = project.value.startedAt ? new Date(project.value.startedAt) : new Date();
+  currentDate.setHours(0, 0, 0, 0);
+
+  for (let i = 0; i < tasks.value.length; i++) {
+    const task = tasks.value[i];
+    const isCura = isCuraTask(task);
+
+    // Ensure cura tasks are ungrouped and have 0 people
+    if (isCura) {
+      if (task.groupWithNext) {
+        task.groupWithNext = false;
+        needsUpdate = true;
+        updates.push(
+          projectsApi.updateTask(route.params.id as string, task.id, {
+            groupWithNext: false,
+          })
+        );
+      }
+      if (task.inputPeople !== 0) {
+        task.inputPeople = 0;
+        needsUpdate = true;
+        updates.push(
+          projectsApi.updateTask(route.params.id as string, task.id, {
+            inputPeople: 0,
+            estimatedHours: 0,
+          })
+        );
+      }
+    }
+
+    // Calculate duration for this task
+    const taskDays = Number(task.inputDays) || 1;
+
+    // Set task dates
+    const taskStart = new Date(currentDate);
+    const taskEnd = addWorkDays(taskStart, taskDays - 1, allowSaturday, allowSunday);
+
+    // Check if dates need updating
+    const currentStart = new Date(task.startDate).getTime();
+    const currentEnd = new Date(task.endDate).getTime();
+    const newStart = taskStart.getTime();
+    const newEnd = taskEnd.getTime();
+
+    if (currentStart !== newStart || currentEnd !== newEnd) {
+      needsUpdate = true;
+      updates.push(
+        projectsApi.updateTask(route.params.id as string, task.id, {
+          startDate: taskStart,
+          endDate: taskEnd,
+        })
+      );
+      task.startDate = taskStart;
+      task.endDate = taskEnd;
+    }
+
+    // Move to next date block ONLY if not grouped with next
+    if (!task.groupWithNext) {
+      // Move currentDate forward by task duration
+      currentDate = addWorkDays(taskEnd, 1, allowSaturday, allowSunday);
+    }
+    // If grouped with next, keep currentDate the same so next task overlaps
+  }
+
+  if (needsUpdate) {
+    try {
+      autoGrouping.value = true;
+      await Promise.all(updates);
+      // Reload tasks
+      const [tasksResponse, statsResponse] = await Promise.all([
+        projectsApi.getTasks(route.params.id as string),
+        projectsApi.getTasksStats(route.params.id as string),
+      ]);
+      tasks.value = tasksResponse.data.data || [];
+      taskStats.value = statsResponse.data.data || null;
+    } catch (error) {
+      console.error('Error reorganizing Gantt timeline:', error);
+    } finally {
+      autoGrouping.value = false;
+    }
+  }
 };
 
 // Delete task helper (old reference)
@@ -368,6 +643,95 @@ const openBlockEditor = (task: any) => {
     label: task.title,
   };
   showBlockEditor.value = true;
+};
+
+// Add task dropdown
+const showAddTaskDropdown = ref<string | null>(null); // taskId do dropdown aberto
+
+// Task templates available for insertion
+const taskTemplates = [
+  { id: 'custom', title: 'Tarefa personalizada', color: '#c9a962' },
+  { id: 'protecao', title: 'Proteção/Fitamento', color: '#64748b' },
+  { id: 'limpeza', title: 'Limpeza', color: '#94a3b8' },
+  { id: 'primer', title: 'Primer', color: '#8b5cf6' },
+  { id: 'lilit', title: 'LILIT', color: '#3b82f6' },
+  { id: 'leona', title: 'Leona', color: '#c9a962' },
+  { id: 'stelion', title: 'Stelion', color: '#d4af37' },
+  { id: 'lixamento', title: 'Lixamento', color: '#6366f1' },
+  { id: 'cura', title: 'Cura', color: '#22c55e', isCura: true },
+  { id: 'verniz', title: 'Verniz', color: '#14b8a6' },
+  { id: 'selador', title: 'Selador', color: '#a855f7' },
+  { id: 'verificacao', title: 'Verificação', color: '#f97316' },
+];
+
+// Toggle add task dropdown
+const toggleAddTaskDropdown = (taskId: string) => {
+  if (showAddTaskDropdown.value === taskId) {
+    showAddTaskDropdown.value = null;
+  } else {
+    showAddTaskDropdown.value = taskId;
+  }
+};
+
+// Insert task at position
+const insertTaskAt = async (position: 'above' | 'below', referenceTaskId: string, template: any) => {
+  try {
+    if (!project.value?.id) return;
+
+    const referenceIndex = tasks.value.findIndex(t => t.id === referenceTaskId);
+    if (referenceIndex === -1) return;
+
+    const insertIndex = position === 'above' ? referenceIndex : referenceIndex + 1;
+
+    // Create new task with template or custom
+    const newTaskData: any = {
+      title: template.title,
+      color: template.color,
+      inputDays: 1,
+      inputPeople: 0,
+      sortOrder: insertIndex + 1,
+      consumesResources: !template.isCura,
+    };
+
+    if (template.isCura) {
+      newTaskData.consumesResources = false;
+    }
+
+    const response = await fetch(`/api/admin/projects/${project.value.id}/tasks`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authStore.token}`,
+      },
+      body: JSON.stringify(newTaskData),
+    });
+
+    if (!response.ok) throw new Error('Failed to create task');
+
+    await response.json();
+
+    // Update sort order for tasks after insertion point
+    const updatePromises = tasks.value
+      .slice(insertIndex)
+      .map(async (task, idx) => {
+        await fetch(`/api/admin/projects/${project.value?.id}/tasks/${task.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${authStore.token}`,
+          },
+          body: JSON.stringify({ sortOrder: insertIndex + idx + 2 }),
+        });
+      });
+
+    await Promise.all(updatePromises);
+
+    // Reload tasks
+    await loadTasks();
+    showAddTaskDropdown.value = null;
+  } catch (error) {
+    console.error('Error inserting task:', error);
+  }
 };
 
 // Save task changes from editor
@@ -414,6 +778,291 @@ const onInlineTaskTypeChange = async (task: any, newTaskType: string) => {
   }
 };
 
+// ===== INLINE EDITING FUNCTIONS =====
+
+// Calcula horas totais baseado em dias + pessoas
+const calculateTaskHours = (task: any): number => {
+  // Use defaults: 1 day if not specified, 0 people means no calculation
+  const days = Number(task.inputDays) || 1;
+  const people = Number(task.inputPeople) || 0;
+
+  // If no people assigned, return 0
+  if (people === 0) return 0;
+
+  const WORK_HOURS_PER_DAY = 8;
+  const LUNCH_BREAK_HOURS = 1;
+  const effectiveHoursPerPerson = WORK_HOURS_PER_DAY - LUNCH_BREAK_HOURS;
+
+  return days * people * effectiveHoursPerPerson;
+};
+
+// Atualiza um campo específico da task
+const updateTaskField = async (taskId: string, field: string, value: any) => {
+  try {
+    const updateData: any = { [field]: value };
+    await projectsApi.updateTask(route.params.id as string, taskId, updateData);
+    await loadTasks();
+  } catch (error) {
+    console.error(`Error updating task ${field}:`, error);
+  }
+};
+
+// Quando muda dias ou pessoas, recalcula estimatedHours
+// Se a task faz parte de um grupo, sincroniza valores para todas as tasks do grupo
+const onInputChange = async (task: any) => {
+  const hours = calculateTaskHours(task);
+
+  try {
+    // Find the index of this task
+    const taskIndex = tasks.value.findIndex(t => t.id === task.id);
+
+    // Check if this is the first task of a group
+    if (taskIndex !== -1 && isGroupedRow(taskIndex)) {
+      // Sync values to ALL tasks in the group
+      const group = getGroupFromStart(taskIndex);
+      const updatePromises = group.map(groupTask =>
+        projectsApi.updateTask(route.params.id as string, groupTask.id, {
+          inputDays: task.inputDays || null,
+          inputPeople: task.inputPeople || null,
+          estimatedHours: hours,
+        })
+      );
+      await Promise.all(updatePromises);
+    } else {
+      // Single task, just update it
+      await projectsApi.updateTask(route.params.id as string, task.id, {
+        inputDays: task.inputDays || null,
+        inputPeople: task.inputPeople || null,
+        estimatedHours: hours,
+      });
+    }
+
+    await loadTasks();
+  } catch (error) {
+    console.error('Error updating task hours:', error);
+  }
+};
+
+// Toggle groupWithNext
+const toggleGroupWithNext = async (task: any) => {
+  const newValue = !task.groupWithNext;
+  task.groupWithNext = newValue;
+  await updateTaskField(task.id, 'groupWithNext', newValue);
+};
+
+// Check if a task is part of a group (has groupWithNext or previous task has groupWithNext)
+const isTaskInGroup = (taskIndex: number): boolean => {
+  if (taskIndex === 0) return false;
+
+  // Check if any previous task groups with this one
+  for (let i = taskIndex - 1; i >= 0; i--) {
+    if (tasks.value[i].groupWithNext) return true;
+    // Stop if we find a task that doesn't group
+    if (i > 0 && !tasks.value[i - 1].groupWithNext) break;
+  }
+  return false;
+};
+
+// Get all tasks in the same group
+const getGroupedTasksForIndex = (taskIndex: number): any[] => {
+  const grouped: any[] = [];
+
+  // Go back to find the start of the group
+  let startIndex = taskIndex;
+  while (startIndex > 0 && tasks.value[startIndex - 1].groupWithNext) {
+    startIndex--;
+  }
+
+  // Collect all tasks in the group
+  for (let i = startIndex; i <= taskIndex; i++) {
+    grouped.push(tasks.value[i]);
+  }
+
+  return grouped;
+};
+
+// Calculate height for grouped timeline bar
+const getGroupHeight = (taskIndex: number): number => {
+  const groupedTasks = getGroupedTasksForIndex(taskIndex);
+  if (groupedTasks.length <= 1) return 24; // Default single task height
+
+  // 20px per task + 4px spacing
+  return groupedTasks.length * 20 + (groupedTasks.length - 1) * 4;
+};
+
+// =============================================
+// ROW GROUPING - Make multiple tasks appear as ONE row
+// =============================================
+
+/**
+ * Determines if we should render a row for this task
+ * Only render if:
+ * 1. Task is standalone (not grouped)
+ * 2. Task is the FIRST in a group
+ * Skip rendering if task is in the middle/end of a group
+ */
+const shouldRenderRow = (taskIndex: number): boolean => {
+  if (taskIndex === 0) return true; // First task always renders
+
+  // Check if previous task groups with this one
+  // If yes, this task is part of a group and should NOT render its own row
+  if (tasks.value[taskIndex - 1].groupWithNext) {
+    return false;
+  }
+
+  return true;
+};
+
+/**
+ * Get all tasks in a group starting from the current task
+ * Used when rendering a grouped row to show all tasks in that group
+ */
+const getGroupFromStart = (startIndex: number): any[] => {
+  const group: any[] = [tasks.value[startIndex]];
+
+  // Keep adding tasks while current task has groupWithNext = true
+  let currentIndex = startIndex;
+  while (currentIndex < tasks.value.length && tasks.value[currentIndex].groupWithNext) {
+    currentIndex++;
+    if (currentIndex < tasks.value.length) {
+      group.push(tasks.value[currentIndex]);
+    }
+  }
+
+  return group;
+};
+
+/**
+ * Calculate total hours for all tasks in a group
+ * Grouped tasks = SAME people doing multiple steps in the SAME period
+ * - Duration = Use from first task (they share the same period)
+ * - People = Use from first task (SAME people, not summed)
+ * - Hours = days × people × 7h
+ */
+const getTotalGroupHours = (startIndex: number): number => {
+  const group = getGroupFromStart(startIndex);
+
+  // Use values from FIRST task - they all share the same resources
+  const firstTask = group[0];
+  const days = Number(firstTask.inputDays) || 1;
+  const people = Number(firstTask.inputPeople) || 0;
+
+  if (people === 0) return 0;
+
+  const WORK_HOURS_PER_DAY = 8;
+  const LUNCH_BREAK_HOURS = 1;
+  const effectiveHoursPerPerson = WORK_HOURS_PER_DAY - LUNCH_BREAK_HOURS;
+
+  return days * people * effectiveHoursPerPerson;
+};
+
+/**
+ * Calculate total duration in days for all tasks in a group
+ * Grouped tasks share the SAME period, so use the first task's duration
+ */
+const getTotalGroupDuration = (startIndex: number): number => {
+  const group = getGroupFromStart(startIndex);
+  const firstTask = group[0];
+  // Use inputDays directly since all tasks in group now share the same value
+  return Number(firstTask.inputDays) || 1;
+};
+
+/**
+ * Check if a task is part of a multi-task group (more than 1 task)
+ */
+const isGroupedRow = (taskIndex: number): boolean => {
+  const group = getGroupFromStart(taskIndex);
+  return group.length > 1;
+};
+
+/**
+ * Determine if the timeline bar should be shown on this specific row within a group
+ * For grouped blocks, show the bar on the MIDDLE row to center it vertically
+ */
+const shouldShowTimelineBar = (groupIdx: number, groupLength: number): boolean => {
+  if (groupLength === 1) return true; // Single task, always show
+  // Show on middle row (for 3 tasks, show on index 1 = 2nd row)
+  const middleIndex = Math.floor(groupLength / 2);
+  return groupIdx === middleIndex;
+};
+
+/**
+ * Calcula o número de ordem do bloco (grupos e tarefas standalone)
+ * Grupos contam como 1 bloco, independente do número de tarefas
+ * Exemplo: [tarefa1, grupo(3 tarefas), tarefa2] = 1, 2, 3
+ */
+const getBlockNumber = (taskIndex: number): number => {
+  let blockCount = 0;
+  let i = 0;
+
+  while (i < taskIndex) {
+    // Se esta tarefa começa um grupo ou é standalone, conta como 1 bloco
+    if (shouldRenderRow(i)) {
+      blockCount++;
+      // Pula todas as tarefas do grupo
+      const groupSize = getGroupFromStart(i).length;
+      i += groupSize;
+    } else {
+      i++;
+    }
+  }
+
+  // Retorna o número do bloco atual (1-indexed)
+  return blockCount + 1;
+};
+
+/**
+ * Determina se deve mostrar o número de ordem nesta linha específica
+ * Para grupos: apenas na linha do MEIO
+ * Para standalone: sempre
+ */
+const shouldShowOrderNumber = (groupIdx: number, groupLength: number): boolean => {
+  if (groupLength === 1) return true; // Standalone, sempre mostra
+  const middleIndex = Math.floor(groupLength / 2);
+  return groupIdx === middleIndex; // Apenas na linha do meio do grupo
+};
+
+// Distribute teamSize to all tasks automatically
+const distributeTeamSize = async () => {
+  if (!project.value?.teamSize) {
+    alert('Defina o número de pessoas na equipe no card Cronograma primeiro');
+    return;
+  }
+
+  if (!confirm(`Distribuir ${project.value.teamSize} pessoa(s) para todas as tarefas que consomem recursos?`)) {
+    return;
+  }
+
+  try {
+    // Update all tasks that consume resources
+    const updates = tasks.value
+      .filter((task: any) => task.consumesResources !== false)
+      .map(async (task: any) => {
+        const inputDays = task.inputDays || 1;
+        const inputPeople = project.value!.teamSize!;
+        const hours = inputDays * inputPeople * 7; // 7h effective per person per day
+
+        return projectsApi.updateTask(route.params.id as string, task.id, {
+          inputDays,
+          inputPeople,
+          estimatedHours: hours,
+        });
+      });
+
+    await Promise.all(updates);
+    await loadTasks();
+    alert(`Distribuição concluída! ${updates.length} tarefa(s) atualizada(s).`);
+  } catch (error) {
+    console.error('Error distributing team size:', error);
+    alert('Erro ao distribuir equipe');
+  }
+};
+
+// Send schedule to app agenda (placeholder - to be configured)
+const sendToAppAgenda = async () => {
+  alert('Funcionalidade "Enviar para Agenda" será configurada em breve.\n\nEsta ação enviará o cronograma completo para a agenda dos aplicadores no app mobile.');
+};
+
 // Drag and drop placeholders (disabled for now - dates controlled by deadline)
 const draggedIndex = ref<number | null>(null);
 const dragOverIndex = ref<number | null>(null);
@@ -458,6 +1107,7 @@ const loadProject = async () => {
       workEndTime: project.value.workEndTime || '17:00',
       deadlineDate: project.value.deadlineDate ? project.value.deadlineDate.split('T')[0] : '',
       estimatedDays: project.value.estimatedDays,
+      teamSize: project.value.teamSize,
       allowSaturday: project.value.allowSaturday || false,
       allowSunday: project.value.allowSunday || false,
       allowNightWork: project.value.allowNightWork || false,
@@ -489,18 +1139,25 @@ const saveProject = async () => {
     // Clean data - remove null/undefined values and convert empty strings
     const cleanData: Record<string, any> = {};
     for (const [key, value] of Object.entries(formData.value)) {
+      // Skip m2Total as it will be calculated
+      if (key === 'm2Total') continue;
+
       // Always include arrays (even empty ones like responsiblePhones: [])
       if (Array.isArray(value)) {
         cleanData[key] = value;
       } else if (value !== null && value !== undefined && value !== '') {
         // Convert numeric fields to numbers
-        if (['m2Total', 'm2Piso', 'm2Parede', 'm2Teto', 'mRodape', 'latitude', 'longitude', 'geofenceRadius', 'estimatedHours'].includes(key)) {
+        if (['m2Piso', 'm2Parede', 'm2Teto', 'mRodape', 'latitude', 'longitude', 'geofenceRadius', 'estimatedHours'].includes(key)) {
           cleanData[key] = Number(value);
         } else {
           cleanData[key] = value;
         }
       }
     }
+
+    // Add calculated m2Total
+    cleanData.m2Total = calculatedM2Total.value;
+
     console.log('Saving project with data:', JSON.stringify(cleanData, null, 2));
     await projectsApi.update(route.params.id as string, cleanData);
     await loadProject();
@@ -548,6 +1205,7 @@ const cancelEdit = () => {
       workEndTime: project.value.workEndTime || '',
       deadlineDate: project.value.deadlineDate ? project.value.deadlineDate.split('T')[0] : '',
       estimatedDays: project.value.estimatedDays,
+      teamSize: project.value.teamSize,
       allowSaturday: project.value.allowSaturday || false,
       allowSunday: project.value.allowSunday || false,
       allowNightWork: project.value.allowNightWork || false,
@@ -567,6 +1225,8 @@ const startFieldEdit = (fieldName: string) => {
       formData.value.deadlineDate = project.value.deadlineDate ? project.value.deadlineDate.split('T')[0] : '';
     } else if (fieldName === 'estimatedDays') {
       formData.value.estimatedDays = project.value.estimatedDays;
+    } else if (fieldName === 'teamSize') {
+      formData.value.teamSize = project.value.teamSize;
     }
   }
   editingField.value = fieldName;
@@ -587,7 +1247,7 @@ const saveFieldInline = async (fieldName: string, event?: Event) => {
     const updateData: Record<string, any> = {};
 
     // Convert numeric fields
-    if (['estimatedDays'].includes(fieldName)) {
+    if (['estimatedDays', 'teamSize'].includes(fieldName)) {
       updateData[fieldName] = value ? Number(value) : null;
     } else {
       updateData[fieldName] = value;
@@ -636,7 +1296,7 @@ const saveFieldInline = async (fieldName: string, event?: Event) => {
     console.error('Save field error:', error);
     // Revert the value on error
     if (project.value) {
-      formData.value[fieldName as keyof typeof formData.value] = (project.value as any)[fieldName];
+      (formData.value as any)[fieldName] = (project.value as any)[fieldName];
     }
     alert('Erro ao salvar: ' + (error.response?.data?.error?.message || error.message));
   } finally {
@@ -665,6 +1325,7 @@ const cancelFieldEdit = () => {
     formData.value.workEndTime = project.value.workEndTime || '17:00';
     formData.value.deadlineDate = project.value.deadlineDate ? project.value.deadlineDate.split('T')[0] : '';
     formData.value.estimatedDays = project.value.estimatedDays;
+    formData.value.teamSize = project.value.teamSize;
     formData.value.allowSaturday = project.value.allowSaturday || false;
     formData.value.allowSunday = project.value.allowSunday || false;
     formData.value.allowNightWork = project.value.allowNightWork || false;
@@ -941,8 +1602,8 @@ const loadTasks = async () => {
     ]);
     tasks.value = tasksResponse.data.data || [];
     taskStats.value = statsResponse.data.data || null;
-    // Initialize gantt blocks from existing tasks
-    initializeBlocksFromTasks();
+    // Auto-group tasks that share the same dates
+    await initializeBlocksFromTasks();
   } catch (error) {
     console.error('Error loading tasks:', error);
   } finally {
@@ -1073,6 +1734,42 @@ const generateTasks = async () => {
     alert('Erro ao gerar tarefas: ' + (errMsg || error.message || 'Erro desconhecido'));
   } finally {
     generatingTasks.value = false;
+  }
+};
+
+// Export Gantt as JPEG
+const exportGanttAsImage = async () => {
+  try {
+    const ganttElement = document.querySelector('.gantt-traditional') as HTMLElement;
+    if (!ganttElement) {
+      alert('Gantt chart não encontrado');
+      return;
+    }
+
+    // Capture the element
+    const canvas = await html2canvas(ganttElement, {
+      backgroundColor: '#0a0a0a',
+      scale: 2, // Higher quality
+      logging: false,
+      useCORS: true,
+    });
+
+    // Convert to JPEG and download
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const projectName = project.value?.title || 'cronograma';
+        const fileName = `${projectName.replace(/\s+/g, '-').toLowerCase()}-gantt.jpg`;
+        link.download = fileName;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+    }, 'image/jpeg', 0.95);
+  } catch (error) {
+    console.error('Error exporting Gantt:', error);
+    alert('Erro ao exportar cronograma');
   }
 };
 
@@ -1218,10 +1915,61 @@ const changeTab = async (tab: string) => {
     await loadNightShiftInvites();
   } else if (tab === 'schedule') {
     await loadTasks();
-    // Auto-generate if no tasks and we have deadline + measurements
-    await autoGenerateTasks();
+    // Tasks now only generated manually via "Gerar Etapas" button
+    // User requested: keep initial setup saved, don't regenerate automatically
   }
 };
+
+// Watch for teamSize changes and auto-update all tasks
+watch(() => project.value?.teamSize, async (newTeamSize, oldTeamSize) => {
+  console.log(`[WATCHER] teamSize changed: ${oldTeamSize} → ${newTeamSize}`, {
+    hasNewValue: !!newTeamSize,
+    valuesAreDifferent: newTeamSize !== oldTeamSize,
+    tasksCount: tasks.value.length,
+    activeTab: activeTab.value
+  });
+
+  // Only run if value actually changed and is not the initial load (oldTeamSize is not undefined)
+  if (newTeamSize && oldTeamSize !== undefined && newTeamSize !== oldTeamSize) {
+    console.log(`[WATCHER] Conditions met, updating tasks...`);
+
+    // Load tasks first if not loaded yet
+    if (tasks.value.length === 0) {
+      console.log('[WATCHER] Loading tasks first...');
+      await loadTasks();
+    }
+
+    // If still no tasks, nothing to update
+    if (tasks.value.length === 0) {
+      console.log('[WATCHER] No tasks to update');
+      return;
+    }
+
+    try {
+      // Update all tasks that consume resources
+      const tasksToUpdate = tasks.value.filter((task: any) => task.consumesResources !== false);
+      console.log(`[WATCHER] Updating ${tasksToUpdate.length} tasks with teamSize=${newTeamSize}`);
+
+      const updates = tasksToUpdate.map(async (task: any) => {
+        const inputDays = task.inputDays || 1;
+        const hours = inputDays * newTeamSize * 7; // 7h effective per person per day
+
+        console.log(`[WATCHER] Task "${task.title}": ${task.inputPeople} → ${newTeamSize} people, ${task.estimatedHours}h → ${hours}h`);
+
+        return projectsApi.updateTask(route.params.id as string, task.id, {
+          inputPeople: newTeamSize,
+          estimatedHours: hours,
+        });
+      });
+
+      await Promise.all(updates);
+      await loadTasks();
+      console.log(`[WATCHER] ✓ ${updates.length} tarefa(s) atualizada(s) com teamSize=${newTeamSize}`);
+    } catch (error) {
+      console.error('[WATCHER] Error auto-updating tasks with teamSize:', error);
+    }
+  }
+});
 
 onMounted(async () => {
   await loadProject();
@@ -1275,6 +2023,16 @@ onMounted(async () => {
             <line x1="4" y1="22" x2="4" y2="15"/>
           </svg>
           Campanhas
+        </router-link>
+        <router-link to="/proposals" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          Propostas
         </router-link>
         <router-link to="/map" class="nav-link">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1563,14 +2321,13 @@ onMounted(async () => {
                 <h3>Metragens</h3>
                 <div v-if="editMode" class="info-fields measurements-edit">
                   <div class="field">
-                    <label>m² Total</label>
+                    <label>m² Total (Calculado)</label>
                     <input
-                      v-model.number="formData.m2Total"
+                      :value="calculatedM2Total"
                       type="number"
-                      step="0.01"
-                      min="0"
-                      class="input"
-                      placeholder="0"
+                      class="input calculated-field"
+                      readonly
+                      disabled
                     />
                   </div>
                   <div class="field">
@@ -1620,17 +2377,6 @@ onMounted(async () => {
                 </div>
                 <div v-else class="measurements-grid">
                   <div class="measurement">
-                    <div class="measurement-icon m2-total">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                      </svg>
-                    </div>
-                    <div class="measurement-content">
-                      <span class="measurement-value">{{ project.m2Total?.toLocaleString() || 0 }}</span>
-                      <span class="measurement-label">m² Total</span>
-                    </div>
-                  </div>
-                  <div class="measurement">
                     <div class="measurement-icon m2-piso">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -1672,6 +2418,18 @@ onMounted(async () => {
                     <div class="measurement-content">
                       <span class="measurement-value">{{ project.mRodape?.toLocaleString() || 0 }}</span>
                       <span class="measurement-label">m Rodape</span>
+                    </div>
+                  </div>
+                  <!-- M² Total - Full Width -->
+                  <div class="measurement measurement-total">
+                    <div class="measurement-icon m2-total">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12h14"/>
+                      </svg>
+                    </div>
+                    <div class="measurement-content">
+                      <span class="measurement-value">{{ projectM2Total?.toLocaleString() || 0 }}</span>
+                      <span class="measurement-label">m² Total (Σ)</span>
                     </div>
                   </div>
                 </div>
@@ -1753,34 +2511,55 @@ onMounted(async () => {
                     <span class="schedule-value highlight">{{ daysInProgress }} dias</span>
                   </div>
 
-                  <!-- Sabado -->
+                  <!-- Pessoas na Equipe -->
                   <div class="schedule-field">
                     <div class="schedule-field-header">
-                      <label>Sabado</label>
+                      <label>Pessoas na Equipe</label>
+                      <span class="field-hint">Define capacidade diária</span>
                     </div>
-                    <button
-                      type="button"
-                      class="toggle-btn"
-                      :class="{ active: formData.allowSaturday }"
-                      @click="toggleAndSave('allowSaturday', $event)"
-                    >
-                      {{ formData.allowSaturday ? 'Sim' : 'Nao' }}
-                    </button>
+                    <div class="schedule-value-row">
+                      <input
+                        v-model.number="formData.teamSize"
+                        type="number"
+                        min="1"
+                        max="50"
+                        class="number-input-inline"
+                        placeholder="4"
+                        @change="saveFieldInline('teamSize', $event)"
+                      />
+                      <span class="input-suffix">pessoa(s)</span>
+                    </div>
                   </div>
 
-                  <!-- Domingo -->
+                  <!-- Sabado e Domingo -->
                   <div class="schedule-field">
                     <div class="schedule-field-header">
-                      <label>Domingo</label>
+                      <label>Trabalho no Fim de Semana</label>
                     </div>
-                    <button
-                      type="button"
-                      class="toggle-btn"
-                      :class="{ active: formData.allowSunday }"
-                      @click="toggleAndSave('allowSunday', $event)"
-                    >
-                      {{ formData.allowSunday ? 'Sim' : 'Nao' }}
-                    </button>
+                    <div class="weekend-toggles">
+                      <div class="weekend-toggle-item">
+                        <span class="weekend-label">Sabado</span>
+                        <button
+                          type="button"
+                          class="toggle-btn-compact"
+                          :class="{ active: formData.allowSaturday }"
+                          @click="toggleAndSave('allowSaturday', $event)"
+                        >
+                          {{ formData.allowSaturday ? 'Sim' : 'Nao' }}
+                        </button>
+                      </div>
+                      <div class="weekend-toggle-item">
+                        <span class="weekend-label">Domingo</span>
+                        <button
+                          type="button"
+                          class="toggle-btn-compact"
+                          :class="{ active: formData.allowSunday }"
+                          @click="toggleAndSave('allowSunday', $event)"
+                        >
+                          {{ formData.allowSunday ? 'Sim' : 'Nao' }}
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   <!-- Noturno -->
@@ -2049,11 +2828,20 @@ onMounted(async () => {
           <!-- Schedule Tab (Programacao / Gantt) -->
           <div v-if="activeTab === 'schedule'" class="schedule-tab">
             <div class="schedule-header">
-              <h3>Programacao de Tarefas</h3>
-              <div class="schedule-actions">
-                <span v-if="hasMeasurements" class="scope-badge" :class="'scope-' + projectScope.toLowerCase()">
-                  Escopo: {{ scopeLabels[projectScope] }}
+              <div class="schedule-header-left">
+                <h3>Programacao de Tarefas</h3>
+                <span v-if="hasMeasurements" class="scope-badge-compact" :class="'scope-' + projectScope.toLowerCase()">
+                  {{ scopeLabels[projectScope] }}
                 </span>
+                <div class="gantt-summary-compact">
+                  <span class="summary-compact-item">{{ totalGanttBlocks }} etapas</span>
+                  <span class="summary-compact-separator">•</span>
+                  <span class="summary-compact-item">{{ totalGanttDays }} dias</span>
+                  <span class="summary-compact-separator">•</span>
+                  <span class="summary-compact-item">{{ totalGanttHours }}h</span>
+                </div>
+              </div>
+              <div class="schedule-actions">
                 <button @click="generateTasks" class="btn btn-primary" :disabled="generatingTasks || !hasMeasurements">
                   <div v-if="generatingTasks" class="btn-spinner-small"></div>
                   <svg v-else class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2061,26 +2849,49 @@ onMounted(async () => {
                   </svg>
                   {{ generatingTasks ? 'Gerando...' : 'Gerar Etapas' }}
                 </button>
-              </div>
-            </div>
-
-            <!-- Total Days Summary -->
-            <div class="gantt-summary">
-              <div class="summary-item">
-                <span class="summary-label">Escopo:</span>
-                <span class="summary-value scope-value">{{ scopeLabels[projectScope] }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="summary-label">Etapas:</span>
-                <span class="summary-value">{{ tasks.length }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="summary-label">Dias:</span>
-                <span class="summary-value">{{ totalGanttDays }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="summary-label">Horas:</span>
-                <span class="summary-value">{{ totalGanttDays * 8 }}h</span>
+                <button
+                  v-if="tasks.length > 0"
+                  @click="distributeTeamSize"
+                  class="btn btn-secondary"
+                  :disabled="!project?.teamSize"
+                  title="Distribuir pessoas da equipe para todas as tarefas"
+                >
+                  <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                  Distribuir Equipe
+                </button>
+                <button
+                  v-if="tasks.length > 0"
+                  @click="sendToAppAgenda"
+                  class="btn btn-accent"
+                  title="Enviar cronograma para agenda dos aplicadores no app"
+                >
+                  <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                    <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>
+                  </svg>
+                  Enviar para Agenda
+                </button>
+                <button
+                  v-if="tasks.length > 0"
+                  @click="exportGanttAsImage"
+                  class="btn btn-secondary"
+                  title="Exportar cronograma como imagem JPEG"
+                >
+                  <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Exportar JPEG
+                </button>
               </div>
             </div>
 
@@ -2090,24 +2901,61 @@ onMounted(async () => {
               <span>Carregando tarefas...</span>
             </div>
 
-            <!-- Traditional Gantt Chart -->
-            <div class="gantt-traditional">
-              <!-- Timeline Header -->
+            <!-- Gantt Chart Wrapper with Today Label -->
+            <div class="gantt-wrapper">
+              <!-- Today Label - Outside the table -->
+              <div
+                v-if="todayIndicator.isVisible"
+                class="today-label-floating"
+                :style="{ left: `calc(${todayIndicator.position}px + var(--gantt-left-offset) + 1px)` }"
+              >
+                <span class="today-text">dia atual</span>
+                <svg class="today-arrow" viewBox="0 0 12 8" fill="currentColor">
+                  <path d="M6 8 L0 2 L2 0 L6 4 L10 0 L12 2 Z"/>
+                </svg>
+              </div>
+
+              <!-- Traditional Gantt Chart -->
+              <div class="gantt-traditional">
+                <!-- Today Indicator Line -->
+                <div
+                  v-if="todayIndicator.isVisible"
+                  class="gantt-today-indicator"
+                  :style="{ left: `calc(${todayIndicator.position}px + var(--gantt-left-offset))` }"
+                ></div>
+
+                <!-- Timeline Header -->
               <div class="gantt-header">
-                <div class="gantt-drag-column"></div>
+                <div class="gantt-drag-column">#</div>
                 <div class="gantt-task-column">ETAPA</div>
+                <div class="gantt-input-column">DIAS</div>
+                <div class="gantt-input-column">PESSOAS</div>
+                <div class="gantt-calc-column">HORAS</div>
                 <div class="gantt-timeline-header">
                   <div
                     v-for="(day, index) in ganttDaysArray"
                     :key="index"
                     class="gantt-day-cell"
-                    :class="{ 'gantt-day-weekend': day.date.getDay() === 0 || day.date.getDay() === 6 }"
+                    :class="{
+                      'gantt-day-weekend': day.isSaturday || day.isSunday,
+                      'gantt-day-blocked': !day.isWorkDay && (day.isSaturday || day.isSunday)
+                    }"
                   >
                     <span class="day-num">{{ day.dayNum }}</span>
                     <span class="day-label">{{ day.label }}</span>
                   </div>
                 </div>
-                <div class="gantt-days-column">DIAS</div>
+                <div class="gantt-add-column">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                </div>
+                <div class="gantt-group-column">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                  </svg>
+                </div>
+                <div class="gantt-action-column"></div>
               </div>
 
               <!-- Task Rows -->
@@ -2126,61 +2974,262 @@ onMounted(async () => {
                 </div>
 
                 <template v-for="(task, index) in tasks" :key="task.id">
-                  <!-- Task Row -->
+                  <!-- Only render row if it's standalone or first in a group -->
                   <div
-                    class="gantt-row-traditional"
-                    :class="{
-                      'gantt-row-selected': selectedBlock?.id === task.id,
-                      'gantt-row-dragging': draggedIndex === index,
-                      'gantt-row-drag-over': dragOverIndex === index
-                    }"
-                    draggable="false"
-                    @click="openBlockEditor(task)"
+                    v-if="shouldRenderRow(index)"
+                    class="gantt-row-inline"
+                    :class="{ 'gantt-row-grouped-block': isGroupedRow(index) }"
+                    :style="{ minHeight: (isGroupedRow(index) ? getGroupFromStart(index).length * 44 : 44) + 'px' }"
                   >
-                    <!-- Sort Order -->
-                    <div class="drag-handle" @click.stop>
-                      <span class="task-order">{{ task.sortOrder || index + 1 }}</span>
+                    <!-- Order - Número do bloco centralizado -->
+                    <div class="gantt-order-cell">
+                      <span class="task-order">{{ getBlockNumber(index) }}.</span>
                     </div>
 
-                    <!-- Task Name -->
-                    <div class="gantt-task-cell" @click.stop>
-                      <div class="task-color-dot" :style="{ backgroundColor: task.color || '#c9a962' }"></div>
-                      <span class="task-title">{{ task.title }}</span>
-                    </div>
-
-                    <!-- Timeline Bar -->
-                    <div class="gantt-timeline-cell">
-                      <div class="timeline-track">
-                        <div
-                          class="timeline-bar"
-                          :style="{
-                            backgroundColor: task.color || '#c9a962',
-                            left: getTaskLeft(task) + 'px',
-                            width: Math.max(getTaskWidth(task) - 4, 30) + 'px',
-                            opacity: task.status === 'COMPLETED' ? 0.6 : 1
-                          }"
-                        >
-                          <span class="bar-label">{{ getTaskDuration(task) }}d</span>
+                    <!-- Task Names - Lista vertical para grupos -->
+                    <div class="gantt-task-cell" :class="{ 'gantt-task-cell-grouped': isGroupedRow(index) }">
+                      <div v-if="!isGroupedRow(index)" class="task-row-single">
+                        <div class="task-color-dot" :style="{ backgroundColor: task.color || '#c9a962' }"></div>
+                        <input
+                          v-model="task.title"
+                          type="text"
+                          class="task-title-input"
+                          @blur="updateTaskField(task.id, 'title', task.title)"
+                        />
+                        <span v-if="!task.consumesResources" class="no-resource-badge" title="Não consome recursos da equipe">⏳</span>
+                      </div>
+                      <div v-else class="grouped-tasks-list">
+                        <div v-for="(gt, idx) in getGroupFromStart(index)" :key="gt.id" class="grouped-task-item">
+                          <div class="task-color-dot" :style="{ backgroundColor: gt.color || '#c9a962' }"></div>
+                          <input
+                            v-model="gt.title"
+                            type="text"
+                            class="task-title-input"
+                            @blur="updateTaskField(gt.id, 'title', gt.title)"
+                          />
+                          <span v-if="!gt.consumesResources" class="no-resource-badge" title="Não consome recursos da equipe">⏳</span>
                         </div>
                       </div>
                     </div>
 
-                    <!-- Days Count -->
-                    <div class="gantt-days-cell">
-                      <span class="days-value">{{ getTaskDuration(task) }}</span>
+                    <!-- Days Select - Único para todo o grupo -->
+                    <div class="gantt-input-cell">
+                      <select
+                        :value="task.inputDays || 1"
+                        @change="(e) => { task.inputDays = Number((e.target as HTMLSelectElement).value); onInputChange(task); }"
+                        class="gantt-select-input"
+                      >
+                        <option v-for="d in 10" :key="d" :value="d">{{ d }}d</option>
+                      </select>
+                    </div>
+
+                    <!-- People Select - Único para todo o grupo -->
+                    <div class="gantt-input-cell">
+                      <select
+                        :value="task.inputPeople || 0"
+                        @change="(e) => { task.inputPeople = Number((e.target as HTMLSelectElement).value); onInputChange(task); }"
+                        class="gantt-select-input"
+                        :class="{ 'input-disabled': !task.consumesResources }"
+                        :disabled="!task.consumesResources"
+                      >
+                        <option v-for="p in 11" :key="p-1" :value="p-1">{{ p-1 }}p</option>
+                      </select>
+                    </div>
+
+                    <!-- Calculated Hours - Total para grupos -->
+                    <div class="gantt-calc-cell">
+                      <span class="calc-hours" :class="{ 'calc-hours-total': isGroupedRow(index) }">
+                        {{ isGroupedRow(index) ? getTotalGroupHours(index) : calculateTaskHours(task) }}h
+                      </span>
+                    </div>
+
+                    <!-- Timeline Bar - Centralizada -->
+                    <div class="gantt-timeline-cell">
+                      <div class="timeline-track">
+                        <div
+                          class="timeline-bar"
+                          :class="{ 'timeline-bar-grouped': isGroupedRow(index) }"
+                          :style="{
+                            backgroundColor: task.color || '#c9a962',
+                            left: getTaskLeft(task) + 'px',
+                            width: Math.max(getTaskWidth(task) - 4, 30) + 'px',
+                            opacity: task.status === 'COMPLETED' ? 0.6 : 1,
+                          }"
+                        >
+                          <div class="bar-content">
+                            <span class="bar-label">
+                              {{ isGroupedRow(index) ? getTotalGroupDuration(index) + 'd' : getTaskDuration(task) + 'd' }}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Add Task Button Column -->
+                    <div class="gantt-add-cell" :class="{ 'gantt-add-cell-grouped': isGroupedRow(index) }">
+                      <button
+                        v-if="!isGroupedRow(index)"
+                        type="button"
+                        class="gantt-action-btn has-tooltip"
+                        data-tooltip="Adicionar tarefa"
+                        @click="toggleAddTaskDropdown(task.id)"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                      </button>
+
+                      <!-- Dropdown para tarefa individual -->
+                      <div
+                        v-if="showAddTaskDropdown === task.id && !isGroupedRow(index)"
+                        class="add-task-dropdown"
+                        @click.stop
+                      >
+                        <div class="dropdown-header">Adicionar abaixo:</div>
+                        <div class="dropdown-templates">
+                          <button
+                            v-for="template in taskTemplates"
+                            :key="template.id"
+                            class="template-item-btn"
+                            @click="insertTaskAt('below', task.id, template)"
+                          >
+                            <div
+                              class="template-color-dot"
+                              :style="{ backgroundColor: template.color }"
+                            ></div>
+                            <span class="template-title">{{ template.title }}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- Botões para blocos agrupados -->
+                      <div
+                        v-for="gt in (isGroupedRow(index) ? getGroupFromStart(index) : [])"
+                        :key="'add-wrapper-' + gt.id"
+                        class="add-dropdown-wrapper"
+                      >
+                        <button
+                          type="button"
+                          class="gantt-action-btn gantt-action-btn-small has-tooltip"
+                          data-tooltip="Adicionar tarefa"
+                          @click="toggleAddTaskDropdown(gt.id)"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 5v14M5 12h14"/>
+                          </svg>
+                        </button>
+
+                        <!-- Dropdown para cada tarefa do grupo -->
+                        <div
+                          v-if="showAddTaskDropdown === gt.id"
+                          class="add-task-dropdown"
+                          @click.stop
+                        >
+                          <div class="dropdown-header">Adicionar abaixo:</div>
+                          <div class="dropdown-templates">
+                            <button
+                              v-for="template in taskTemplates"
+                              :key="template.id"
+                              class="template-item-btn"
+                              @click="insertTaskAt('below', gt.id, template)"
+                            >
+                              <div
+                                class="template-color-dot"
+                                :style="{ backgroundColor: template.color }"
+                              ></div>
+                              <span class="template-title">{{ template.title }}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Group Button -->
+                    <div class="gantt-group-cell">
+                      <button
+                        v-if="!isGroupedRow(index)"
+                        type="button"
+                        class="gantt-action-btn has-tooltip"
+                        :class="{ 'active': task.groupWithNext }"
+                        :data-tooltip="task.groupWithNext ? 'Etapa agrupada com a próxima' : 'Agrupar no mesmo dia com próxima tarefa'"
+                        @click="toggleGroupWithNext(task)"
+                      >
+                        <svg v-if="task.groupWithNext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M5 13l4 4L19 7"/>
+                        </svg>
+                        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                        </svg>
+                      </button>
+                      <div v-else class="grouped-actions-list">
+                        <template v-for="(gt, idx) in getGroupFromStart(index)" :key="'group-' + gt.id">
+                          <button
+                            v-if="idx < getGroupFromStart(index).length - 1"
+                            type="button"
+                            class="gantt-action-btn gantt-action-btn-small has-tooltip"
+                            :class="{ 'active': gt.groupWithNext }"
+                            data-tooltip="Desagrupar esta etapa"
+                            @click="toggleGroupWithNext(gt)"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <path d="M5 13l4 4L19 7"/>
+                            </svg>
+                          </button>
+                          <!-- Add group button for last task in group -->
+                          <button
+                            v-if="idx === getGroupFromStart(index).length - 1 && index + getGroupFromStart(index).length < tasks.length"
+                            type="button"
+                            class="gantt-action-btn gantt-action-btn-small has-tooltip group-toggle-add"
+                            :class="{ 'active': gt.groupWithNext }"
+                            :data-tooltip="gt.groupWithNext ? 'Bloco agrupado com próximo' : 'Agrupar bloco com próxima tarefa'"
+                            @click="toggleGroupWithNext(gt)"
+                          >
+                            <svg v-if="gt.groupWithNext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <path d="M5 13l4 4L19 7"/>
+                            </svg>
+                            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                            </svg>
+                          </button>
+                        </template>
+                      </div>
                     </div>
 
                     <!-- Delete button -->
-                    <button class="gantt-delete-btn" @click.stop="deleteBlock(task.id)" title="Remover etapa">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"/>
-                        <line x1="6" y1="6" x2="18" y2="18"/>
-                      </svg>
-                    </button>
+                    <div class="gantt-action-cell" :class="{ 'gantt-action-cell-grouped': isGroupedRow(index) }">
+                      <button
+                        v-if="!isGroupedRow(index)"
+                        class="gantt-action-btn has-tooltip"
+                        @click.stop="deleteBlock(task.id)"
+                        data-tooltip="Remover etapa"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                      <div v-else class="grouped-delete-list">
+                        <button
+                          v-for="gt in getGroupFromStart(index)"
+                          :key="'delete-' + gt.id"
+                          class="gantt-action-btn gantt-action-btn-small has-tooltip"
+                          @click.stop="deleteBlock(gt.id)"
+                          data-tooltip="Remover etapa"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </template>
               </div>
+              </div>
+              <!-- End of Gantt traditional -->
             </div>
+            <!-- End of Gantt Wrapper -->
 
             <!-- Block Editor Panel -->
             <div v-if="showBlockEditor && selectedBlock" class="block-editor-panel">
@@ -3003,6 +4052,22 @@ onMounted(async () => {
   background: var(--bg-card-hover);
 }
 
+.btn-accent {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+  border: none;
+}
+
+.btn-accent:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.btn-accent:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .btn-spinner {
   width: 16px;
   height: 16px;
@@ -3146,13 +4211,13 @@ onMounted(async () => {
 
 /* Date Input Inline - mesma aparência do time-dropdown */
 .date-input-inline {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--accent-color);
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: 0;
+  padding: 4px 8px;
 }
 
 .date-input-inline:hover {
@@ -3174,7 +4239,7 @@ onMounted(async () => {
   cursor: pointer;
   padding: 0;
   width: 50px;
-  text-align: left;
+  text-align: center;
 }
 
 .number-input-inline:hover {
@@ -3205,6 +4270,7 @@ onMounted(async () => {
 .schedule-value-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
 }
 
@@ -3235,6 +4301,50 @@ onMounted(async () => {
   color: var(--accent-color);
 }
 
+/* Weekend Toggles - Sábado e Domingo agrupados */
+.weekend-toggles {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.weekend-toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.weekend-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-width: 60px;
+}
+
+.toggle-btn-compact {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px 16px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  text-align: center;
+  min-width: 60px;
+}
+
+.toggle-btn-compact:hover {
+  background: rgba(201, 169, 98, 0.1);
+}
+
+.toggle-btn-compact.active {
+  color: var(--accent-color);
+  background: rgba(201, 169, 98, 0.15);
+}
+
 .schedule-field-header {
   display: flex;
   align-items: center;
@@ -3247,6 +4357,14 @@ onMounted(async () => {
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.field-hint {
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  opacity: 0.7;
+  white-space: nowrap;
 }
 
 .edit-field-btn {
@@ -3279,6 +4397,9 @@ onMounted(async () => {
   font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
+  text-align: center;
+  display: block;
+  width: 100%;
 }
 
 .schedule-value.highlight {
@@ -3538,6 +4659,12 @@ onMounted(async () => {
   padding: 12px;
   background: var(--bg-secondary);
   border-radius: var(--border-radius);
+}
+
+.measurement-total {
+  grid-column: 1 / -1;
+  background: rgba(201, 169, 98, 0.08);
+  border: 1px solid rgba(201, 169, 98, 0.2);
 }
 
 .measurement-icon {
@@ -4456,17 +5583,76 @@ onMounted(async () => {
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 12px 16px;
+  background: var(--card-bg);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.schedule-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .schedule-header h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
 }
 
 .schedule-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
+}
+
+/* Compact scope badge */
+.scope-badge-compact {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.scope-badge-compact.scope-piso {
+  background: rgba(201, 169, 98, 0.15);
+  color: #c9a962;
+  border: 1px solid rgba(201, 169, 98, 0.3);
+}
+
+.scope-badge-compact.scope-parede_teto {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.scope-badge-compact.scope-combinado {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+/* Compact summary inline */
+.gantt-summary-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.summary-compact-item {
+  font-weight: 500;
+}
+
+.summary-compact-separator {
+  color: var(--text-tertiary);
+  font-weight: 300;
 }
 
 .task-stats {
@@ -4513,12 +5699,12 @@ onMounted(async () => {
   background: var(--card-bg);
   border-radius: 12px;
   border: 1px solid var(--border-color);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .gantt-chart {
   min-width: 100%;
-  overflow-x: auto;
+  overflow-x: visible;
 }
 
 .gantt-row {
@@ -4743,34 +5929,93 @@ onMounted(async () => {
   letter-spacing: 0.5px;
 }
 
+/* Gantt Wrapper - Contains label and table */
+.gantt-wrapper {
+  --gantt-left-offset: 558px; /* padding(8) + col1(40+8) + col2(220+8) + col3(70+8) + col4(90+8) + col5(90+8) = 558px */
+  position: relative;
+  padding-top: 35px;
+}
+
+/* Today Label - Floating above table */
+.today-label-floating {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+  z-index: 20;
+}
+
+.today-label-floating .today-text {
+  font-size: 9px;
+  font-weight: 600;
+  color: #22c55e;
+  text-transform: lowercase;
+  letter-spacing: 0.2px;
+}
+
+.today-label-floating .today-arrow {
+  width: 12px;
+  height: 6px;
+  color: #22c55e;
+}
+
 /* Traditional Gantt Chart Styles */
 .gantt-traditional {
   background: var(--card-bg);
   border-radius: 12px;
   border: 1px solid var(--border-color);
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
+}
+
+/* Today Indicator - Green vertical bar showing current day */
+.gantt-today-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40px;
+  background: linear-gradient(180deg,
+    rgba(34, 197, 94, 0.15) 0%,
+    rgba(34, 197, 94, 0.1) 50%,
+    rgba(34, 197, 94, 0.15) 100%
+  );
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.15);
 }
 
 .gantt-header {
   display: grid;
-  grid-template-columns: 32px 180px 1fr 70px 36px;
+  grid-template-columns: 40px 220px 70px 90px 90px auto 40px 50px 40px;
   background: rgba(0, 0, 0, 0.3);
   border-bottom: 2px solid var(--border-color);
+  gap: 8px;
+  padding: 0 8px;
 }
 
-.gantt-drag-column {
-  width: 32px;
-}
-
-.gantt-task-column {
-  padding: 12px 16px;
-  font-size: 11px;
+.gantt-drag-column,
+.gantt-task-column,
+.gantt-input-column,
+.gantt-calc-column,
+.gantt-add-column,
+.gantt-group-column,
+.gantt-action-column {
+  padding: 8px 6px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: center;
+}
+
+.gantt-task-column {
+  justify-content: flex-start;
 }
 
 .gantt-days-column {
@@ -4788,7 +6033,7 @@ onMounted(async () => {
 
 .gantt-timeline-header {
   display: flex;
-  overflow-x: auto;
+  overflow-x: visible;
   border-left: 1px solid var(--border-color);
   border-right: 1px solid var(--border-color);
 }
@@ -4796,12 +6041,17 @@ onMounted(async () => {
 .gantt-day-cell {
   min-width: 40px;
   max-width: 40px;
-  padding: 8px 4px;
+  padding: 6px 4px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   border-right: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.2s ease;
+}
+
+.gantt-day-cell:hover {
+  background: rgba(201, 169, 98, 0.1);
 }
 
 .gantt-day-cell:last-child {
@@ -4809,26 +6059,373 @@ onMounted(async () => {
 }
 
 .gantt-day-weekend {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.gantt-day-weekend:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+/* Blocked weekends - red overlay for non-work days */
+.gantt-day-blocked {
+  position: relative;
+  background: transparent !important;
+}
+
+.gantt-day-blocked::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(220, 38, 38, 0.2);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.gantt-day-blocked .day-num,
+.gantt-day-blocked .day-label {
+  position: relative;
+  z-index: 2;
+  opacity: 0.6;
 }
 
 .day-num {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text-primary);
 }
 
 .day-label {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-tertiary);
   text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 /* Gantt Body */
 .gantt-body {
-  max-height: 500px;
-  overflow-y: auto;
+  /* Removed max-height and overflow to integrate with page scroll */
+  overflow-y: visible;
 }
+
+/* INLINE GANTT ROW */
+.gantt-row-inline {
+  display: grid;
+  grid-template-columns: 40px 220px 70px 90px 90px auto 40px 50px 40px;
+  border-bottom: 1px solid var(--border-color);
+  gap: 8px;
+  padding: 0 8px;
+  transition: all 0.2s ease;
+  align-items: center;
+  min-height: 44px;
+  overflow: visible; /* Allow tooltips and prevent scrollbar */
+}
+
+.gantt-row-inline:hover {
+  background: rgba(201, 169, 98, 0.08);
+  transform: translateX(2px);
+}
+
+.gantt-row-grouped {
+  border-left: 3px solid var(--accent-color);
+  background: rgba(201, 169, 98, 0.08);
+}
+
+/* =============================================
+   GROUPED BLOCK - UMA ÚNICA LINHA COM ALTURA EXPANDIDA
+   ============================================= */
+
+.gantt-row-grouped-block {
+  border: 2px solid var(--accent-color) !important;
+  border-radius: 8px;
+  background: rgba(201, 169, 98, 0.05) !important;
+  margin: 4px 0;
+  box-shadow: 0 2px 8px rgba(201, 169, 98, 0.2);
+}
+
+/* Células agrupadas - display flex vertical apenas para task names e actions */
+.gantt-task-cell-grouped,
+.gantt-action-cell-grouped {
+  display: flex !important;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-evenly;
+  gap: 4px;
+  padding: 8px 4px !important;
+  overflow: visible; /* Prevent scrollbar */
+}
+
+/* Lista de tarefas agrupadas */
+.grouped-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.grouped-task-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 2px 0;
+}
+
+/* Lista de ações agrupadas */
+.grouped-actions-list,
+.grouped-delete-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  align-items: center;
+  overflow: visible; /* Prevent scrollbar */
+}
+
+
+.group-toggle-add {
+  background: rgba(34, 197, 94, 0.2) !important;
+  border-color: rgba(34, 197, 94, 0.4) !important;
+  color: #22c55e !important;
+}
+
+.group-toggle-add:hover {
+  background: rgba(34, 197, 94, 0.3) !important;
+  border-color: #22c55e !important;
+}
+
+/* Total hours styling for grouped blocks */
+.calc-hours-total {
+  font-weight: 700;
+  color: var(--accent-color);
+  font-size: 15px;
+  background: rgba(201, 169, 98, 0.15);
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--accent-color);
+}
+
+/* Inline Cells */
+.gantt-order-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.task-order {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.task-title-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 4px;
+  outline: none;
+  border-bottom: 1px solid transparent;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+}
+
+.task-title-input:hover {
+  border-bottom-color: rgba(201, 169, 98, 0.4);
+  background: rgba(201, 169, 98, 0.05);
+}
+
+.task-title-input:focus {
+  border-bottom-color: var(--accent-color);
+  background: rgba(201, 169, 98, 0.08);
+  padding-left: 8px;
+}
+
+.gantt-input-cell,
+.gantt-calc-cell,
+.gantt-group-cell,
+.gantt-action-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible; /* Prevent scrollbar and allow tooltips */
+}
+
+.gantt-number-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  padding: 6px 10px;
+  outline: none;
+  transition: all 0.2s ease;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+  font-variant-numeric: tabular-nums;
+  -webkit-appearance: none;
+  -moz-appearance: textfield;
+}
+
+/* Hide spinner arrows */
+.gantt-number-input::-webkit-inner-spin-button,
+.gantt-number-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.gantt-number-input:hover {
+  background: rgba(201, 169, 98, 0.08);
+  border-color: rgba(201, 169, 98, 0.3);
+  transform: translateY(-1px);
+}
+
+.gantt-number-input:focus {
+  background: rgba(201, 169, 98, 0.12);
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(201, 169, 98, 0.15), inset 0 1px 3px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.gantt-number-input.input-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(0, 0, 0, 0.15);
+  transform: none !important;
+}
+
+/* Select Dropdown Styles */
+.gantt-select-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  padding: 6px 10px;
+  outline: none;
+  transition: all 0.2s ease;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23c9a962' d='M6 9L2 5h8z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 28px;
+}
+
+.gantt-select-input:hover {
+  background-color: rgba(201, 169, 98, 0.08);
+  border-color: rgba(201, 169, 98, 0.3);
+  transform: translateY(-1px);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23c9a962' d='M6 9L2 5h8z'/%3E%3C/svg%3E");
+}
+
+.gantt-select-input:focus {
+  background-color: rgba(201, 169, 98, 0.12);
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(201, 169, 98, 0.15), inset 0 1px 3px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23c9a962' d='M6 3L2 7h8z'/%3E%3C/svg%3E");
+}
+
+.gantt-select-input.input-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: rgba(0, 0, 0, 0.15);
+  transform: none !important;
+}
+
+.gantt-select-input option {
+  background: #1a1a1a;
+  color: var(--text-primary);
+  padding: 8px;
+  font-weight: 600;
+}
+
+.no-resource-badge {
+  font-size: 14px;
+  margin-left: 6px;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.calc-hours {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-color);
+  padding: 4px 8px;
+  background: rgba(201, 169, 98, 0.15);
+  border-radius: 6px;
+}
+
+.gantt-action-btn.active {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: #fff;
+}
+
+/* Instant Tooltip */
+.has-tooltip {
+  position: relative;
+}
+
+.has-tooltip::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  background: rgba(0, 0, 0, 0.95);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(201, 169, 98, 0.3);
+}
+
+.has-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-2px);
+  border: 6px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.95);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 1001;
+}
+
+.has-tooltip:hover::before,
+.has-tooltip:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+.has-tooltip:hover::after {
+  transform: translateX(-50%) translateY(0);
+}
+
 
 .gantt-row-traditional {
   display: grid;
@@ -4890,18 +6487,27 @@ onMounted(async () => {
 }
 
 .gantt-task-cell {
-  padding: 12px 16px;
+  padding: 12px 16px 12px 12px;
   display: flex;
   align-items: center;
   gap: 10px;
   border-right: 1px solid var(--border-color);
 }
 
+.task-row-single {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
 .task-color-dot {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 3px;
   flex-shrink: 0;
+  box-shadow: 0 0 8px currentColor;
+  opacity: 0.9;
 }
 
 .task-name {
@@ -4915,8 +6521,28 @@ onMounted(async () => {
 
 .gantt-timeline-cell {
   padding: 8px 0;
-  overflow-x: auto;
+  overflow-x: visible;
   border-right: 1px solid var(--border-color);
+}
+
+/* Action Cells (Add, Group, Delete) */
+.gantt-add-cell,
+.gantt-group-cell,
+.gantt-action-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.gantt-add-cell-grouped,
+.gantt-action-cell-grouped {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-evenly;
+  gap: 2px;
+  padding: 8px 4px !important;
 }
 
 .timeline-track {
@@ -4947,6 +6573,40 @@ onMounted(async () => {
 .timeline-bar:hover {
   transform: scaleY(1.1);
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+}
+
+.timeline-bar-grouped {
+  align-items: flex-start;
+  padding: 4px 8px;
+}
+
+.bar-content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.grouped-tasks-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  font-size: 11px;
+}
+
+.grouped-task-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.grouped-task-label:last-child {
+  border-bottom: none;
 }
 
 .bar-label {
@@ -5329,9 +6989,161 @@ onMounted(async () => {
   min-height: 80px;
 }
 
+.calculated-field {
+  background: rgba(201, 169, 98, 0.1) !important;
+  color: #c9a962 !important;
+  font-weight: 600;
+  cursor: not-allowed;
+  border-color: rgba(201, 169, 98, 0.3) !important;
+}
+
 .input-color {
   height: 40px;
   padding: 4px;
   cursor: pointer;
+}
+
+/* Unified Action Buttons (Add, Group, Delete) */
+.add-task-wrapper,
+.grouped-add-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gantt-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-tertiary);
+  position: relative;
+  outline: none;
+  padding: 0;
+}
+
+.gantt-action-btn:hover {
+  background: rgba(201, 169, 98, 0.2);
+  border-color: var(--accent-color);
+}
+
+.gantt-action-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.gantt-action-btn-small {
+  width: 28px;
+  height: 28px;
+}
+
+.gantt-action-btn-small svg {
+  width: 14px;
+  height: 14px;
+}
+
+.add-dropdown-wrapper {
+  position: relative;
+}
+
+.add-task-dropdown {
+  position: fixed;
+  background: rgba(20, 20, 20, 0.98);
+  border: 1px solid rgba(201, 169, 98, 0.3);
+  border-radius: 12px;
+  padding: 12px;
+  min-width: 240px;
+  max-width: 300px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(201, 169, 98, 0.1);
+  z-index: 9999;
+  backdrop-filter: blur(10px);
+}
+
+.dropdown-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dropdown-templates {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+/* Custom scrollbar for dropdown */
+.dropdown-templates::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dropdown-templates::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.dropdown-templates::-webkit-scrollbar-thumb {
+  background: rgba(201, 169, 98, 0.3);
+  border-radius: 3px;
+}
+
+.dropdown-templates::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 169, 98, 0.5);
+}
+
+.template-item-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  outline: none;
+}
+
+.template-item-btn:hover {
+  background: rgba(201, 169, 98, 0.15);
+  border-color: rgba(201, 169, 98, 0.3);
+  transform: translateX(2px);
+}
+
+.template-item-btn:active {
+  transform: translateX(2px) scale(0.98);
+}
+
+.template-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.3);
+}
+
+.template-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
 }
 </style>

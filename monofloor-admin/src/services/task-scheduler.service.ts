@@ -13,6 +13,42 @@ export interface TaskTemplate {
   isCura?: boolean; // Cura tasks have 0 work hours but take time
 }
 
+// =============================================
+// HELPERS - Conversão Dias → Horas
+// =============================================
+
+const WORK_HOURS_PER_DAY = 8;   // 8 horas de trabalho
+const LUNCH_BREAK_HOURS = 1;    // 1 hora de almoço
+
+/**
+ * Converte dias + pessoas em horas-pessoa totais
+ * Exemplo: 1 dia, 4 pessoas = 4 × (8h - 1h) = 28 horas-pessoa
+ */
+export function convertDaysToHours(days: number, people: number): number {
+  const effectiveHoursPerPerson = WORK_HOURS_PER_DAY - LUNCH_BREAK_HOURS;
+  return days * people * effectiveHoursPerPerson;
+}
+
+/**
+ * Calcula duração em dias corridos (para timeline do Gantt)
+ * Leva em conta que com mais pessoas, a tarefa termina mais rápido
+ */
+export function calculateElapsedDays(totalHoursPeople: number, teamSize: number): number {
+  if (teamSize === 0) return 0;
+  const effectiveHoursPerPerson = WORK_HOURS_PER_DAY - LUNCH_BREAK_HOURS;
+  const hoursPerDay = teamSize * effectiveHoursPerPerson;
+  return Math.ceil(totalHoursPeople / hoursPerDay);
+}
+
+/**
+ * Retorna descrição legível do cálculo
+ */
+export function getCalculationSummary(days: number, people: number): string {
+  const effectiveHours = WORK_HOURS_PER_DAY - LUNCH_BREAK_HOURS;
+  const total = convertDaysToHours(days, people);
+  return `${days} dia(s) × ${people} pessoa(s) × ${effectiveHours}h = ${total}h-pessoa`;
+}
+
 // Colors for different task categories
 const COLORS = {
   PROTECAO: '#64748b',     // Slate - Preparation
@@ -277,4 +313,79 @@ export function calculateEstimatedDays(
 ): number {
   const workDays = getWorkDays(startDate, deadlineDate, allowSaturday, allowSunday);
   return workDays.length;
+}
+
+// =============================================
+// RESOURCE CAPACITY VALIDATION
+// =============================================
+
+/**
+ * Calculate daily capacity in hours based on team size
+ * Capacidade diária = teamSize × (8h - 1h almoço) = teamSize × 7h
+ */
+export function calculateDailyCapacity(teamSize: number): number {
+  const effectiveHoursPerPerson = WORK_HOURS_PER_DAY - LUNCH_BREAK_HOURS;
+  return teamSize * effectiveHoursPerPerson;
+}
+
+/**
+ * Validate if tasks grouped on the same day fit within team capacity
+ * @param tasksOnSameDay Array of tasks that will run on the same day
+ * @param teamSize Number of people in the team
+ * @returns { valid: boolean, usedHours: number, availableHours: number }
+ */
+export function validateDayCapacity(
+  tasksOnSameDay: Array<{ inputDays?: number | null; inputPeople?: number | null; consumesResources?: boolean }>,
+  teamSize: number
+): { valid: boolean; usedHours: number; availableHours: number; exceedsBy: number } {
+  const dailyCapacity = calculateDailyCapacity(teamSize);
+
+  // Calculate total hours needed for tasks that consume resources
+  let usedHours = 0;
+  for (const task of tasksOnSameDay) {
+    // Skip tasks that don't consume resources (cura, secagem, etc.)
+    if (task.consumesResources === false) {
+      continue;
+    }
+
+    const days = task.inputDays ?? 0;
+    const people = task.inputPeople ?? 0;
+
+    // For same-day tasks, we only count the people, not the days
+    // (all tasks happen in parallel with the available people)
+    usedHours += people * (WORK_HOURS_PER_DAY - LUNCH_BREAK_HOURS);
+  }
+
+  const exceedsBy = Math.max(0, usedHours - dailyCapacity);
+
+  return {
+    valid: usedHours <= dailyCapacity,
+    usedHours,
+    availableHours: dailyCapacity,
+    exceedsBy,
+  };
+}
+
+/**
+ * Group tasks by day considering the groupWithNext flag
+ * Returns an array of arrays, where each sub-array contains tasks on the same day
+ */
+export function groupTasksByDay(
+  tasks: Array<{ id: string; groupWithNext: boolean; [key: string]: any }>
+): Array<Array<{ id: string; groupWithNext: boolean; [key: string]: any }>> {
+  const grouped: Array<Array<{ id: string; groupWithNext: boolean; [key: string]: any }>> = [];
+  let currentGroup: Array<{ id: string; groupWithNext: boolean; [key: string]: any }> = [];
+
+  for (let i = 0; i < tasks.length; i++) {
+    const task = tasks[i];
+    currentGroup.push(task);
+
+    // If this task doesn't group with next, close the group
+    if (!task.groupWithNext || i === tasks.length - 1) {
+      grouped.push([...currentGroup]);
+      currentGroup = [];
+    }
+  }
+
+  return grouped;
 }

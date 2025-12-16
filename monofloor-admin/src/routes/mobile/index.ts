@@ -2833,4 +2833,41 @@ router.post(
   }
 );
 
+// =============================================
+// XP RANKING
+// =============================================
+
+/**
+ * GET /api/mobile/ranking/top10
+ * Get top 10 applicators by XP
+ */
+router.get('/ranking/top10', mobileAuth, async (req, res, next) => {
+  try {
+    const topUsers = await prisma.user.findMany({
+      where: {
+        status: 'APPROVED',
+      },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        role: true,
+        xpTotal: true,
+        level: true,
+      },
+      orderBy: {
+        xpTotal: 'desc',
+      },
+      take: 10,
+    });
+
+    res.json({
+      success: true,
+      data: topUsers,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export { router as mobileRoutes };

@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monofloor - Gerador de Relatório de Vídeo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .logo-img {
+            width: 200px;
+            height: auto;
+            margin-bottom: 16px;
+        }
+
+        .subtitle {
+            color: #888;
+            font-size: 16px;
+        }
+
+        .card {
+            background: #1f1f1f;
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 24px;
+            border: 1px solid #333;
+        }
+
+        .upload-area {
+            border: 3px dashed #444;
+            border-radius: 16px;
+            padding: 60px 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #252525;
+        }
+
+        .upload-area:hover {
+            border-color: #c9a962;
+            background: #2a2a2a;
+        }
+
+        .upload-area.dragover {
+            border-color: #c9a962;
+            background: #2d2508;
+        }
+
+        .upload-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        .upload-text {
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+
+        .upload-hint {
+            color: #888;
+            font-size: 14px;
+        }
+
+        .videos-grid {
+            display: none;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 24px;
+        }
+
+        .videos-grid.show {
+            display: grid;
+        }
+
+        .video-thumbnail {
+            position: relative;
+            background: #252525;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid #333;
+            transition: all 0.3s;
+        }
+
+        .video-thumbnail:hover {
+            border-color: #c9a962;
+            transform: translateY(-2px);
+        }
+
+        .video-thumbnail video {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .video-thumbnail-info {
+            padding: 10px;
+            background: #1f1f1f;
+        }
+
+        .video-thumbnail-name {
+            font-size: 12px;
+            color: #ccc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 4px;
+        }
+
+        .video-thumbnail-size {
+            font-size: 11px;
+            color: #888;
+        }
+
+        .video-thumbnail-remove {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 28px;
+            height: 28px;
+            background: rgba(239, 68, 68, 0.9);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .video-thumbnail-remove:hover {
+            background: #ef4444;
+            transform: scale(1.1);
+        }
+
+        .video-count-badge {
+            display: inline-block;
+            background: #c9a962;
+            color: #1a1a1a;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #ccc;
+            font-weight: 500;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px 16px;
+            background: #252525;
+            border: 1px solid #444;
+            border-radius: 8px;
+            color: white;
+            font-size: 15px;
+            font-family: inherit;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #c9a962;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .btn {
+            padding: 14px 32px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        .btn-primary {
+            background: linear-gradient(90deg, #c9a962, #e0c078);
+            color: #1a1a1a;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(201, 169, 98, 0.3);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #333;
+            color: white;
+            margin-top: 12px;
+        }
+
+        .btn-secondary:hover {
+            background: #444;
+        }
+
+        .progress-container {
+            display: none;
+            margin-top: 24px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #333;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #c9a962, #e0c078);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .progress-text {
+            text-align: center;
+            color: #ccc;
+            font-size: 14px;
+        }
+
+        .result-container {
+            display: none;
+        }
+
+        .success-icon {
+            font-size: 64px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .result-title {
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 12px;
+        }
+
+        .result-text {
+            text-align: center;
+            color: #888;
+            margin-bottom: 32px;
+        }
+
+        .error-message {
+            display: none;
+            background: #ff444420;
+            border: 1px solid #ff4444;
+            color: #ff6666;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 16px;
+        }
+
+        .settings-toggle {
+            color: #c9a962;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 16px;
+            display: inline-block;
+        }
+
+        .settings-toggle:hover {
+            text-decoration: underline;
+        }
+
+        .advanced-settings {
+            display: none;
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #333;
+        }
+
+        .advanced-settings.show {
+            display: block;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .config-section {
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .config-title {
+            color: #c9a962;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .config-input {
+            background: #1f1f1f;
+            border: 1px solid #555;
+            color: #fff;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .config-input:focus {
+            border-color: #c9a962;
+            outline: none;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-indicator.online {
+            background: #22c55e;
+        }
+
+        .status-indicator.offline {
+            background: #ef4444;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+
+            .card {
+                padding: 24px;
+            }
+
+            .upload-area {
+                padding: 40px 20px;
+            }
+
+            .videos-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="logo.png" alt="Monofloor" class="logo-img">
+            <div class="subtitle">Gerador Automático de Relatório de Vídeo</div>
+        </div>
+
+        <!-- Configuração de API -->
+        <div class="card">
+            <div class="config-section">
+                <div class="config-title">⚙️ Configuração da API</div>
+                <div class="form-group">
+                    <label for="apiUrl">
+                        <span class="status-indicator" id="apiStatus"></span>
+                        URL do Backend
+                    </label>
+                    <input
+                        type="text"
+                        id="apiUrl"
+                        class="config-input"
+                        value="http://localhost:3000"
+                        placeholder="http://localhost:3000"
+                    >
+                    <small style="color: #888; font-size: 12px; display: block; margin-top: 6px;">
+                        URL do servidor backend Monofloor
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom: 24px;">1. Enviar Vídeos</h2>
+
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">🎥</div>
+                <div class="upload-text">Arraste os vídeos aqui ou clique para selecionar</div>
+                <div class="upload-hint">Formatos: MP4, MOV, AVI • Múltiplos vídeos aceitos (máx. 500MB cada)</div>
+                <input type="file" id="videoInput" accept="video/*" multiple style="display: none;">
+            </div>
+
+            <div class="videos-grid" id="videosGrid"></div>
+
+            <div class="error-message" id="errorMessage"></div>
+        </div>
+
+        <div class="card" id="formCard" style="display: none;">
+            <h2 style="margin-bottom: 24px;">2. Informações do Relatório</h2>
+
+            <form id="reportForm">
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="projectName">Nome do Projeto *</label>
+                        <input type="text" id="projectName" required placeholder="Ex: Residência Silva">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="technicianName">Nome do Técnico *</label>
+                        <input type="text" id="technicianName" required placeholder="Ex: João Silva">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="visitDate">Data da Visita *</label>
+                    <input type="date" id="visitDate" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="visitPurpose">Objetivo da Visita</label>
+                    <select id="visitPurpose">
+                        <option value="vistoria">Vistoria Inicial</option>
+                        <option value="acompanhamento">Acompanhamento de Obra</option>
+                        <option value="problema">Identificação de Problema</option>
+                        <option value="finalização">Vistoria de Finalização</option>
+                        <option value="manutencao">Manutenção</option>
+                        <option value="outro">Outro</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="observations">Observações Adicionais</label>
+                    <textarea id="observations" placeholder="Notas gerais, contexto da visita..."></textarea>
+                </div>
+
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="outputFormat">📄 Formato do Relatório</label>
+                        <select id="outputFormat" onchange="toggleFormatFields()">
+                            <option value="pdf">PDF (Design Monofloor)</option>
+                            <option value="docx">Word/DOCX (Template Oficial)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Campos específicos para DOCX -->
+                <div id="docxFields" style="display: none;">
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="clientName">Nome do Cliente</label>
+                            <input type="text" id="clientName" placeholder="Ex: João Silva">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="address">Endereço da Obra</label>
+                            <input type="text" id="address" placeholder="Ex: Rua ABC, 123 - Bairro">
+                        </div>
+                    </div>
+                </div>
+
+                <span class="settings-toggle" onclick="toggleAdvanced()">⚙️ Configurações Avançadas</span>
+
+                <div class="advanced-settings" id="advancedSettings">
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="frameInterval">Intervalo de Captura (segundos)</label>
+                            <input type="number" id="frameInterval" value="10" min="5" max="60">
+                            <small style="color: #888; font-size: 12px;">Quanto menor, mais imagens no relatório</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="maxFrames">Máximo de Imagens (por vídeo)</label>
+                            <input type="number" id="maxFrames" value="20" min="5" max="50">
+                            <small style="color: #888; font-size: 12px;">Limite de imagens por vídeo</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="analysisPrompt">Instrução para IA</label>
+                        <textarea id="analysisPrompt" rows="3">Analise esta imagem de obra. Descreva o que vê, identifique problemas, medições visíveis, qualidade da aplicação e próximos passos necessários.</textarea>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="generateBtn">
+                    🚀 Gerar Relatório
+                </button>
+            </form>
+        </div>
+
+        <div class="card progress-container" id="progressContainer">
+            <h2 style="margin-bottom: 24px;">Processando Vídeos...</h2>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">Iniciando...</div>
+        </div>
+
+        <div class="card result-container" id="resultContainer">
+            <div class="success-icon">✅</div>
+            <div class="result-title">Relatório Gerado com Sucesso!</div>
+            <div class="result-text" id="resultText">Seu relatório está pronto para download</div>
+
+            <button class="btn btn-primary" id="downloadBtn">
+                📥 Baixar Relatório
+            </button>
+
+            <button class="btn btn-secondary" onclick="resetForm()">
+                🔄 Gerar Novo Relatório
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let selectedFiles = [];
+        let generatedReportUrl = null;
+        let generatedReportFormat = 'pdf';
+
+        // Configurar data de hoje como padrão
+        document.getElementById('visitDate').valueAsDate = new Date();
+
+        // Verificar status da API
+        async function checkApiStatus() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const statusIndicator = document.getElementById('apiStatus');
+
+            try {
+                const response = await fetch(`${apiUrl}/api/admin/reports/video-process/test`);
+                if (response.ok) {
+                    statusIndicator.className = 'status-indicator online';
+                } else {
+                    statusIndicator.className = 'status-indicator offline';
+                }
+            } catch (error) {
+                statusIndicator.className = 'status-indicator offline';
+            }
+        }
+
+        checkApiStatus();
+        setInterval(checkApiStatus, 10000);
+        document.getElementById('apiUrl').addEventListener('change', checkApiStatus);
+
+        // Upload area interactions
+        const uploadArea = document.getElementById('uploadArea');
+        const videoInput = document.getElementById('videoInput');
+        const videosGrid = document.getElementById('videosGrid');
+        const formCard = document.getElementById('formCard');
+
+        uploadArea.addEventListener('click', () => videoInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = Array.from(e.dataTransfer.files);
+            handleFiles(files);
+        });
+
+        videoInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            handleFiles(files);
+        });
+
+        function handleFiles(files) {
+            const videoFiles = files.filter(file => file.type.startsWith('video/'));
+
+            if (videoFiles.length === 0) {
+                showError('Por favor, selecione apenas arquivos de vídeo.');
+                return;
+            }
+
+            // Validar tamanho (500MB cada)
+            const oversized = videoFiles.find(file => file.size > 500 * 1024 * 1024);
+            if (oversized) {
+                showError(`O vídeo "${oversized.name}" é muito grande. Tamanho máximo: 500MB por vídeo.`);
+                return;
+            }
+
+            // Adicionar novos vídeos
+            videoFiles.forEach(file => {
+                if (!selectedFiles.find(f => f.name === file.name)) {
+                    selectedFiles.push(file);
+                }
+            });
+
+            renderVideos();
+            formCard.style.display = 'block';
+            hideError();
+        }
+
+        function renderVideos() {
+            if (selectedFiles.length === 0) {
+                videosGrid.classList.remove('show');
+                formCard.style.display = 'none';
+                return;
+            }
+
+            videosGrid.innerHTML = `
+                <div style="grid-column: 1 / -1;">
+                    <span class="video-count-badge">${selectedFiles.length} vídeo${selectedFiles.length > 1 ? 's' : ''} selecionado${selectedFiles.length > 1 ? 's' : ''}</span>
+                </div>
+            `;
+
+            selectedFiles.forEach((file, index) => {
+                const url = URL.createObjectURL(file);
+                const thumbnail = document.createElement('div');
+                thumbnail.className = 'video-thumbnail';
+                thumbnail.innerHTML = `
+                    <video src="${url}" muted></video>
+                    <div class="video-thumbnail-info">
+                        <div class="video-thumbnail-name" title="${file.name}">📹 Vídeo ${index + 1}</div>
+                        <div class="video-thumbnail-size">${formatFileSize(file.size)}</div>
+                    </div>
+                    <button class="video-thumbnail-remove" onclick="removeVideo(${index})" type="button">×</button>
+                `;
+                videosGrid.appendChild(thumbnail);
+            });
+
+            videosGrid.classList.add('show');
+        }
+
+        function removeVideo(index) {
+            selectedFiles.splice(index, 1);
+            renderVideos();
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('errorMessage');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        function toggleAdvanced() {
+            document.getElementById('advancedSettings').classList.toggle('show');
+        }
+
+        function toggleFormatFields() {
+            const format = document.getElementById('outputFormat').value;
+            const docxFields = document.getElementById('docxFields');
+
+            if (format === 'docx') {
+                docxFields.style.display = 'block';
+            } else {
+                docxFields.style.display = 'none';
+            }
+        }
+
+        // Form submission
+        document.getElementById('reportForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (selectedFiles.length === 0) {
+                showError('Por favor, selecione pelo menos um vídeo.');
+                return;
+            }
+
+            // Preparar dados
+            const formData = new FormData();
+
+            // Adicionar todos os vídeos
+            selectedFiles.forEach(file => {
+                formData.append('videos', file);
+            });
+
+            formData.append('projectName', document.getElementById('projectName').value);
+            formData.append('technicianName', document.getElementById('technicianName').value);
+            formData.append('visitDate', document.getElementById('visitDate').value);
+            formData.append('visitPurpose', document.getElementById('visitPurpose').value);
+            formData.append('observations', document.getElementById('observations').value);
+            formData.append('frameInterval', document.getElementById('frameInterval').value);
+            formData.append('maxFrames', document.getElementById('maxFrames').value);
+            formData.append('analysisPrompt', document.getElementById('analysisPrompt').value);
+            formData.append('outputFormat', document.getElementById('outputFormat').value);
+            formData.append('clientName', document.getElementById('clientName').value || document.getElementById('projectName').value);
+            formData.append('address', document.getElementById('address').value);
+
+            // Mostrar progresso
+            formCard.style.display = 'none';
+            document.getElementById('progressContainer').style.display = 'block';
+
+            try {
+                const apiUrl = document.getElementById('apiUrl').value;
+
+                // Simular progresso
+                simulateProgress();
+
+                const response = await fetch(`${apiUrl}/api/admin/reports/video-process-multiple`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Erro ao processar vídeos');
+                }
+
+                // Receber arquivo (PDF ou DOCX)
+                const blob = await response.blob();
+                generatedReportUrl = URL.createObjectURL(blob);
+                generatedReportFormat = document.getElementById('outputFormat').value;
+
+                // Atualizar texto do resultado
+                const formatLabel = generatedReportFormat === 'docx' ? 'Word/DOCX' : 'PDF';
+                document.getElementById('resultText').textContent = `Seu relatório em ${formatLabel} está pronto para download`;
+
+                // Mostrar resultado
+                document.getElementById('progressContainer').style.display = 'none';
+                document.getElementById('resultContainer').style.display = 'block';
+
+            } catch (error) {
+                document.getElementById('progressContainer').style.display = 'none';
+                formCard.style.display = 'block';
+                showError('Erro ao gerar relatório: ' + error.message);
+            }
+        });
+
+        async function simulateProgress() {
+            const totalVideos = selectedFiles.length;
+            const steps = [
+                { text: `Fazendo upload de ${totalVideos} vídeo${totalVideos > 1 ? 's' : ''}...`, progress: 15 },
+                { text: 'Extraindo frames relevantes (Clinical Eye)...', progress: 35 },
+                { text: 'Analisando com IA (GPT-4 Vision)...', progress: 55 },
+                { text: 'Agrupando por tópicos semânticos...', progress: 75 },
+                { text: 'Gerando relatório...', progress: 90 },
+                { text: 'Finalizando...', progress: 100 }
+            ];
+
+            for (const step of steps) {
+                document.getElementById('progressText').textContent = step.text;
+                document.getElementById('progressFill').style.width = step.progress + '%';
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        }
+
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            if (generatedReportUrl) {
+                const a = document.createElement('a');
+                a.href = generatedReportUrl;
+                const projectName = document.getElementById('projectName').value.replace(/[^a-z0-9]/gi, '_');
+                const date = document.getElementById('visitDate').value;
+                const extension = generatedReportFormat === 'docx' ? 'docx' : 'pdf';
+                a.download = `relatorio_${projectName}_${date}.${extension}`;
+                a.click();
+            }
+        });
+
+        function resetForm() {
+            document.getElementById('resultContainer').style.display = 'none';
+            uploadArea.style.display = 'block';
+            formCard.style.display = 'none';
+            videosGrid.classList.remove('show');
+            selectedFiles = [];
+            generatedReportUrl = null;
+            generatedReportFormat = 'pdf';
+            document.getElementById('reportForm').reset();
+            document.getElementById('visitDate').valueAsDate = new Date();
+            document.getElementById('docxFields').style.display = 'none';
+            videoInput.value = '';
+            renderVideos();
+        }
+    </script>
+</body>
+</html>

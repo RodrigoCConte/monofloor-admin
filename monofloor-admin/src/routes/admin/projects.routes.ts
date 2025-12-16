@@ -293,6 +293,7 @@ router.put(
         'workEndTime',
         'deadlineDate',
         'estimatedDays',
+        'teamSize',
         'allowSaturday',
         'allowSunday',
         'allowNightWork',

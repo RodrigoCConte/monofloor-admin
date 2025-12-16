@@ -189,6 +189,7 @@ model Project {
   // Deadline and scheduling
   deadlineDate      DateTime? @map("deadline_date")    // Data prazo do projeto
   estimatedDays     Int?      @map("estimated_days")   // Dias estimados de trabalho
+  teamSize          Int?      @map("team_size")        // Quantidade de pessoas na equipe
 
   // Timestamps
   startedAt       DateTime? @map("started_at")
@@ -1059,6 +1060,12 @@ model ProjectTask {
   endDate         DateTime?     @map("end_date")
   durationHours   Decimal       @default(0) @map("duration_hours") @db.Decimal(10, 2)  // Horas trabalhadas nesta etapa
   estimatedHours  Decimal?      @map("estimated_hours") @db.Decimal(10, 2)  // Horas estimadas
+
+  // Input simplificado (dias + pessoas)
+  inputDays       Int?          @map("input_days")        // Ex: 1, 2, 3 dias
+  inputPeople     Int?          @map("input_people")      // Ex: 4 pessoas
+  groupWithNext   Boolean       @default(false) @map("group_with_next")  // Agrupar no mesmo dia que a próxima
+  consumesResources Boolean     @default(true) @map("consumes_resources") // False para cura, secagem, etc.
 
   // Progress
   status          TaskStatus    @default(PENDING)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue';
+import { ref, onMounted, watch, nextTick, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { projectsApi } from '../api';
@@ -74,6 +74,29 @@ const newProject = ref({
 const enderecoInput = ref<HTMLInputElement | null>(null);
 const autocomplete = ref<google.maps.places.Autocomplete | null>(null);
 const locationFound = ref(false);
+
+// Calculated m2Total for create and edit modals
+const calculatedM2TotalNew = computed(() => {
+  const piso = Number(newProject.value.m2Piso) || 0;
+  const parede = Number(newProject.value.m2Parede) || 0;
+  const teto = Number(newProject.value.m2Teto) || 0;
+  return piso + parede + teto;
+});
+
+const calculatedM2TotalEdit = computed(() => {
+  const piso = Number(editProject.value.m2Piso) || 0;
+  const parede = Number(editProject.value.m2Parede) || 0;
+  const teto = Number(editProject.value.m2Teto) || 0;
+  return piso + parede + teto;
+});
+
+// Helper to calculate m2Total for any project
+const getProjectM2Total = (project: any): number => {
+  const piso = Number(project.m2Piso) || 0;
+  const parede = Number(project.m2Parede) || 0;
+  const teto = Number(project.m2Teto) || 0;
+  return piso + parede + teto;
+};
 
 // Load Google Maps script
 const loadGoogleMapsScript = (): Promise<void> => {
@@ -230,9 +253,9 @@ const handleFileUpload = async (event: Event) => {
 
 const getStatusColor = (activeCheckinsCount: number) => {
   if (activeCheckinsCount > 0) {
-    return 'var(--accent-green)';
+    return '#22c55e'; // Green
   }
-  return 'var(--text-tertiary)';
+  return '#ef4444'; // Red
 };
 
 const getStatusLabel = (activeCheckinsCount: number) => {
@@ -317,7 +340,7 @@ const createProject = async () => {
     // Build data object, excluding null/undefined values
     const data: Record<string, any> = {
       title: newProject.value.title,
-      m2Total: newProject.value.m2Total,
+      m2Total: calculatedM2TotalNew.value,
       m2Piso: newProject.value.m2Piso,
       m2Parede: newProject.value.m2Parede,
       m2Teto: newProject.value.m2Teto,
@@ -393,7 +416,7 @@ const updateProject = async () => {
   try {
     const data: Record<string, any> = {
       title: editProject.value.title,
-      m2Total: editProject.value.m2Total,
+      m2Total: calculatedM2TotalEdit.value,
       m2Piso: editProject.value.m2Piso,
       m2Parede: editProject.value.m2Parede,
       m2Teto: editProject.value.m2Teto,
@@ -466,6 +489,16 @@ onMounted(loadProjects);
             <line x1="4" y1="22" x2="4" y2="15"/>
           </svg>
           Campanhas
+        </router-link>
+        <router-link to="/proposals" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          Propostas
         </router-link>
         <router-link to="/map" class="nav-link">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -569,19 +602,23 @@ onMounted(loadProjects);
 
       <div v-else class="projects-grid">
         <div v-for="project in projects" :key="project.id" class="project-card" @click="router.push(`/projects/${project.id}`)">
+          <span
+            class="status-badge"
+            :style="{
+              borderColor: getStatusColor(project.activeCheckinsCount || 0) + '40'
+            }"
+          >
+            <span
+              class="status-dot"
+              :style="{ background: getStatusColor(project.activeCheckinsCount || 0) }"
+            ></span>
+            <span class="status-text">
+              {{ getStatusLabel(project.activeCheckinsCount || 0) }} • {{ project.activeCheckinsCount || 0 }}/{{ project._count?.assignments || 0 }}
+            </span>
+          </span>
           <div class="project-header">
             <h3>{{ project.title }}</h3>
             <div class="project-actions">
-              <span
-                class="status-badge"
-                :style="{
-                  background: getStatusColor(project.activeCheckinsCount || 0) + '20',
-                  color: getStatusColor(project.activeCheckinsCount || 0),
-                  borderColor: getStatusColor(project.activeCheckinsCount || 0) + '40'
-                }"
-              >
-                {{ getStatusLabel(project.activeCheckinsCount || 0) }}
-              </span>
               <button
                 class="edit-btn"
                 @click.stop="openEditModal(project)"
@@ -606,19 +643,21 @@ onMounted(loadProjects);
               </button>
             </div>
           </div>
-          <div class="project-client">
-            <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
-            {{ project.cliente || 'Cliente nao informado' }}
-          </div>
-          <div class="project-address">
-            <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-              <circle cx="12" cy="10" r="3"/>
-            </svg>
-            {{ project.endereco || 'Endereco nao informado' }}
+          <div class="project-content">
+            <div class="project-client">
+              <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+              {{ project.cliente || 'Cliente nao informado' }}
+            </div>
+            <div class="project-address">
+              <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                <circle cx="12" cy="10" r="3"/>
+              </svg>
+              {{ project.endereco || 'Endereco nao informado' }}
+            </div>
           </div>
           <div class="project-stats">
             <div class="stat">
@@ -628,7 +667,7 @@ onMounted(loadProjects);
                 </svg>
               </div>
               <div class="stat-content">
-                <span class="stat-value">{{ project.m2Total?.toLocaleString() || 0 }}</span>
+                <span class="stat-value">{{ getProjectM2Total(project)?.toLocaleString() || 0 }}</span>
                 <span class="stat-label">m² Total</span>
               </div>
             </div>
@@ -772,13 +811,13 @@ onMounted(loadProjects);
               />
             </div>
             <div class="form-group">
-              <label>m² Total</label>
+              <label>m² Total (Calculado)</label>
               <input
-                v-model.number="newProject.m2Total"
+                :value="calculatedM2TotalNew"
                 type="number"
-                min="0"
-                step="0.01"
-                class="form-input"
+                class="form-input calculated-field"
+                readonly
+                disabled
               />
             </div>
             <div class="form-group">
@@ -903,13 +942,13 @@ onMounted(loadProjects);
               />
             </div>
             <div class="form-group">
-              <label>m² Total</label>
+              <label>m² Total (Calculado)</label>
               <input
-                v-model.number="editProject.m2Total"
+                :value="calculatedM2TotalEdit"
                 type="number"
-                min="0"
-                step="0.01"
-                class="form-input"
+                class="form-input calculated-field"
+                readonly
+                disabled
               />
             </div>
             <div class="form-group">
@@ -1284,9 +1323,13 @@ onMounted(loadProjects);
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius-lg);
-  padding: 24px;
+  padding: 24px 24px 32px 24px;
   transition: all 0.2s;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+  position: relative;
 }
 
 .project-card:hover {
@@ -1313,13 +1356,42 @@ onMounted(loadProjects);
 }
 
 .status-badge {
-  flex-shrink: 0;
-  padding: 4px 12px;
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translate(-50%, 50%);
+  padding: 4px 16px;
   border-radius: 20px;
   font-size: 11px;
   font-weight: 500;
   border: 1px solid;
   white-space: nowrap;
+  z-index: 1;
+  background: #000;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-text {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.project-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
 }
 
 .project-client,
@@ -1329,26 +1401,25 @@ onMounted(loadProjects);
   gap: 8px;
   font-size: 14px;
   color: var(--text-secondary);
-  margin-bottom: 8px;
 }
 
 .project-address {
   color: var(--text-tertiary);
   font-size: 13px;
-  margin-bottom: 20px;
+  justify-content: center;
+}
+
+.project-stats {
+  display: flex;
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
 }
 
 .info-icon {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-}
-
-.project-stats {
-  display: flex;
-  gap: 16px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border-color);
 }
 
 .stat {
@@ -1750,5 +1821,13 @@ onMounted(loadProjects);
 :global(.pac-matched) {
   color: var(--accent-primary) !important;
   font-weight: 600 !important;
+}
+
+.calculated-field {
+  background: rgba(201, 169, 98, 0.1) !important;
+  color: #c9a962 !important;
+  font-weight: 600;
+  cursor: not-allowed;
+  border-color: rgba(201, 169, 98, 0.3) !important;
 }
 </style>

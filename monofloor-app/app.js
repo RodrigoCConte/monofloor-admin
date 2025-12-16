@@ -6721,6 +6721,8 @@ function navigateTo(screenId) {
         initReportScreen();
     } else if (screenId === 'screen-badges') {
         loadBadgesScreen();
+    } else if (screenId === 'screen-learn') {
+        loadXPRanking();
     }
 }
 
@@ -7470,6 +7472,79 @@ document.addEventListener('DOMContentLoaded', function() {
         helpDescriptionInput.addEventListener('input', updateHelpSubmitButton);
     }
 });
+
+// =============================================
+// XP RANKING
+// =============================================
+
+async function loadXPRanking() {
+    const container = document.getElementById('xp-ranking-list');
+    if (!container) return;
+
+    // Mostrar loading
+    container.innerHTML = '<div class="loading-state"><span>Carregando ranking...</span></div>';
+
+    try {
+        const token = getAuthToken();
+
+        if (!token) {
+            container.innerHTML = '<div class="loading-state"><span>Faça login para ver o ranking</span></div>';
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/api/mobile/ranking/top10`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        const result = await response.json();
+
+        if (result.success && Array.isArray(result.data)) {
+            const users = result.data;
+
+            if (users.length === 0) {
+                container.innerHTML = '<div class="loading-state"><span>Nenhum usuário no ranking ainda</span></div>';
+                return;
+            }
+
+            // Find max XP for percentage calculation
+            const maxXP = users.length > 0 ? users[0].xpTotal : 0;
+
+            // Render ranking items
+            container.innerHTML = users.map((user, index) => {
+                const position = index + 1;
+                const xpPercentage = maxXP > 0 ? ((user.xpTotal || 0) / maxXP) * 100 : 0;
+
+                return `
+                    <div class="xp-ranking-item">
+                        <div class="xp-rank">#${position}</div>
+                        <div class="xp-user-info">
+                            <div class="xp-user-name">${user.name || 'Anônimo'}</div>
+                            <div class="xp-bar-container">
+                                <div class="xp-bar" style="width: ${xpPercentage}%"></div>
+                            </div>
+                        </div>
+                        <div class="xp-value">${(user.xpTotal || 0).toLocaleString()} XP</div>
+                    </div>
+                `;
+            }).join('');
+
+        } else {
+            throw new Error(result.error?.message || 'Erro ao carregar ranking');
+        }
+    } catch (error) {
+        console.error('Erro ao carregar ranking:', error);
+        container.innerHTML = `
+            <div class="error-state">
+                <span>Erro ao carregar ranking</span>
+                <button onclick="loadXPRanking()">Tentar novamente</button>
+            </div>
+        `;
+    }
+}
 
 // =============================================
 // GLOBAL TEST FUNCTIONS (for browser console)

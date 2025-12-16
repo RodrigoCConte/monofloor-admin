@@ -9,11 +9,54 @@ import {
   distributeTasks,
   calculateDeadlineFromTasks,
   calculateEstimatedDays,
+  convertDaysToHours,
   ProjectScope,
 } from '../../services/task-scheduler.service';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+/**
+ * Calculate grouping pattern to fit tasks within available work days
+ * Never groups "Cura" tasks as they need rest time
+ * @param tasks Array of tasks to be grouped
+ * @param availableDays Number of work days available
+ * @returns Array of booleans indicating if each task should groupWithNext
+ */
+function calculateGroupingPattern(tasks: any[], availableDays: number): boolean[] {
+  const pattern = new Array(tasks.length).fill(false);
+
+  // If we have enough days, no grouping needed
+  if (tasks.length <= availableDays) {
+    return pattern;
+  }
+
+  // Calculate how many tasks need to be grouped (reduce total blocks)
+  const blocksNeeded = tasks.length - availableDays;
+  let groupedCount = 0;
+
+  // Try to group tasks uniformly, avoiding Cura tasks
+  for (let i = 0; i < tasks.length - 1 && groupedCount < blocksNeeded; i++) {
+    const currentTask = tasks[i];
+    const nextTask = tasks[i + 1];
+
+    // Never group Cura tasks or group with Cura tasks
+    if (currentTask.isCura || nextTask.isCura) {
+      continue;
+    }
+
+    // Skip if next task is already grouped
+    if (i > 0 && pattern[i - 1]) {
+      continue;
+    }
+
+    // Group this task with next
+    pattern[i] = true;
+    groupedCount++;
+  }
+
+  return pattern;
+}
 
 // Validation middleware
 const validate = (req: any, res: any, next: any) => {
@@ -185,6 +228,7 @@ router.post(
           startedAt: true,
           deadlineDate: true,
           estimatedDays: true,
+          teamSize: true,
           allowSaturday: true,
           allowSunday: true,
         },
@@ -249,20 +293,49 @@ router.post(
         project.allowSunday
       );
 
-      // Create tasks in database
-      const tasksToCreate = generatedTasks.map((task, index) => ({
-        projectId,
-        title: task.title,
-        taskType: 'CUSTOM' as TaskType,
-        startDate: task.startDate,
-        endDate: task.endDate,
-        color: task.color,
-        sortOrder: task.sortOrder,
-        status: 'PENDING' as TaskStatus,
-        progress: 0,
-        durationHours: 0,
-        estimatedHours: task.isCura ? 0 : null, // Cura has 0 work hours
-      }));
+      // Create tasks in database with initial values
+      const defaultTeamSize = project.teamSize || 4; // Default to 4 people
+      const defaultDays = 1; // Default to 1 day per task
+
+      // Calculate available work days
+      const workDays = calculateEstimatedDays(
+        startDate,
+        deadlineDate,
+        project.allowSaturday || false,
+        project.allowSunday || false
+      );
+
+      // Auto-group tasks if needed to fit deadline (never group "Cura" tasks)
+      const shouldAutoGroup = generatedTasks.length > workDays;
+      const groupingPattern = calculateGroupingPattern(generatedTasks, workDays);
+
+      const tasksToCreate = generatedTasks.map((task, index) => {
+        const inputDays = defaultDays;
+        const inputPeople = task.isCura ? 0 : defaultTeamSize; // Cura doesn't consume resources
+        const consumesResources = !task.isCura;
+        const estimatedHours = consumesResources ? convertDaysToHours(inputDays, inputPeople) : 0;
+
+        // Determine if this task should group with next
+        const groupWithNext = shouldAutoGroup && groupingPattern[index];
+
+        return {
+          projectId,
+          title: task.title,
+          taskType: 'CUSTOM' as TaskType,
+          startDate: task.startDate,
+          endDate: task.endDate,
+          color: task.color,
+          sortOrder: task.sortOrder,
+          status: 'PENDING' as TaskStatus,
+          progress: 0,
+          durationHours: 0,
+          estimatedHours,
+          inputDays,
+          inputPeople,
+          groupWithNext,
+          consumesResources,
+        };
+      });
 
       await prisma.projectTask.createMany({
         data: tasksToCreate,
@@ -340,9 +413,9 @@ router.post(
 );
 
 // =============================================
-// POST /api/admin/projects/:projectId/tasks/sync-deadline - Sync tasks with deadline
+// POST /api/admin/projects/:projectId/tasks/sync-deadline - Sync deadline and estimated days
 // IMPORTANT: This route must be defined BEFORE /:projectId/tasks/:id
-// When deadline changes, redistribute tasks to fit the new deadline
+// Syncs deadlineDate <-> estimatedDays using work days only
 // =============================================
 router.post(
   '/:projectId/tasks/sync-deadline',
@@ -363,9 +436,6 @@ router.post(
         where: { id: projectId },
         select: {
           id: true,
-          m2Piso: true,
-          m2Parede: true,
-          m2Teto: true,
           startedAt: true,
           deadlineDate: true,
           estimatedDays: true,
@@ -378,23 +448,23 @@ router.post(
         throw new AppError('Projeto nao encontrado', 404, 'PROJECT_NOT_FOUND');
       }
 
-      // Get existing tasks
-      const existingTasks = await prisma.projectTask.findMany({
-        where: { projectId },
-        orderBy: { sortOrder: 'asc' },
-      });
-
-      if (existingTasks.length === 0) {
-        throw new AppError('Nenhuma tarefa encontrada. Gere as tarefas primeiro.', 400, 'NO_TASKS');
-      }
-
       const startDate = project.startedAt || new Date();
-      let deadlineDate: Date;
+      let deadlineDate: Date | null = null;
+      let calculatedEstimatedDays: number | null = null;
 
       // Calculate deadline based on input
       if (newDeadlineStr) {
+        // User changed deadline -> calculate estimatedDays
         deadlineDate = new Date(newDeadlineStr);
+        calculatedEstimatedDays = calculateEstimatedDays(
+          startDate,
+          deadlineDate,
+          project.allowSaturday || false,
+          project.allowSunday || false
+        );
       } else if (newEstimatedDays) {
+        // User changed estimatedDays -> calculate deadline
+        calculatedEstimatedDays = newEstimatedDays;
         deadlineDate = new Date(startDate);
         let daysAdded = 0;
         while (daysAdded < newEstimatedDays) {
@@ -403,6 +473,7 @@ router.post(
           const isSaturday = dayOfWeek === 6;
           const isSunday = dayOfWeek === 0;
 
+          // Only count work days
           if (
             (!isSaturday && !isSunday) ||
             (isSaturday && project.allowSaturday) ||
@@ -415,69 +486,7 @@ router.post(
         throw new AppError('Informe deadlineDate ou estimatedDays', 400, 'MISSING_DEADLINE');
       }
 
-      // Determine scope from measurements
-      const scope = determineProjectScope(
-        Number(project.m2Piso) || null,
-        Number(project.m2Parede) || null,
-        Number(project.m2Teto) || null
-      );
-
-      // Get task sequence for this scope
-      const sequence = getTaskSequence(scope);
-
-      // Redistribute tasks
-      const redistributedTasks = distributeTasks(
-        sequence,
-        startDate,
-        deadlineDate,
-        project.allowSaturday,
-        project.allowSunday
-      );
-
-      // Delete existing and recreate
-      await prisma.projectTask.deleteMany({
-        where: { projectId },
-      });
-
-      const tasksToCreate = redistributedTasks.map((task) => ({
-        projectId,
-        title: task.title,
-        taskType: 'CUSTOM' as TaskType,
-        startDate: task.startDate,
-        endDate: task.endDate,
-        color: task.color,
-        sortOrder: task.sortOrder,
-        status: 'PENDING' as TaskStatus,
-        progress: 0,
-        durationHours: 0,
-        estimatedHours: task.isCura ? 0 : null,
-      }));
-
-      await prisma.projectTask.createMany({
-        data: tasksToCreate,
-      });
-
-      // Set up dependencies
-      const allTasks = await prisma.projectTask.findMany({
-        where: { projectId },
-        orderBy: { sortOrder: 'asc' },
-      });
-
-      for (let i = 1; i < allTasks.length; i++) {
-        await prisma.projectTask.update({
-          where: { id: allTasks[i].id },
-          data: { dependsOnId: allTasks[i - 1].id },
-        });
-      }
-
       // Update project deadline and estimated days
-      const calculatedEstimatedDays = calculateEstimatedDays(
-        startDate,
-        deadlineDate,
-        project.allowSaturday,
-        project.allowSunday
-      );
-
       await prisma.project.update({
         where: { id: projectId },
         data: {
@@ -490,37 +499,18 @@ router.post(
       await prisma.auditLog.create({
         data: {
           adminUserId: req.user!.sub,
-          action: 'SYNC_TASKS_DEADLINE',
+          action: 'SYNC_DEADLINE',
           entityType: 'Project',
           entityId: projectId,
-          description: `Synced ${redistributedTasks.length} tasks with new deadline`,
-        },
-      });
-
-      // Fetch final tasks
-      const finalTasks = await prisma.projectTask.findMany({
-        where: { projectId },
-        orderBy: { sortOrder: 'asc' },
-        include: {
-          dependsOn: {
-            select: { id: true, title: true },
-          },
+          description: `Updated deadline to ${deadlineDate?.toISOString().split('T')[0]} (${calculatedEstimatedDays} work days)`,
         },
       });
 
       res.json({
         success: true,
         data: {
-          count: finalTasks.length,
-          scope,
-          deadlineDate,
+          deadlineDate: deadlineDate?.toISOString(),
           estimatedDays: calculatedEstimatedDays,
-          tasks: finalTasks.map(t => ({
-            ...t,
-            durationHours: Number(t.durationHours),
-            estimatedHours: t.estimatedHours ? Number(t.estimatedHours) : null,
-            taskTypeLabel: TASK_TYPE_LABELS[t.taskType],
-          })),
         },
       });
     } catch (error) {
@@ -769,6 +759,11 @@ router.post(
     body('progress').optional().isInt({ min: 0, max: 100 }),
     body('dependsOnId').optional().isUUID(),
     body('color').optional().isString(),
+    // Novos campos para input simplificado
+    body('inputDays').optional().isInt({ min: 1 }),
+    body('inputPeople').optional().isInt({ min: 0 }),
+    body('groupWithNext').optional().isBoolean(),
+    body('consumesResources').optional().isBoolean(),
   ],
   validate,
   async (req, res, next) => {
@@ -808,6 +803,11 @@ router.post(
           dependsOnId: req.body.dependsOnId || null,
           color: req.body.color || TASK_TYPE_COLORS[taskType],
           sortOrder: (maxOrder._max.sortOrder || 0) + 1,
+          // Novos campos
+          inputDays: req.body.inputDays || null,
+          inputPeople: req.body.inputPeople || null,
+          groupWithNext: req.body.groupWithNext || false,
+          consumesResources: req.body.consumesResources !== undefined ? req.body.consumesResources : true,
         },
       });
 
@@ -857,6 +857,11 @@ router.put(
     body('progress').optional().isInt({ min: 0, max: 100 }),
     body('dependsOnId').optional({ nullable: true }).isUUID(),
     body('color').optional({ nullable: true }).isString(),
+    // Novos campos para input simplificado
+    body('inputDays').optional({ nullable: true }).isInt({ min: 1 }),
+    body('inputPeople').optional({ nullable: true }).isInt({ min: 0 }),
+    body('groupWithNext').optional().isBoolean(),
+    body('consumesResources').optional().isBoolean(),
   ],
   validate,
   async (req, res, next) => {
@@ -876,6 +881,8 @@ router.put(
         'title', 'description', 'taskType', 'startDate', 'endDate',
         'durationHours', 'estimatedHours', 'status', 'progress',
         'dependsOnId', 'color',
+        // Novos campos
+        'inputDays', 'inputPeople', 'groupWithNext', 'consumesResources',
       ];
 
       for (const field of allowedFields) {
