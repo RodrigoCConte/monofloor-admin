@@ -12,7 +12,8 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "propostas": "node propostas-server.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

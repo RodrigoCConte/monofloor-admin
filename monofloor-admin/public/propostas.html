@@ -1,0 +1,1530 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerador de Propostas - Monofloor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    @font-face {
+      font-family: 'NITECLUB';
+      src: url(data:font/ttf;base64,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ZARoBGwDCAKUAkgEdAI8BHwC4ASQA0QC/AMAAAQAAAAAAAKVQGD9fDzz1AAkD6AAAAAAAAAAAAAAAAAAAAAD/+P/FBBEDWwAAAAUAAQABAAAAAAABAAADtf/FAJYERP/4AAIEAwABAAAAAAAAAAAAAAAAAAABjwFgAAAAAAAAAWAAAAFgAAAAnAAAAfQAAAH0AAABpv/5Ag8ABAIj//8AnAAAAOoAAADqAAABhwAGAREAAACcAAABEQAAAJwAAAE5//gBYAAAAPYAAAFgAAABYP/5AVwAAAFzAAYBZ//4AWD//gFzAAABc//4AJwAAACcAAAB9AAAAREAAAH0AAABUAAAAfQAAAG5//4Bh//+AmUADQIPAAABUAAAAVAAAALaAAYBWAAAAJwAAAERAAABpgAAAUwAAAKsAAABcwAAA7UAAAGWAAADtQAAAaIAAAE5//8BSAAAAXMAAAG5AAACrAAAAZoAAAGWAAABWAAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAATn//gERAAABmgAJAWcAAADqAAAA6gAAAfwABAD+AAAAZgAAALQAAAElAAAA6gAAAdEAAAD+AAABhwACAR0AAAKMAAABMQAAANf//wDqAAAA7gAAATEAAAHgAAABHQAAAR0AAADyAAAB9AAAADUAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAGm//4BngAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAWAAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAABYAAAAfQAAAFgAAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAJwAAAH0AAAB9AAABEQADgH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAInAAQB9AAAAWAAAAFgAAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAFgAAABYAAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAfQAAAFgAAAB9AAAAfQAAAH0AAAB9AAAAWAAAAH0AAABYAAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAH0AAAB9AAAAfQAAAFgAAAB9AAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAABYAAAAWAAAAFgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAABAAAAAQAAAAR4AAAHIAAACbAAAArIAAALoAAADHAAAA2AAAAOKAAADzgAAA+gAAAQWAAAEOgAABIgAAASsAAAFHgAABeQAAAYaAAAGlAAAB0IAAAdmAAAISAAACQAAAAlOAAAJtAAACbQAAAnaAAAJ2gAACjoAAAo6AAAKdAAACwgAAAtIAAALigAAC7gAAAviAAAMUAAADIAAAAycAAAMyAAADRYAAA02AAANdAAADaIAAA32AAAOTAAAD0IAAA/MAAAQOAAAEFwAABCcAAAQxAAAEQYAABFAAAARbgAAEZYAABGWAAARlgAAEZYAABGWAAARlgAAEZYAABHMAAASWAAAEpgAABLaAAATBgAAEy4AABOgAAATzgAAE+oAABQWAAAUYAAAFIAAABS8AAAU6gAAFTgAABWGAAAWbgAAFugAABdUAAAXeAAAF8AAABfoAAAYKAAAGF4AABiKAAAYsAAAGLAAABjMAAAYzAAAGMwAABjMAAAYzAAAGMwAABjMAAAYzAAAGMwAABjMAAAYzAAAGMwAABjMAAAYzAAAGMwAABjMAAAYzAAAGMwAABjMAAAYzAAAGMwAABjMAAAYzAAAGMwAABjMAAAYzAAAGMwAABjMAAAYzAAAGMwAABjMAAAYzAAAGMwAABjMAAAYzAAAGMwAABjMAAAZSgAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABnkAAAZ5AAAGeQAABoqAAAaKgAAGioAAB+aAAAfmgAAH5oAAB+aAAAfmgAAH5oAAB+aAAAfmgAAH5oAAB+aAAAfmgAAH5oAAB+aAAAfmgAAH5oAAB+aAAAfmgAAH5oAAB+aAAAfmgAAH5oAAB+aAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAAf6AAAH+gAAB/oAAEAAAGPAfgABQH4AAUAAQAAAAIAAgABB+AAAAABAAEAAAAOAK4AAQAAAAAAAAABAAAAAQAAAAAAAQAIAAEAAQAAAAAAAgAHAAkAAQAAAAAAAwAeABAAAQAAAAAABAAIAC4AAQAAAAAABQApADYAAQAAAAAABgAIAF8AAwABBAkAAAACAGgAAwABBAkAAQAQAGoAAwABBAkAAgAOAHoAAwABBAkAAwA8AIgAAwABBAkABAAQAMQAAwABBAkABQBSANQAAwABBAkABgAQASYgTml0ZUNsdWJSZWd1bGFyVE9NVFlQRTpOaXRlQ2x1YiBSZWd1bGFyOlRPTSdTTml0ZUNsdWJDb3B5cmlnaHQgKGMpIDE5OTIsIFRob21hcyBFLiBIYXJ2ZXkuIEFSUk5pdGVDbHViAAAgAE4AaQB0AGUAQwBsAHUAYgBSAGUAZwB1AGwAYQByAFQATwBNAFQAWQBQAEUAOgBOAGkAdABlAEMAbAB1AGIAIABSAGUAZwB1AGwAYQByADoAVABPAE0AJwBTAE4AaQB0AGUAQwBsAHUAYgBDAG8AcAB5AHIAaQBnAGgAdAAgACgAYwApACAAMQA5ADkAMgAsACAAVABoAG8AbQBhAHMAIABFAC4AIABIAGEAcgB2AGUAeQAuACAAQQBSAFIATgBpAHQAZQBDAGwAdQBiAAIAAAAAAAD/sAAyAAAAAAAAAAAAAAAAAAAAAAAAAAABjwAAAAAAAAECAQMBBAEFAQYBBwEIAQkBCgELAQwBDQEOAQ8BEAERARIBEwEUARUBFgEXARgBGQEaARsBHAEdAR4BHwEgASEBIgEjASQBJQEmAScBKAEpASoBKwEsAS0BLgEvATABMQEyATMBNAE1ATYBNwE4ATkBOgE7ATwBPQE+AT8BQAFBAUIBQwFEAUUBRgFHAUgBSQFKAUsBTAFNAU4BTwFQAVEBUgFTAVQBVQFWAVcBWAFZAVoBWwFcAV0BXgFfAWABYQFiAWMBZAFlAWYBZwFoAWkBagFrAWwBbQFuAW8BcAFxAXIBcwF0AXUBdgF3AXgBeQF6AXsBfAF9AX4BfwGAAYEBggGDAYQBhQGGAYcBiAGJAYoBiwGMAY0BjgGPAZABkQGSAZMBlAGVAZYBlwGYAZkBmgGbAZwBnQGeAZ8BoAGhAaIBowGkAaUBpgGnAagBqQGqAasBrAGtAa4BrwGwAbEBsgGzAbQBtQG2AbcBuAG5AboBuwG8Ab0BvgG/AcABwQHCAcMBxAHFAcYBxwHIAckBygHLAcwBzQHOAc8B0AHRAdIB0wHUAdUB1gHXAdgB2QHaAdsB3AHdAd4B3wHgAeEB4gHjAeQB5QHmAecB6AHpAeoB6wHsAe0B7gHvAfAB8QHyAfMB9AH1AfYB9wH4AfkB+gH7AfwB/QH+Af8CAAIBAgICAwIEAgUCBgIHAggCCQIKAgsCDAINAg4CDwIQAhECEgITAhQCFQIWAhcCGAIZAhoCGwIcAh0CHgIfAiACIQIiAiMCJAIlAiYCJwIoAikCKgIrAiwCLQIuAi8CMAIxAjICMwI0AjUCNgI3AjgCOQI6AjsCPAI9Aj4CPwJAAkECQgJDAkQCRQJGAkcCSAJJAkoCSwJMAk0CTgJPAlACUQJSAlMCVAJVAlYCVwJYAlkCWgJbAlwCXQJeAl8CYAJhAmICYwJkAmUCZgJnAmgCaQJqAmsCbAJtAm4CbwJwAnECcgJzAnQCdQJ2AncCeAJ5AnoCewJ8An0CfgJ/AoACgQKCAoMChAKFAoYChwKIAokCigKLAowCjQVzcGFjZQZleGNsYW0IcXVvdGVkYmwKbnVtYmVyc2lnbgZkb2xsYXIHcGVyY2VudAlhbXBlcnNhbmQLcXVvdGVzaW5nbGUJcGFyZW5sZWZ0CnBhcmVucmlnaHQIYXN0ZXJpc2sEcGx1cwVjb21tYQZoeXBoZW4GcGVyaW9kBXNsYXNoBHplcm8Db25lA3R3bwV0aHJlZQRmb3VyBGZpdmUDc2l4BXNldmVuBWVpZ2h0BG5pbmUFY29sb24Jc2VtaWNvbG9uBGxlc3MFZXF1YWwHZ3JlYXRlcghxdWVzdGlvbgJhdAFBAUIBQwFEAUUBRgFHAUgBSQFKAUsBTAFNAU4BTwFQAVEBUgFTAVQBVQFWAVcBWAFZAVoLYnJhY2tldGxlZnQJYmFja3NsYXNoDGJyYWNrZXRyaWdodAthc2NpaWNpcmN1bQp1bmRlcnNjb3JlBWdyYXZlAWEBYgFjAWQBZQFmAWcBaAFpAWoBawFsAW0BbgFvAXABcQFyAXMBdAF1AXYBdwF4AXkBeglicmFjZWxlZnQDYmFyCmJyYWNlcmlnaHQKYXNjaWl0aWxkZQlBZGllcmVzaXMFQXJpbmcIQ2NlZGlsbGEGRWFjdXRlBk50aWxkZQlPZGllcmVzaXMJVWRpZXJlc2lzBmFhY3V0ZQZhZ3JhdmULYWNpcmN1bWZsZXgJYWRpZXJlc2lzBmF0aWxkZQVhcmluZwhjY2VkaWxsYQZlYWN1dGUGZWdyYXZlC2VjaXJjdW1mbGV4CWVkaWVyZXNpcwZpYWN1dGUGaWdyYXZlC2ljaXJjdW1mbGV4CWlkaWVyZXNpcwZudGlsZGUGb2FjdXRlBm9ncmF2ZQtvY2lyY3VtZmxleAlvZGllcmVzaXMGb3RpbGRlBnVhY3V0ZQZ1Z3JhdmULdWNpcmN1bWZsZXgJdWRpZXJlc2lzBmRhZ2dlcgZkZWdyZWUEY2VudAhzdGVybGluZwdzZWN0aW9uBmJ1bGxldAlwYXJhZ3JhcGgKZ2VybWFuZGJscwpyZWdpc3RlcmVkCWNvcHlyaWdodAl0cmFkZW1hcmsFYWN1dGUIZGllcmVzaXMIbm90ZXF1YWwCQUUGT3NsYXNoCGluZmluaXR5CXBsdXNtaW51cwlsZXNzZXF1YWwMZ3JlYXRlcmVxdWFsA3llbgJtdQtwYXJ0aWFsZGlmZglzdW1tYXRpb24HcHJvZHVjdAJwaQhpbnRlZ3JhbAtvcmRmZW1pbmluZQxvcmRtYXNjdWxpbmUFT21lZ2ECYWUGb3NsYXNoDHF1ZXN0aW9uZG93bgpleGNsYW1kb3duCmxvZ2ljYWxub3QHcmFkaWNhbAZmbG9yaW4LYXBwcm94ZXF1YWwFRGVsdGENZ3VpbGxlbW90bGVmdA5ndWlsbGVtb3RyaWdodAhlbGxpcHNpcwZBZ3JhdmUGQXRpbGRlBk90aWxkZQJPRQJvZQZlbmRhc2gGZW1kYXNoDHF1b3RlZGJsbGVmdA1xdW90ZWRibHJpZ2h0CXF1b3RlbGVmdApxdW90ZXJpZ2h0BmRpdmlkZQdsb3plbmdlCXlkaWVyZXNpcwlZZGllcmVzaXMIZnJhY3Rpb24IY3VycmVuY3kNZ3VpbHNpbmdsbGVmdA5ndWlsc2luZ2xyaWdodAJmaQJmbAlkYWdnZXJkYmwOcGVyaW9kY2VudGVyZWQOcXVvdGVzaW5nbGJhc2UMcXVvdGVkYmxiYXNlC3BlcnRob3VzYW5kC0FjaXJjdW1mbGV4C0VjaXJjdW1mbGV4BkFhY3V0ZQlFZGllcmVzaXMGRWdyYXZlBklhY3V0ZQtJY2lyY3VtZmxleAlJZGllcmVzaXMGSWdyYXZlBk9hY3V0ZQtPY2lyY3VtZmxleAVhcHBsZQZPZ3JhdmUGVWFjdXRlC1VjaXJjdW1mbGV4BlVncmF2ZQhkb3RsZXNzaQpjaXJjdW1mbGV4BXRpbGRlBm1hY3JvbgVicmV2ZQlkb3RhY2NlbnQEcmluZwdjZWRpbGxhDGh1bmdhcnVtbGF1dAZvZ29uZWsFY2Fyb24GTHNsYXNoBmxzbGFzaAZTY2Fyb24Gc2Nhcm9uBlpjYXJvbgZ6Y2Fyb24JYnJva2VuYmFyA0V0aANldGgGWWFjdXRlBnlhY3V0ZQVUaG9ybgV0aG9ybQVtaW51cwhtdWx0aXBseQtvbmVzdXBlcmlvcgt0d29zdXBlcmlvcg10aHJlZXN1cGVyaW9yB29uZWhhbGYKb25lcXVhcnRlcg10aHJlZXF1YXJ0ZXJzBWZyYW5jBkdicmV2ZQZnYnJldmUESWRvdAhTY2VkaWxsYQhzY2VkaWxsYQZDYWN1dGUGY2FjdXRlBkNjYXJvbgZjY2Fyb24GZHNsYXNoCmFycm93cmlnaHQFaG91c2UGZW5kYXNoCXNmdGh5cGhlbglmaWxsZWRib3gGYnVsbGV0CW92ZXJzdG9yZQZkZWdyZWUGbWlkZG90DXVuZGVyc2NvcmVkYmwJZXhjbGFtZGJsCW5zdXBlcmlvcgZwZXNldGEFR2FtbWEFVGhldGEDUGhpBWFscGhhBWRlbHRhB2Vwc2lsb24Fc2lnbWEDdGF1A3BoaQlhcnJvd2xlZnQHYXJyb3d1cAlhcnJvd2Rvd24JYXJyb3dib3RoCWFycm93dXBkbg1hcnJvd3VwZG5iYXNlCm9ydGhvZ29uYWwMaW50ZXJzZWN0aW9uC2VxdWl2YWxlbmNlDXJldmxvZ2ljYWxub3QKaW50ZWdyYWx0cAppbnRlZ3JhbGJ0CmZpbGxlZHJlY3QGY2lyY2xlB3RyaWFndXAHdHJpYWdydAd0cmlhZ2RuB3RyaWFnbGYJaW52YnVsbGV0CWludmNpcmNsZQZSY2Fyb24HdXBibG9jawdkbmJsb2NrBWJsb2NrB2xmYmxvY2sHcnRibG9jawdsdHNoYWRlBXNoYWRlB2Rrc2hhZGUJc21pbGVmYWNlDGludnNtaWxlZmFjZQNzdW4GZmVtYWxlBG1hbGUFc3BhZGUEY2x1YgVoZWFydAdkaWFtb25kC211c2ljYWxub3RlDm11c2ljYWxub3RlZGJsBkFicmV2ZQZhYnJldmUHQW9nb25lawdhb2dvbmVrBkRjYXJvbgZkY2Fyb24GRHNsYXNoB0VvZ29uZWsHZW9nb25lawZFY2Fyb24GZWNhcm9uBkxhY3V0ZQZsYWN1dGUGTGNhcm9uBmxjYXJvbgZOYWN1dGUGbmFjdXRlBk5jYXJvbgZuY2Fyb24JT2RibGFjdXRlCW9kYmxhY3V0ZQZSYWN1dGUGcmFjdXRlBnJjYXJvbgZTYWN1dGUGc2FjdXRlCFRjZWRpbGxhCHRjZWRpbGxhBlRjYXJvbgZ0Y2Fyb24FVXJpbmcFdXJpbmcJVWRibGFjdXRlCXVkYmxhY3V0ZQZaYWN1dGUGemFjdXRlBFpkb3QEemRvdARMZG90BGxkb3QEMjUwMAQyNTAyBDI1MGMEMjUxMAQyNTE0BDI1MTgEMjUxYwQyNTI0BDI1MmMEMjUzNAQyNTNjBDI1NTAEMjU1MQQyNTUyBDI1NTMEMjU1NAQyNTU1BDI1NTYEMjU1NwQyNTU4BDI1NTkEMjU1YQQyNTViBDI1NWMEMjU1ZAQyNTVlBDI1NWYEMjU2MAQyNTYxBDI1NjIEMjU2MwQyNTY0BDI1NjUEMjU2NgQyNTY3BDI1NjgEMjU2OQQyNTZhBDI1NmIEMjU2YwAAuAH/hQAAASIBkAAFAAQC7gLuAAAAyALuAu4AAAEsADIBPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABUT01TAEAAIPACAzj/6ACWA7UAOwAA) format('truetype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: swap;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #000000;
+      min-height: 100vh;
+      padding: 24px;
+      color: #ffffff;
+    }
+
+    .product-name {
+      font-family: 'NITECLUB', 'Inter', sans-serif !important;
+      letter-spacing: 1px;
+      font-size: 21px;
+      font-weight: normal;
+      text-transform: uppercase;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .logo {
+      font-size: 32px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 16px;
+      color: #999999;
+    }
+
+    .form-card {
+      background: transparent;
+      padding: 32px;
+    }
+
+    .form-section {
+      margin-bottom: 40px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid #333333;
+    }
+
+    .form-section:last-of-type {
+      border-bottom: none;
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #ffffff;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-icon {
+      width: 24px;
+      height: 24px;
+      color: #ffffff;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .form-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-group.full-width {
+      grid-column: 1 / -1;
+    }
+
+    .form-group label {
+      font-size: 14px;
+      font-weight: 500;
+      color: #cccccc;
+      margin-bottom: 8px;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      padding: 12px 16px;
+      background: #1a1a1a;
+      border: 1px solid #333333;
+      border-radius: 4px;
+      font-size: 14px;
+      color: #ffffff;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .form-group select {
+      cursor: pointer;
+    }
+
+    .form-group select option {
+      background: #1a1a1a;
+      color: #ffffff;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: #ffffff;
+      background: #1a1a1a;
+    }
+
+    .form-group input::placeholder,
+    .form-group textarea::placeholder {
+      color: #666666;
+    }
+
+    .form-group textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .distance-info {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+      color: #999999;
+    }
+
+    /* Botões de escolha de produto (Piso) */
+    .produto-toggle {
+      display: inline-flex;
+      gap: 15px;
+      margin-left: 15px;
+      font-size: 11px;
+      font-weight: normal;
+    }
+
+    .produto-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      padding: 4px 10px;
+      border-radius: 12px;
+      transition: all 0.2s ease;
+      background: transparent;
+      color: #666;
+    }
+
+    .produto-option:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #999;
+    }
+
+    .produto-option.active {
+      color: #c9a962;
+      font-weight: 500;
+    }
+
+    .produto-bolinha {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid #666;
+      background: transparent;
+      transition: all 0.2s ease;
+    }
+
+    .produto-option.active .produto-bolinha {
+      background: #c9a962;
+      border-color: #c9a962;
+      box-shadow: 0 0 8px rgba(201, 169, 98, 0.5);
+    }
+
+    .metragem-summary {
+      background: #1a1a1a;
+      border: 1px solid #333333;
+      border-radius: 4px;
+      padding: 20px;
+      margin-top: 24px;
+    }
+
+    .summary-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+    }
+
+    .summary-item.highlight {
+      border-top: 2px solid #ffffff;
+      padding-top: 16px;
+      margin-top: 8px;
+    }
+
+    .summary-label {
+      font-size: 14px;
+      color: #cccccc;
+      font-weight: 500;
+    }
+
+    .summary-item.highlight .summary-label {
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .summary-value {
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .summary-item.highlight .summary-value {
+      font-size: 20px;
+      color: #ffffff;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 16px;
+      justify-content: flex-end;
+      padding-top: 24px;
+    }
+
+    .btn {
+      padding: 14px 32px;
+      border-radius: 4px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      font-family: inherit;
+    }
+
+    .btn-primary {
+      background: #ffffff;
+      color: #000000;
+      border: 2px solid #ffffff;
+    }
+
+    .btn-primary:hover {
+      background: #000000;
+      color: #ffffff;
+      border: 2px solid #ffffff;
+    }
+
+    .btn-primary:active {
+      transform: scale(0.98);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: #ffffff;
+      border: 2px solid #ffffff;
+    }
+
+    .btn-secondary:hover {
+      background: #ffffff;
+      color: #000000;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      body {
+        padding: 16px;
+
+      .form-card {
+        padding: 20px;
+
+      .form-row {
+        grid-template-columns: 1fr;
+
+      .form-actions {
+        flex-direction: column;
+
+      .btn {
+        width: 100%;
+    }
+
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #ffffff;
+      color: #000000;
+      padding: 16px 24px;
+      border-radius: 4px;
+      border: 2px solid #000000;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      z-index: 1000;
+      animation: slideIn 0.3s ease;
+    }
+
+    .toast.show {
+      display: flex;
+    }
+
+    .toast.success {
+      border-left: 4px solid #ffffff;
+    }
+
+    .toast.error {
+      border-left: 4px solid #ffffff;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+
+    /* Google Places Autocomplete Customization */
+    .pac-container {
+      background-color: #1a1a1a !important;
+      border: 1px solid #333333 !important;
+      border-radius: 4px !important;
+      margin-top: 4px !important;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    .pac-container:after {
+      display: none !important;
+    }
+
+    .pac-item {
+      background-color: #1a1a1a !important;
+      border-top: 1px solid #333333 !important;
+      color: #ffffff !important;
+      padding: 12px 16px !important;
+      cursor: pointer !important;
+      font-size: 14px !important;
+    }
+
+    .pac-item:first-child {
+      border-top: none !important;
+    }
+
+    .pac-item:hover,
+    .pac-item-selected {
+      background-color: #2a2a2a !important;
+    }
+
+    .pac-item-query {
+      color: #ffffff !important;
+      font-size: 14px !important;
+    }
+
+    .pac-matched {
+      color: #ffffff !important;
+      font-weight: 600 !important;
+    }
+
+    .pac-icon {
+      background-image: none !important;
+      width: 0 !important;
+      display: none !important;
+    }
+
+    .pac-item span {
+      color: #cccccc !important;
+    }
+
+    /* Google Maps Autocomplete - Estilo Dark */
+    .pac-container {
+      background-color: #1a1a1a !important;
+      border: 1px solid #333333 !important;
+      border-radius: 4px !important;
+      margin-top: 4px !important;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3) !important;
+      z-index: 10000 !important;
+    }
+
+    .pac-item {
+      background-color: #1a1a1a !important;
+      border-top: 1px solid #333333 !important;
+      color: #ffffff !important;
+      padding: 12px 16px !important;
+      cursor: pointer !important;
+      font-size: 14px !important;
+    }
+
+    .pac-item:hover,
+    .pac-item-selected {
+      background-color: #2a2a2a !important;
+    }
+
+    .pac-item-query {
+      color: #ffffff !important;
+      font-weight: 500 !important;
+    }
+
+    .pac-matched {
+      color: #667eea !important;
+      font-weight: 700 !important;
+    }
+
+    .pac-icon {
+      display: none !important;
+    }
+
+    .pac-item span {
+      color: #cccccc !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <img src="/artboard 1.png" alt="Monofloor Logo" style="max-width: 338px; margin-bottom: 16px;" />
+      <div class="subtitle">Gerador Automático de Propostas Comerciais</div>
+    </div>
+
+    <!-- Form Card -->
+    <div class="form-card">
+      <form id="proposalForm">
+        <!-- Client Information -->
+        <div class="form-section">
+          <h2 class="section-title">
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            Informações do Cliente
+          </h2>
+
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label for="nomeCliente">Nome do Cliente *</label>
+              <input
+                id="nomeCliente"
+                type="text"
+                required
+                placeholder="Digite o nome do cliente"
+              />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label for="endereco">
+                Obra em (Endereço) *
+                <span id="distanciaLabel" style="color: #ef4444; font-size: 12px; font-weight: normal; display: none; margin-left: 10px;"></span>
+              </label>
+              <input
+                id="endereco"
+                type="text"
+                required
+                placeholder="Digite o endereço da obra"
+                autocomplete="off"
+              />
+              <small id="distanciaInfo" class="distance-info" style="display: none;">
+                📍 Distância calculada: <span id="distanciaValor">0</span> km
+              </small>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label for="detalhes">Detalhes</label>
+              <textarea
+                id="detalhes"
+                rows="3"
+                placeholder="Informações adicionais sobre a obra"
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="previsaoData">Previsão de Data da Obra *</label>
+              <input
+                id="previsaoData"
+                type="date"
+                required
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Metragem -->
+        <div class="form-section">
+          <h2 class="section-title">
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            </svg>
+            Metragem
+          </h2>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="metrosPiso">
+                Piso (m²)
+                <span class="produto-toggle">
+                  <span class="produto-option active" data-produto="stelion" onclick="selecionarProdutoPiso('stelion')">
+                    <span class="produto-bolinha"></span>
+                    STELION
+                  </span>
+                  <span class="produto-option" data-produto="lilit" onclick="selecionarProdutoPiso('lilit')">
+                    <span class="produto-bolinha"></span>
+                    LILIT
+                  </span>
+                </span>
+              </label>
+              <input id="metrosPiso" type="number" min="0" step="0.01" placeholder="0.00" value="0" />
+            </div>
+            <div class="form-group">
+              <label for="metrosParede">Parede (m²)</label>
+              <input id="metrosParede" type="number" min="0" step="0.01" placeholder="0.00" value="0" />
+            </div>
+            <div class="form-group">
+              <label for="metrosTeto">Teto (m²)</label>
+              <input id="metrosTeto" type="number" min="0" step="0.01" placeholder="0.00" value="0" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="metrosBancadas">Bancadas (m²)</label>
+              <input id="metrosBancadas" type="number" min="0" step="0.01" placeholder="0.00" value="0" />
+            </div>
+            <div class="form-group">
+              <label for="metrosEscadas">Escadas (m²)</label>
+              <input id="metrosEscadas" type="number" min="0" step="0.01" placeholder="0.00" value="0" />
+            </div>
+            <div class="form-group">
+              <label for="metrosEspeciaisPequenos">Especiais Pequenos (m²)</label>
+              <input id="metrosEspeciaisPequenos" type="number" min="0" step="0.01" placeholder="0.00" value="0" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="metrosEspeciaisGrandes">Especiais Grandes (m²)</label>
+              <input id="metrosEspeciaisGrandes" type="number" min="0" step="0.01" placeholder="0.00" value="0" />
+            </div>
+            <div class="form-group">
+              <label for="metrosPiscina">Piscina (m²)</label>
+              <input id="metrosPiscina" type="number" min="0" step="0.01" placeholder="0.00" value="0" />
+            </div>
+          </div>
+
+          <!-- Calculated Metragem -->
+          <div class="metragem-summary">
+            <div class="summary-item">
+              <span class="summary-label">Metragem Original (soma):</span>
+              <span class="summary-value" id="metragemOriginal">0.00 m²</span>
+            </div>
+            <div class="summary-item highlight">
+              <span class="summary-label">Metragem Total (com 10% perda):</span>
+              <span class="summary-value" id="metragemTotal">0.00 m²</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Financial Values -->
+        <div class="form-section">
+          <h2 class="section-title">
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="1" x2="12" y2="23"/>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+            Valores e Condições
+          </h2>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="valorTotal">Valor Total (R$) *</label>
+              <input id="valorTotal" type="number" min="0" step="0.01" required placeholder="0.00" value="0" />
+            </div>
+            <div class="form-group">
+              <label for="percentualEntrada">% de Entrada *</label>
+              <input id="percentualEntrada" type="number" min="0" max="100" step="1" required placeholder="50" value="50" />
+            </div>
+            <div class="form-group">
+              <label for="numeroParcelas">Número de Parcelas do Saldo *</label>
+              <input id="numeroParcelas" type="number" min="1" step="1" required placeholder="1" value="1" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="descontoVista">Desconto à Vista (%)</label>
+              <input id="descontoVista" type="number" min="0" max="100" step="0.01" placeholder="0.00" value="0" />
+            </div>
+            <div class="form-group">
+              <label for="taxaJurosCartao">Taxa de Juros Cartão (%)</label>
+              <input id="taxaJurosCartao" type="number" min="0" step="0.01" placeholder="0.00" value="0" />
+            </div>
+            <div class="form-group">
+              <label for="numeroParcelasCartao">Número de Parcelas Cartão</label>
+              <input id="numeroParcelasCartao" type="number" min="1" step="1" placeholder="1" value="1" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Pricing Table -->
+        <div class="form-section">
+          <h2 class="section-title">
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+            Composição de Preços
+          </h2>
+
+          <!-- STELION -->
+          <div style="margin-bottom: 30px;">
+            <h3 style="color: #ffffff; font-size: 16px; margin-bottom: 12px; font-weight: 600;">
+              <span class="product-name">STELION</span>
+            </h3>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="precoBaseStelion">Valor Base (R$/m²)</label>
+                <input id="precoBaseStelion" type="number" min="0" step="0.01" value="910" oninput="calcularPrecos()" />
+              </div>
+              <div class="form-group">
+                <label>Valor Total</label>
+                <div style="background: #1a1a1a; border: 1px solid #333333; border-radius: 4px; padding: 12px 16px; color: #ffffff; font-size: 14px; font-weight: 600;">
+                  R$ <span id="totalStelion">0,00</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Materiais</label>
+                <div style="background: #1a1a1a; border: 1px solid #333333; border-radius: 4px; padding: 12px 16px; color: #ffffff; font-size: 14px;">
+                  R$ <span id="materiaisStelion">0,00</span>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Mão de Obra (R$ 120/m²)</label>
+                <div style="background: #1a1a1a; border: 1px solid #333333; border-radius: 4px; padding: 12px 16px; color: #ffffff; font-size: 14px;">
+                  R$ <span id="maoObraStelion">0,00</span>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Impostos (17%)</label>
+                <div style="background: #1a1a1a; border: 1px solid #333333; border-radius: 4px; padding: 12px 16px; color: #ffffff; font-size: 14px;">
+                  R$ <span id="impostosStelion">0,00</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- LILIT -->
+          <div>
+            <h3 style="color: #ffffff; font-size: 16px; margin-bottom: 12px; font-weight: 600;">
+              <span class="product-name">LILIT</span>
+            </h3>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="precoBaseLilit">Valor Base (R$/m²)</label>
+                <input id="precoBaseLilit" type="number" min="0" step="0.01" value="590" oninput="calcularPrecos()" />
+              </div>
+              <div class="form-group">
+                <label>Valor Total</label>
+                <div style="background: #1a1a1a; border: 1px solid #333333; border-radius: 4px; padding: 12px 16px; color: #ffffff; font-size: 14px; font-weight: 600;">
+                  R$ <span id="totalLilit">0,00</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Materiais</label>
+                <div style="background: #1a1a1a; border: 1px solid #333333; border-radius: 4px; padding: 12px 16px; color: #ffffff; font-size: 14px;">
+                  R$ <span id="materiaisLilit">0,00</span>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Mão de Obra (R$ 120/m²)</label>
+                <div style="background: #1a1a1a; border: 1px solid #333333; border-radius: 4px; padding: 12px 16px; color: #ffffff; font-size: 14px;">
+                  R$ <span id="maoObraLilit">0,00</span>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Impostos (17%)</label>
+                <div style="background: #1a1a1a; border: 1px solid #333333; border-radius: 4px; padding: 12px 16px; color: #ffffff; font-size: 14px;">
+                  R$ <span id="impostosLilit">0,00</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resumo Geral -->
+        <div class="form-section">
+          <h2 class="section-title">
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <path d="M3 9h18"/>
+              <path d="M9 21V9"/>
+            </svg>
+            Resumo Geral
+          </h2>
+
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 20px;">
+            <!-- STELION -->
+            <div style="background: #1a1a1a; border: 2px solid #333333; border-radius: 8px; padding: 20px; text-align: center;">
+              <div style="color: #cccccc; font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">
+                <span class="product-name" style="font-size: 14px;">STELION</span>
+              </div>
+              <div style="color: #ffffff; font-size: 28px; font-weight: 700; margin-bottom: 4px;">
+                R$ <span id="resumoTotalStelion">0,00</span>
+              </div>
+              <div style="color: #888888; font-size: 12px;">
+                <span id="resumoMetragemStelion">0,00</span> m²
+              </div>
+            </div>
+
+            <!-- LILIT -->
+            <div style="background: #1a1a1a; border: 2px solid #333333; border-radius: 8px; padding: 20px; text-align: center;">
+              <div style="color: #cccccc; font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">
+                <span class="product-name" style="font-size: 14px;">LILIT</span>
+              </div>
+              <div style="color: #ffffff; font-size: 28px; font-weight: 700; margin-bottom: 4px;">
+                R$ <span id="resumoTotalLilit">0,00</span>
+              </div>
+              <div style="color: #888888; font-size: 12px;">
+                <span id="resumoMetragemLilit">0,00</span> m²
+              </div>
+            </div>
+
+            <!-- TOTAL GERAL -->
+            <div style="background: #ffffff; border: 2px solid #ffffff; border-radius: 8px; padding: 20px; text-align: center;">
+              <div style="color: #666666; font-size: 12px; text-transform: uppercase; margin-bottom: 8px; font-weight: 600;">
+                TOTAL GERAL
+              </div>
+              <div style="color: #000000; font-size: 32px; font-weight: 700; margin-bottom: 4px;">
+                R$ <span id="resumoTotalGeral">0,00</span>
+              </div>
+              <div style="color: #666666; font-size: 12px;">
+                <span id="resumoMetragemGeral">0,00</span> m²
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Calculadora de Prazos -->
+        <div class="form-section">
+          <h2 class="section-title">
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            Calculadora de Prazos
+          </h2>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="calcMetragem">Metragem (m²)</label>
+              <input id="calcMetragem" type="number" min="1" value="100" oninput="calcularPrazo(); calcularPrestadoresNecessarios()" />
+            </div>
+            <div class="form-group">
+              <label for="calcPrestadores">Número de Prestadores</label>
+              <input id="calcPrestadores" type="number" min="1" max="50" value="2" oninput="calcularPrazo()" />
+            </div>
+            <div class="form-group">
+              <label for="calcTipo">Tipo de Obra</label>
+              <select id="calcTipo" onchange="calcularPrazo(); calcularPrestadoresNecessarios()">
+                <option value="piso">Piso (4,5 m²/dia/pessoa)</option>
+                <option value="misto">Misto (3,15 m²/dia/pessoa)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="calcPrazoDesejado">Prazo Desejado (dias úteis)</label>
+              <input id="calcPrazoDesejado" type="number" min="3" placeholder="Ex: 10 dias" oninput="calcularPrestadoresNecessarios()" />
+            </div>
+            <div class="form-group">
+              <label>Prestadores Necessários</label>
+              <div style="background: #1a1a1a; border: 1px solid #333333; border-radius: 4px; padding: 12px 16px; color: #ffffff; font-size: 14px; min-height: 44px; display: flex; align-items: center;">
+                <span id="prestadoresNecessarios">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Resultado -->
+          <div style="background: #ffffff; color: #000000; border-radius: 4px; padding: 25px; margin-top: 20px; text-align: center;">
+            <div style="color: #666666; font-size: 14px; margin-bottom: 5px;">Prazo Total Estimado</div>
+            <div style="font-size: 48px; font-weight: bold;" id="calcResultadoTotal">14</div>
+            <div style="color: #666666; font-size: 14px;">dias úteis</div>
+          </div>
+
+          <!-- Detalhes -->
+          <div style="background: #1a1a1a; border-radius: 4px; padding: 20px; margin-top: 20px; border: 1px solid #333333;">
+            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #333333; color: #cccccc; font-size: 14px;">
+              <span>Produção diária da equipe</span>
+              <span style="color: #ffffff; font-weight: 500;" id="calcProducaoDiaria">9 m²/dia</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #333333; color: #cccccc; font-size: 14px;">
+              <span>Dias de instalação</span>
+              <span style="color: #ffffff; font-weight: 500;" id="calcDiasInstalacao">12 dias</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #333333; color: #cccccc; font-size: 14px;">
+              <span>Dias de cura</span>
+              <span style="color: #ffffff; font-weight: 500;">2 dias</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px 0; color: #ffffff; font-size: 14px; font-weight: bold;">
+              <span>Total</span>
+              <span id="calcTotalLinha">14 dias</span>
+            </div>
+          </div>
+
+          <div style="background: #0a0a0a; border-radius: 4px; padding: 15px; margin-top: 20px; font-family: monospace; color: #888888; font-size: 12px; text-align: center; border: 1px solid #333333;">
+            <strong style="color: #ffffff;">Fórmula:</strong> (m² ÷ (produtividade × prestadores)) + 2 dias de cura
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="resetForm()">
+            Limpar Formulário
+          </button>
+          <button type="submit" class="btn btn-primary">
+            🚀 RODAR PROPOSTA
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast">
+    <span id="toastMessage"></span>
+  </div>
+
+  <script>
+    // ============================================
+    // CONFIGURAÇÃO DO WEBHOOK
+    // ============================================
+    // Configure a URL do webhook abaixo para onde os dados serão enviados
+    const WEBHOOK_URL = 'https://seu-webhook-aqui.com/endpoint';
+
+    // ============================================
+    // GOOGLE PLACES AUTOCOMPLETE
+    // ============================================
+    // Autocomplete configurado no final do HTML (após o body)
+
+    // Calculate metragem in real-time
+    const metragemFields = [
+      'metrosPiso',
+      'metrosParede',
+      'metrosTeto',
+      'metrosBancadas',
+      'metrosEscadas',
+      'metrosEspeciaisPequenos',
+      'metrosEspeciaisGrandes',
+      'metrosPiscina'
+    ];
+
+    function calculateMetragem() {
+      console.log('📏 Calculando metragem...');
+
+      let total = 0;
+      metragemFields.forEach(id => {
+        const value = parseFloat(document.getElementById(id).value) || 0;
+        total += value;
+      });
+
+      const metragemOriginal = total;
+      const metragemTotal = total > 0 ? total / 0.9 : 0;
+
+      console.log(`   Original: ${metragemOriginal.toFixed(2)} m² | Com perda (÷0.9): ${metragemTotal.toFixed(2)} m²`);
+
+      document.getElementById('metragemOriginal').textContent = metragemOriginal.toFixed(2) + ' m²';
+      document.getElementById('metragemTotal').textContent = metragemTotal.toFixed(2) + ' m²';
+
+      // Recalcular preços quando a metragem mudar
+      calcularPrecos();
+
+      return { metragemOriginal, metragemTotal };
+    }
+
+    // Add event listeners to all metragem fields
+    function setupEventListeners() {
+      console.log('🔧 Configurando event listeners...');
+
+      metragemFields.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+          element.addEventListener('input', calculateMetragem);
+          console.log(`  ✅ Listener adicionado: ${id}`);
+        } else {
+          console.error(`  ❌ Elemento não encontrado: ${id}`);
+        }
+      });
+
+      console.log('✅ Event listeners configurados');
+    }
+
+    // Reset form
+    function resetForm() {
+      document.getElementById('proposalForm').reset();
+      document.getElementById('percentualEntrada').value = '50';
+      document.getElementById('numeroParcelas').value = '1';
+      document.getElementById('numeroParcelasCartao').value = '1';
+      metragemFields.forEach(id => {
+        document.getElementById(id).value = '0';
+      });
+      document.getElementById('valorTotal').value = '0';
+      document.getElementById('descontoVista').value = '0';
+      document.getElementById('taxaJurosCartao').value = '0';
+      document.getElementById('precoStelion').value = '0';
+      document.getElementById('precoLilit').value = '0';
+      calculateMetragem();
+      showToast('Formulário limpo com sucesso', 'success');
+    }
+
+    // Show toast notification
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      const toastMessage = document.getElementById('toastMessage');
+
+      toastMessage.textContent = message;
+      toast.className = `toast ${type} show`;
+
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    // Form submission
+    document.getElementById('proposalForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      if (!WEBHOOK_URL || WEBHOOK_URL === 'https://seu-webhook-aqui.com/endpoint') {
+        showToast('⚠️ Webhook não configurado. Configure o WEBHOOK_URL no código.', 'error');
+        return;
+
+      // Collect form data
+      const metragem = calculateMetragem();
+
+      const proposalData = {
+        cliente: {
+          nome: document.getElementById('nomeCliente').value,
+          endereco: document.getElementById('endereco').value,
+          detalhes: document.getElementById('detalhes').value,
+        },
+        obra: {
+          previsaoData: document.getElementById('previsaoData').value,
+        },
+        metragem: {
+          piso: parseFloat(document.getElementById('metrosPiso').value) || 0,
+          parede: parseFloat(document.getElementById('metrosParede').value) || 0,
+          teto: parseFloat(document.getElementById('metrosTeto').value) || 0,
+          bancadas: parseFloat(document.getElementById('metrosBancadas').value) || 0,
+          escadas: parseFloat(document.getElementById('metrosEscadas').value) || 0,
+          especiaisPequenos: parseFloat(document.getElementById('metrosEspeciaisPequenos').value) || 0,
+          especiaisGrandes: parseFloat(document.getElementById('metrosEspeciaisGrandes').value) || 0,
+          piscina: parseFloat(document.getElementById('metrosPiscina').value) || 0,
+          original: metragem.metragemOriginal,
+          total: metragem.metragemTotal,
+        },
+        valores: {
+          valorTotal: parseFloat(document.getElementById('valorTotal').value) || 0,
+          percentualEntrada: parseFloat(document.getElementById('percentualEntrada').value) || 50,
+          numeroParcelas: parseInt(document.getElementById('numeroParcelas').value) || 1,
+          descontoVista: parseFloat(document.getElementById('descontoVista').value) || 0,
+          taxaJurosCartao: parseFloat(document.getElementById('taxaJurosCartao').value) || 0,
+          numeroParcelasCartao: parseInt(document.getElementById('numeroParcelasCartao').value) || 1,
+        },
+        tabela: {
+          precoStelion: parseFloat(document.getElementById('precoStelion').value) || 0,
+          precoLilit: parseFloat(document.getElementById('precoLilit').value) || 0,
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      try {
+        const response = await fetch(WEBHOOK_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(proposalData),
+        });
+
+        if (response.ok) {
+          showToast('✅ Proposta enviada com sucesso!', 'success');
+          console.log('Proposta enviada:', proposalData);
+        } else {
+          throw new Error('Erro ao enviar proposta');
+        }
+      } catch (error) {
+        console.error('Erro:', error);
+        showToast('❌ Erro ao enviar proposta. Verifique o webhook.', 'error');
+    });
+
+    // ============================================
+    // INICIALIZAÇÃO
+    // ============================================
+    function initializeApp() {
+      console.log('🚀 Inicializando aplicação...');
+
+      // Configurar event listeners
+      setupEventListeners();
+
+      // Calcular valores iniciais
+      calculateMetragem();
+
+      console.log('✅ Aplicação inicializada com sucesso!');
+    }
+
+    // Executar quando DOM estiver pronto
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeApp);
+    } else {
+      // DOM já está pronto
+      initializeApp();
+    }
+
+    // ============================================
+    // CALCULADORA DE PRAZOS
+    // ============================================
+    const PROD_PISO = 4.5;
+    const PROD_MISTO = 3.15;
+    const DIAS_CURA = 2;
+
+    function calcularPrazo() {
+      const m2 = parseFloat(document.getElementById('calcMetragem').value) || 0;
+      const prestadores = parseInt(document.getElementById('calcPrestadores').value) || 1;
+      const tipo = document.getElementById('calcTipo').value;
+
+      // Produtividade por tipo
+      const produtividade = tipo === 'piso' ? PROD_PISO : PROD_MISTO;
+
+      // Produção diária da equipe
+      const producaoDiaria = produtividade * prestadores;
+
+      // Dias de instalação (assumindo semana de 5 dias úteis)
+      const diasInstalacao = Math.ceil(m2 / producaoDiaria);
+
+      // Total = instalação + cura
+      const total = diasInstalacao + DIAS_CURA;
+
+      // Atualizar interface
+      document.getElementById('calcProducaoDiaria').textContent = producaoDiaria.toFixed(1) + ' m²/dia';
+      document.getElementById('calcDiasInstalacao').textContent = diasInstalacao + ' dias';
+      document.getElementById('calcResultadoTotal').textContent = total;
+      document.getElementById('calcTotalLinha').textContent = total + ' dias';
+    }
+
+    function calcularPrestadoresNecessarios() {
+      const m2 = parseFloat(document.getElementById('calcMetragem').value) || 0;
+      const prazoDesejado = parseInt(document.getElementById('calcPrazoDesejado').value);
+      const tipo = document.getElementById('calcTipo').value;
+
+      if (!prazoDesejado || prazoDesejado < 3) {
+        document.getElementById('prestadoresNecessarios').textContent = '—';
+        return;
+
+      // Produtividade por tipo
+      const produtividade = tipo === 'piso' ? PROD_PISO : PROD_MISTO;
+
+      // Dias disponíveis para instalação (prazo total - dias de cura)
+      const diasInstalacao = prazoDesejado - DIAS_CURA;
+
+      if (diasInstalacao <= 0) {
+        document.getElementById('prestadoresNecessarios').textContent = 'Prazo muito curto (mínimo 3 dias)';
+        return;
+
+      // Calcular quantos prestadores são necessários
+      const prestadoresNecessarios = Math.ceil(m2 / (diasInstalacao * produtividade));
+
+      document.getElementById('prestadoresNecessarios').textContent = prestadoresNecessarios + ' prestador(es)';
+    }
+
+    // Calcular prazo ao carregar
+    calcularPrazo();
+
+    // ============================================
+    // CÁLCULO DE PREÇOS
+    // ============================================
+    const MAO_OBRA_M2 = 120; // R$ 120 por m²
+    const IMPOSTOS_PERCENT = 0.17; // 17%
+
+    // Produto selecionado para o piso (padrão: stelion)
+    let produtoPisoSelecionado = 'stelion';
+
+    // Função para selecionar produto do piso
+    function selecionarProdutoPiso(produto) {
+      console.log('🔄 Alterando produto do piso para:', produto.toUpperCase());
+
+      produtoPisoSelecionado = produto;
+
+      // Atualizar UI - remover classe active de todos e adicionar ao selecionado
+      document.querySelectorAll('.produto-option').forEach(opt => {
+        opt.classList.remove('active');
+      });
+
+      document.querySelector(`.produto-option[data-produto="${produto}"]`).classList.add('active');
+
+      // Recalcular preços
+      calcularPrecos();
+    }
+
+    function formatarMoeda(valor) {
+      return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function calcularPrecos() {
+      console.log('🔄 Calculando preços...');
+
+      // Pegar valores base
+      const precoBaseStelion = parseFloat(document.getElementById('precoBaseStelion').value) || 0;
+      const precoBaseLilit = parseFloat(document.getElementById('precoBaseLilit').value) || 0;
+
+      console.log('Preço Base STELION:', precoBaseStelion);
+      console.log('Preço Base LILIT:', precoBaseLilit);
+
+      // Pegar metragens de cada tipo
+      const metrosPiso = parseFloat(document.getElementById('metrosPiso').value) || 0;
+      const metrosParede = parseFloat(document.getElementById('metrosParede').value) || 0;
+      const metrosTeto = parseFloat(document.getElementById('metrosTeto').value) || 0;
+      const metrosBancadas = parseFloat(document.getElementById('metrosBancadas').value) || 0;
+      const metrosEscadas = parseFloat(document.getElementById('metrosEscadas').value) || 0;
+      const metrosEspeciaisPequenos = parseFloat(document.getElementById('metrosEspeciaisPequenos').value) || 0;
+      const metrosEspeciaisGrandes = parseFloat(document.getElementById('metrosEspeciaisGrandes').value) || 0;
+      const metrosPiscina = parseFloat(document.getElementById('metrosPiscina').value) || 0;
+
+      console.log('Metragens:', { metrosPiso, metrosParede, metrosTeto, metrosBancadas, metrosEscadas, metrosEspeciaisPequenos, metrosEspeciaisGrandes, metrosPiscina });
+
+      // Calcular valor total considerando produtos e multiplicadores
+      let valorTotalStelion = 0;
+      let valorTotalLilit = 0;
+      let metragemTotalStelion = 0;
+      let metragemTotalLilit = 0;
+
+      // PISO → Depende da seleção (STELION 1.0x ou LILIT 1.0x)
+      if (metrosPiso > 0) {
+        const metrosComPerda = metrosPiso / 0.9;
+
+        if (produtoPisoSelecionado === 'stelion') {
+          // STELION com multiplicador 1.0x
+          valorTotalStelion += metrosComPerda * precoBaseStelion * 1.0;
+          metragemTotalStelion += metrosComPerda;
+          console.log(`  ✅ Piso: ${metrosComPerda.toFixed(2)}m² × STELION (R$ ${precoBaseStelion}) × 1.0x = R$ ${(metrosComPerda * precoBaseStelion * 1.0).toFixed(2)}`);
+        } else {
+          // LILIT com multiplicador 1.0x
+          valorTotalLilit += metrosComPerda * precoBaseLilit * 1.0;
+          metragemTotalLilit += metrosComPerda;
+          console.log(`  ✅ Piso: ${metrosComPerda.toFixed(2)}m² × LILIT (R$ ${precoBaseLilit}) × 1.0x = R$ ${(metrosComPerda * precoBaseLilit * 1.0).toFixed(2)}`);
+        }
+      }
+
+      // PAREDE → LILIT (0.8x)
+      if (metrosParede > 0) {
+        const metrosComPerda = metrosParede / 0.9;
+        valorTotalLilit += metrosComPerda * precoBaseLilit * 0.8;
+        metragemTotalLilit += metrosComPerda;
+      }
+
+      // TETO → LILIT (0.8x)
+      if (metrosTeto > 0) {
+        const metrosComPerda = metrosTeto / 0.9;
+        valorTotalLilit += metrosComPerda * precoBaseLilit * 0.8;
+        metragemTotalLilit += metrosComPerda;
+      }
+
+      // ESPECIAIS PEQUENOS → STELION (0.5x)
+      if (metrosEspeciaisPequenos > 0) {
+        const metrosComPerda = metrosEspeciaisPequenos / 0.9;
+        valorTotalStelion += metrosComPerda * precoBaseStelion * 0.5;
+        metragemTotalStelion += metrosComPerda;
+      }
+
+      // ESPECIAIS GRANDES → STELION (1.5x)
+      if (metrosEspeciaisGrandes > 0) {
+        const metrosComPerda = metrosEspeciaisGrandes / 0.9;
+        valorTotalStelion += metrosComPerda * precoBaseStelion * 1.5;
+        metragemTotalStelion += metrosComPerda;
+      }
+
+      // BANCADAS → STELION (1.5x)
+      if (metrosBancadas > 0) {
+        const metrosComPerda = metrosBancadas / 0.9;
+        valorTotalStelion += metrosComPerda * precoBaseStelion * 1.5;
+        metragemTotalStelion += metrosComPerda;
+      }
+
+      // ESCADAS → STELION (1.5x)
+      if (metrosEscadas > 0) {
+        const metrosComPerda = metrosEscadas / 0.9;
+        valorTotalStelion += metrosComPerda * precoBaseStelion * 1.5;
+        metragemTotalStelion += metrosComPerda;
+      }
+
+      // PISCINA → STELION (1.5x)
+      if (metrosPiscina > 0) {
+        const metrosComPerda = metrosPiscina / 0.9;
+        valorTotalStelion += metrosComPerda * precoBaseStelion * 1.5;
+        metragemTotalStelion += metrosComPerda;
+      }
+
+      console.log('💰 Valores Calculados:');
+      console.log('  STELION Total:', valorTotalStelion, 'Metragem:', metragemTotalStelion);
+      console.log('  LILIT Total:', valorTotalLilit, 'Metragem:', metragemTotalLilit);
+
+      // Calcular composição de preços para cada produto
+      calcularProdutoPorValor('Stelion', valorTotalStelion, metragemTotalStelion);
+      calcularProdutoPorValor('Lilit', valorTotalLilit, metragemTotalLilit);
+
+      // Atualizar resumo geral
+      const metragemGeral = metragemTotalStelion + metragemTotalLilit;
+      const valorGeral = valorTotalStelion + valorTotalLilit;
+
+      console.log('📊 Resumo Geral - Metragem:', metragemGeral, 'Valor:', valorGeral);
+
+      try {
+        document.getElementById('resumoTotalStelion').textContent = formatarMoeda(valorTotalStelion);
+        document.getElementById('resumoMetragemStelion').textContent = metragemTotalStelion.toFixed(2);
+
+        document.getElementById('resumoTotalLilit').textContent = formatarMoeda(valorTotalLilit);
+        document.getElementById('resumoMetragemLilit').textContent = metragemTotalLilit.toFixed(2);
+
+        document.getElementById('resumoTotalGeral').textContent = formatarMoeda(valorGeral);
+        document.getElementById('resumoMetragemGeral').textContent = metragemGeral.toFixed(2);
+
+        console.log('✅ DOM atualizado com sucesso!');
+      } catch (error) {
+        console.error('❌ Erro ao atualizar DOM:', error);
+    }
+
+    function calcularProdutoPorValor(produto, valorTotal, metragem) {
+      console.log(`  📦 Calculando ${produto}...`);
+
+      // Impostos = Valor Total × 17%
+      const impostos = valorTotal * IMPOSTOS_PERCENT;
+
+      // Mão de Obra = 120 × Metragem
+      const maoObra = MAO_OBRA_M2 * metragem;
+
+      // Materiais = Valor Total - Impostos - Mão de Obra
+      const materiais = valorTotal - impostos - maoObra;
+
+      console.log(`    Total: R$ ${formatarMoeda(valorTotal)}`);
+      console.log(`    Materiais: R$ ${formatarMoeda(materiais)}`);
+      console.log(`    Mão de Obra: R$ ${formatarMoeda(maoObra)}`);
+      console.log(`    Impostos: R$ ${formatarMoeda(impostos)}`);
+
+      // Atualizar interface
+      try {
+        document.getElementById(`total${produto}`).textContent = formatarMoeda(valorTotal);
+        document.getElementById(`impostos${produto}`).textContent = formatarMoeda(impostos);
+        document.getElementById(`maoObra${produto}`).textContent = formatarMoeda(maoObra);
+        document.getElementById(`materiais${produto}`).textContent = formatarMoeda(materiais);
+        console.log(`    ✅ ${produto} atualizado no DOM`);
+      } catch (error) {
+        console.error(`    ❌ Erro ao atualizar ${produto}:`, error);
+    }
+
+    // Debug: Check if NITECLUB font is loaded
+    document.fonts.ready.then(function() {
+      const fonts = Array.from(document.fonts.values());
+      const niteclubFont = fonts.find(f => f.family === 'NITECLUB');
+      if (niteclubFont) {
+        console.log('✅ Fonte NITECLUB carregada com sucesso!');
+      } else {
+        console.warn('⚠️ Fonte NITECLUB não foi encontrada. Carregando manualmente...');
+        const font = new FontFace('NITECLUB', 'url(/NITECLUB.TTF)');
+        font.load().then(function(loadedFont) {
+          document.fonts.add(loadedFont);
+          console.log('✅ Fonte NITECLUB carregada manualmente!');
+        }).catch(function(error) {
+          console.error('❌ Erro ao carregar fonte NITECLUB:', error);
+        });
+    });
+  </script>
+
+  <!-- Google Maps Places API - Com Geolocalização e Cálculo de Distância -->
+  <script>
+    console.log('🗺️ [Google Maps] Iniciando configuração...');
+
+    // Variáveis globais
+    var autocomplete;
+    var autocompleteInitialized = false;
+    var userLocation = null; // Localização atual do usuário
+
+    // Função para calcular distância usando Haversine formula
+    function calcularDistancia(lat1, lon1, lat2, lon2) {
+      var R = 6371; // Raio da Terra em km
+      var dLat = (lat2 - lat1) * Math.PI / 180;
+      var dLon = (lon2 - lon1) * Math.PI / 180;
+      var a =
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+      var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      var d = R * c;
+      return d.toFixed(1);
+    }
+
+    // Função para atualizar a distância no label
+    function atualizarDistancia(distanciaKm) {
+      var distanciaLabel = document.getElementById('distanciaLabel');
+      if (distanciaLabel) {
+        distanciaLabel.textContent = '(' + distanciaKm + ' km de distância)';
+        distanciaLabel.style.display = 'inline';
+        console.log('✅ [Distância] Atualizada no label:', distanciaKm, 'km');
+      }
+    }
+
+    // Obter localização do usuário
+    function obterLocalizacao() {
+      if (navigator.geolocation) {
+        console.log('🌍 [Geolocalização] Solicitando localização do usuário...');
+
+        navigator.geolocation.getCurrentPosition(
+          function(position) {
+            userLocation = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            };
+            console.log('✅ [Geolocalização] Localização obtida:', userLocation);
+
+            // Se o autocomplete já foi criado, atualizar o bias
+            if (autocomplete) {
+              var circle = new google.maps.Circle({
+                center: userLocation,
+                radius: 50000 // 50km de raio
+              });
+              autocomplete.setBounds(circle.getBounds());
+              console.log('✅ [Geolocalização] Bias atualizado para priorizar endereços próximos');
+            }
+          },
+          function(error) {
+            console.warn('⚠️ [Geolocalização] Erro ao obter localização:', error.message);
+            console.warn('   Autocomplete funcionará sem bias de localização');
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0
+          }
+        );
+      } else {
+        console.warn('⚠️ [Geolocalização] Não suportada pelo navegador');
+      }
+    }
+
+    // IMPORTANTE: Definir a função ANTES de carregar o script do Google Maps
+    window.initGoogleMaps = function() {
+      console.log('📞 [Autocomplete] Callback initGoogleMaps() chamada');
+
+      if (autocompleteInitialized) {
+        console.warn('⚠️ [Autocomplete] Já inicializado, ignorando');
+        return;
+      }
+
+      try {
+        // Verificar se Google Maps está disponível
+        console.log('🔍 [Autocomplete] Verificando disponibilidade do Google Maps...');
+
+        if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
+          console.error('❌ [Autocomplete] google.maps.places não está disponível');
+          return;
+        }
+
+        console.log('✅ [Autocomplete] Google Maps disponível');
+
+        var enderecoInput = document.getElementById('endereco');
+
+        if (!enderecoInput) {
+          console.error('❌ [Autocomplete] Campo de endereço não encontrado');
+          return;
+        }
+
+        console.log('✅ [Autocomplete] Campo de endereço encontrado');
+
+        // Opções do autocomplete - restrito ao Brasil
+        var options = {
+          types: ['address'],
+          componentRestrictions: { country: 'br' },
+          fields: ['formatted_address', 'address_components', 'geometry']
+        };
+
+        // Se já temos a localização do usuário, adicionar como bias
+        if (userLocation) {
+          options.location = new google.maps.LatLng(userLocation.lat, userLocation.lng);
+          options.radius = 50000; // 50km de raio
+          console.log('✅ [Autocomplete] Localização do usuário adicionada como bias');
+        }
+
+        console.log('⚙️ [Autocomplete] Criando Autocomplete com opções:', options);
+
+        // Inicializar autocomplete
+        autocomplete = new google.maps.places.Autocomplete(enderecoInput, options);
+
+        console.log('✅ [Autocomplete] Objeto Autocomplete criado');
+
+        // Listener para quando um endereço for selecionado
+        autocomplete.addListener('place_changed', function() {
+          console.log('📍 [Autocomplete] Evento place_changed disparado');
+          var place = autocomplete.getPlace();
+
+          if (!place.geometry) {
+            console.log('⚠️ [Autocomplete] Sem geometria para:', place.name);
+            return;
+          }
+
+          // Preencher o campo com o endereço formatado
+          enderecoInput.value = place.formatted_address;
+          console.log('✅ [Autocomplete] Endereço preenchido:', place.formatted_address);
+
+          // Calcular e mostrar distância se tivermos a localização do usuário
+          if (userLocation) {
+            var destinoLat = place.geometry.location.lat();
+            var destinoLng = place.geometry.location.lng();
+            var distancia = calcularDistancia(
+              userLocation.lat,
+              userLocation.lng,
+              destinoLat,
+              destinoLng
+            );
+
+            console.log('📏 [Distância] Calculada:', distancia, 'km');
+            atualizarDistancia(distancia);
+          } else {
+            console.log('⚠️ [Distância] Localização do usuário não disponível');
+          }
+        });
+
+        console.log('✅ [Autocomplete] Listener place_changed adicionado');
+
+        autocompleteInitialized = true;
+        console.log('🎉 [Autocomplete] Inicialização completa!');
+        console.log('💡 [Autocomplete] Digite no campo de endereço para testar');
+
+        // Obter localização do usuário após inicializar o autocomplete
+        obterLocalizacao();
+
+      } catch (error) {
+        console.error('❌ [Autocomplete] Erro:', error);
+        console.error('   Stack:', error.stack);
+      }
+    };
+
+    console.log('✅ [Google Maps] Função initGoogleMaps definida');
+
+    // Agora carregar o script do Google Maps
+    (function() {
+      console.log('🗺️ [Google Maps] Carregando script...');
+
+      var apiKey = 'AIzaSyAGl3uuilMmSmSiGWdiV9ySwKq70nNEX-E';
+      var script = document.createElement('script');
+
+      script.src = 'https://maps.googleapis.com/maps/api/js?key=' + apiKey + '&libraries=places&callback=initGoogleMaps';
+      script.async = true;
+      script.defer = true;
+
+      script.onload = function() {
+        console.log('✅ [Google Maps] Script carregado com sucesso');
+      };
+
+      script.onerror = function(error) {
+        console.error('❌ [Google Maps] Erro ao carregar script:', error);
+        console.error('   URL:', script.src);
+      };
+
+      document.body.appendChild(script);
+      console.log('🔄 [Google Maps] Script adicionado ao DOM');
+
+      // Timeout de segurança - avisar se não carregar em 10 segundos
+      setTimeout(function() {
+        if (!autocompleteInitialized) {
+          console.warn('⏱️ [Google Maps] Timeout - Autocomplete não inicializou em 10 segundos');
+          console.warn('   Campo de endereço funcionará sem autocomplete.');
+        }
+      }, 10000);
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teste Fonte NITECLUB</title>
+  <style>
+    @font-face {
+      font-family: 'NITECLUB';
+      src: url('/NITECLUB.TTF') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+    }
+
+    body {
+      background: #000;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      padding: 40px;
+    }
+
+    .niteclub {
+      font-family: 'NITECLUB', Arial, sans-serif;
+      font-size: 48px;
+      margin: 20px 0;
+    }
+
+    .normal {
+      font-family: Arial, sans-serif;
+      font-size: 48px;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Teste de Fonte NITECLUB</h1>
+
+  <div class="niteclub">
+    STELION - LILIT - LEONA - PRIMER
+  </div>
+
+  <div class="normal">
+    STELION - LILIT - LEONA - PRIMER (Arial para comparação)
+  </div>
+
+  <script>
+    document.fonts.ready.then(() => {
+      console.log('Fontes carregadas:', Array.from(document.fonts.values()).map(f => f.family));
+    });
+  </script>
+</body>
+</html>

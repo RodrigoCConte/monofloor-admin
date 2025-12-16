@@ -51,12 +51,6 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: '/proposals',
-    name: 'Proposals',
-    component: () => import('../views/Proposals.vue'),
-    meta: { requiresAuth: true },
-  },
-  {
     path: '/badges',
     redirect: '/campaigns',
   },
