@@ -58,4 +58,4 @@ RUN mkdir -p temp/uploads temp/frames
 EXPOSE 3000
 
 # Start command
-CMD ["sh", "-c", "npx prisma db push && npm start"]
+CMD ["sh", "-c", "npx prisma db push && echo 'Starting server...' && node dist/index.js 2>&1"]
