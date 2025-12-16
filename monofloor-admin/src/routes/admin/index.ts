@@ -4,6 +4,8 @@ import { applicatorsRoutes } from './applicators.routes';
 import { projectsRoutes } from './projects.routes';
 import { tasksRoutes } from './tasks.routes';
 import { reportsRoutes } from './reports.routes';
+import videoReportsRoutes from './video-reports.routes';
+import simpleVideoReportsRoutes from './simple-video-reports.routes';
 import { locationsRoutes } from './locations.routes';
 import { contributionsRoutes } from './contributions.routes';
 import { campaignsRoutes } from './campaigns.routes';
@@ -17,6 +19,8 @@ router.use('/applicators', applicatorsRoutes);
 router.use('/projects', projectsRoutes);
 router.use('/projects', tasksRoutes);  // Tasks sub-routes (/projects/:projectId/tasks)
 router.use('/reports', reportsRoutes);
+router.use('/reports', videoReportsRoutes);  // Video reports (old complex system)
+router.use('/reports', simpleVideoReportsRoutes);  // Simple video reports (new!)
 router.use('/locations', locationsRoutes);
 router.use('/contributions', contributionsRoutes);
 router.use('/campaigns', campaignsRoutes);

@@ -22,8 +22,13 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, Postman)
-    if (!origin) return callback(null, true);
+    // Allow requests with no origin (mobile apps, Postman, file://)
+    if (!origin || origin === 'null') return callback(null, true);
+
+    // Allow file:// protocol (for local HTML files)
+    if (origin && origin.startsWith('file://')) {
+      return callback(null, true);
+    }
 
     // Allow any localhost origin during development
     if (origin && origin.match(/^http:\/\/localhost:\d+$/)) {
@@ -33,6 +38,10 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      // In development, allow all origins
+      if (config.server.nodeEnv === 'development') {
+        return callback(null, true);
+      }
       callback(new Error('Not allowed by CORS'));
     }
   },
