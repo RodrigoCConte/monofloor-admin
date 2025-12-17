@@ -27,6 +27,9 @@ COPY . .
 # Build TypeScript
 RUN npm run build
 
+# Generate Prisma Client
+RUN npx prisma generate
+
 # Production image
 FROM node:20-bullseye-slim
 
@@ -58,4 +61,4 @@ RUN mkdir -p temp/uploads temp/frames
 EXPOSE 3000
 
 # Start command
-CMD ["sh", "-c", "npx prisma db push && echo 'Starting server...' && node dist/index.js 2>&1"]
+CMD ["node", "dist/index.js"]
