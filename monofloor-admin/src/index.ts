@@ -56,8 +56,10 @@ async function main() {
     console.log('✅ Database connected');
 
     // Start server with Socket.io
-    httpServer.listen(config.port, () => {
-      console.log(`🚀 Server running on port ${config.port}`);
+    // Railway requires binding to 0.0.0.0, not localhost
+    const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+    httpServer.listen(config.port, host, () => {
+      console.log(`🚀 Server running on ${host}:${config.port}`);
       console.log(`🔌 Socket.io enabled`);
       console.log(`📍 Environment: ${config.nodeEnv}`);
       console.log(`🔗 Health check: http://localhost:${config.port}/health`);
