@@ -6,7 +6,6 @@ import { errorHandler } from './middleware/errorHandler';
 import { authRoutes } from './routes/auth.routes';
 import { adminRoutes } from './routes/admin';
 import { mobileRoutes } from './routes/mobile';
-import proposalsRoutes from './routes/proposals.routes';
 
 const app = express();
 
@@ -79,7 +78,6 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/mobile', mobileRoutes);
-app.use('/api/proposals', proposalsRoutes);
 
 // Error handling
 app.use(errorHandler);
