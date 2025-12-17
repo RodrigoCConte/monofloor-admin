@@ -6,6 +6,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { authRoutes } from './routes/auth.routes';
 import { adminRoutes } from './routes/admin';
 import { mobileRoutes } from './routes/mobile';
+import proposalsRoutes from './routes/proposals.routes';
 
 const app = express();
 
@@ -18,6 +19,8 @@ const allowedOrigins = [
   'http://localhost:5174',
   'http://localhost:5175',
   'http://localhost:5176',
+  'https://vt.monofloor.cloud',
+  'http://vt.monofloor.cloud',
 ];
 
 app.use(cors({
@@ -76,6 +79,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/mobile', mobileRoutes);
+app.use('/api/proposals', proposalsRoutes);
 
 // Error handling
 app.use(errorHandler);
