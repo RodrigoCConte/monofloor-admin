@@ -51,6 +51,11 @@ io.on('connection', (socket) => {
 
 async function main() {
   try {
+    // Log environment info for debugging Railway deployment
+    console.log('🔍 Environment:', process.env.NODE_ENV);
+    console.log('🔍 PORT from env:', process.env.PORT);
+    console.log('🔍 Config port:', config.port);
+
     // Test database connection
     await prisma.$connect();
     console.log('✅ Database connected');
