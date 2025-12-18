@@ -49,6 +49,7 @@ COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/data ./data
 COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/public ./public
 
 # Copy Python requirements and install
 COPY requirements.txt ./

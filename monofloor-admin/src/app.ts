@@ -6,6 +6,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { authRoutes } from './routes/auth.routes';
 import { adminRoutes } from './routes/admin';
 import { mobileRoutes } from './routes/mobile';
+import proposalsRoutes from './routes/proposals.routes';
 
 const app = express();
 
@@ -59,6 +60,9 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
+// Serve video processor static files
+app.use('/video-processor', express.static(path.join(__dirname, '../public/video-processor')));
+
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
@@ -78,6 +82,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/mobile', mobileRoutes);
+app.use('/api/proposals', proposalsRoutes);
 
 // Error handling
 app.use(errorHandler);
