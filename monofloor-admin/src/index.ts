@@ -91,6 +91,23 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
+// Catch uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+});
+
+// Catch unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise);
+  console.error('Reason:', reason);
+});
+
+// Keep process alive with periodic heartbeat log
+setInterval(() => {
+  console.log(`💓 Heartbeat at ${new Date().toISOString()}`);
+}, 60000);
+
 main();
 
 export { prisma, io };
