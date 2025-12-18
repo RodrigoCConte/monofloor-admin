@@ -631,7 +631,33 @@ router.post(
       // Get user info for socket events
       const user = await prisma.user.findUnique({
         where: { id: req.user!.sub },
-        select: { name: true, photoUrl: true },
+        select: { name: true, photoUrl: true, xpTotal: true },
+      });
+
+      // =============================================
+      // XP REWARD: 100 XP por check-in
+      // =============================================
+      const XP_CHECKIN = 100;
+
+      // Criar transação de XP
+      await prisma.xpTransaction.create({
+        data: {
+          userId: req.user!.sub,
+          amount: XP_CHECKIN,
+          type: 'CHECKIN',
+          reason: `Check-in na obra ${checkin.project.cliente || checkin.project.title}`,
+          checkinId: checkin.id,
+          projectId,
+        },
+      });
+
+      // Atualizar XP total do usuário
+      const updatedUser = await prisma.user.update({
+        where: { id: req.user!.sub },
+        data: {
+          xpTotal: { increment: XP_CHECKIN },
+        },
+        select: { xpTotal: true, level: true },
       });
 
       // Update UserLocation to sync with checkin (for map)
@@ -672,6 +698,12 @@ router.post(
       res.status(201).json({
         success: true,
         data: checkin,
+        xp: {
+          earned: XP_CHECKIN,
+          reason: 'Check-in na obra',
+          total: updatedUser.xpTotal,
+          level: updatedUser.level,
+        },
       });
     } catch (error) {
       next(error);

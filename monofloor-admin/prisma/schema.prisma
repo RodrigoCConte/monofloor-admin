@@ -92,6 +92,7 @@ model User {
   contributionRequests  ContributionRequest[]
   helpRequests          HelpRequest[]
   pushSubscriptions     PushSubscription[]
+  xpTransactions        XpTransaction[]
   campaignParticipations CampaignParticipant[]
   campaignWins          CampaignWinner[]
   badges                UserBadge[]
@@ -1165,4 +1166,42 @@ enum VideoJobStatus {
   PROCESSING  // Em processamento
   COMPLETED   // Concluído com sucesso
   FAILED      // Falhou
+}
+
+// =============================================
+// XP TRANSACTIONS (Histórico de XP)
+// =============================================
+model XpTransaction {
+  id          String      @id @default(uuid())
+  userId      String      @map("user_id")
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // XP info
+  amount      Int                    // Quantidade de XP (positivo = ganho, negativo = perdido)
+  type        XpTransactionType      // Tipo de transação
+  reason      String                 // Descrição legível (ex: "Check-in na obra Casa Silva")
+
+  // Referências opcionais
+  checkinId   String?     @map("checkin_id")
+  projectId   String?     @map("project_id")
+  campaignId  String?     @map("campaign_id")
+
+  // Timestamps
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("xp_transactions")
+}
+
+enum XpTransactionType {
+  CHECKIN           // Check-in na obra
+  CHECKOUT          // Check-out (bonus por horas trabalhadas)
+  REPORT            // Envio de relatório
+  CAMPAIGN          // Participação em campanha
+  ACHIEVEMENT       // Conquista desbloqueada
+  BONUS             // Bonus manual do admin
+  VIDEO_WATCHED     // Vídeo assistido
+  PENALTY           // Penalidade (XP negativo)
 }
