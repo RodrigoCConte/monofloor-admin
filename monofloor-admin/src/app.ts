@@ -10,48 +10,16 @@ import proposalsRoutes from './routes/proposals.routes';
 
 const app = express();
 
-// CORS configuration
-const allowedOrigins = [
-  config.cors.adminPanelUrl,
-  config.cors.mobileAppUrl,
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:5175',
-  'http://localhost:5176',
-  'https://vt.monofloor.cloud',
-  'http://vt.monofloor.cloud',
-];
-
+// CORS configuration - allow all origins for video processing
 app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, Postman, file://)
-    if (!origin || origin === 'null') return callback(null, true);
-
-    // Allow file:// protocol (for local HTML files)
-    if (origin && origin.startsWith('file://')) {
-      return callback(null, true);
-    }
-
-    // Allow any localhost origin during development
-    if (origin && origin.match(/^http:\/\/localhost:\d+$/)) {
-      return callback(null, true);
-    }
-
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      // In development, allow all origins
-      if (config.server.nodeEnv === 'development') {
-        return callback(null, true);
-      }
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: true, // Allow all origins
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }));
+
+// Handle OPTIONS preflight explicitly
+app.options('*', cors());
 
 // Body parsing (increased limit for base64 images)
 app.use(express.json({ limit: '5mb' }));
