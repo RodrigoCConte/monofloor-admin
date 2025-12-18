@@ -1,313 +1,62 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Teste de Cálculo - Propostas</title>
+  <title>Teste Cálculo Simplificado</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #000;
-      color: #fff;
-      padding: 20px;
-      max-width: 800px;
-      margin: 0 auto;
-    }
-    .test-section {
-      background: #1a1a1a;
-      padding: 20px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-    }
-    h2 {
-      color: #4CAF50;
-      margin-top: 0;
-    }
-    .input-group {
-      margin-bottom: 15px;
-    }
-    label {
-      display: block;
-      margin-bottom: 5px;
-      color: #aaa;
-    }
-    input {
-      width: 100%;
-      padding: 10px;
-      background: #2a2a2a;
-      border: 1px solid #333;
-      color: #fff;
-      border-radius: 4px;
-      font-size: 16px;
-    }
-    .result {
-      background: #2a2a2a;
-      padding: 15px;
-      border-radius: 4px;
-      margin-top: 15px;
-    }
-    .result-item {
-      display: flex;
-      justify-content: space-between;
-      padding: 8px 0;
-      border-bottom: 1px solid #333;
-    }
-    .result-item:last-child {
-      border-bottom: none;
-    }
-    .result-item.highlight {
-      font-weight: bold;
-      color: #4CAF50;
-    }
-    .console {
-      background: #0a0a0a;
-      padding: 15px;
-      border-radius: 4px;
-      font-family: 'Courier New', monospace;
-      font-size: 12px;
-      max-height: 300px;
-      overflow-y: auto;
-      margin-top: 10px;
-    }
-    .log {
-      margin-bottom: 5px;
-    }
-    .error {
-      color: #f44336;
-    }
-    .success {
-      color: #4CAF50;
-    }
-    .warning {
-      color: #ff9800;
-    }
-    .info {
-      color: #2196F3;
-    }
+    body { font-family: Arial; padding: 20px; background: #000; color: #fff; }
+    input { padding: 10px; margin: 5px; background: #222; color: #fff; border: 1px solid #444; }
+    .result { background: #1a1a1a; padding: 20px; margin: 20px 0; border: 1px solid #333; }
   </style>
 </head>
 <body>
-  <h1>🧪 Teste de Cálculo - Sistema de Propostas</h1>
+  <h1>Teste Simplificado - Verificar se oninput funciona</h1>
 
-  <div class="test-section">
-    <h2>📊 Entradas</h2>
-
-    <div class="input-group">
-      <label for="precoBaseStelion">Valor Base STELION (R$/m²)</label>
-      <input type="number" id="precoBaseStelion" value="910" step="0.01" oninput="calcular()">
-    </div>
-
-    <div class="input-group">
-      <label for="precoBaseLilit">Valor Base LILIT (R$/m²)</label>
-      <input type="number" id="precoBaseLilit" value="590" step="0.01" oninput="calcular()">
-    </div>
-
-    <div class="input-group">
-      <label for="metrosPiso">Piso (m²) - STELION 1.0x</label>
-      <input type="number" id="metrosPiso" value="100" step="0.01" oninput="calcular()">
-    </div>
-
-    <div class="input-group">
-      <label for="metrosParede">Parede (m²) - LILIT 0.8x</label>
-      <input type="number" id="metrosParede" value="50" step="0.01" oninput="calcular()">
-    </div>
-
-    <div class="input-group">
-      <label for="metrosTeto">Teto (m²) - LILIT 0.8x</label>
-      <input type="number" id="metrosTeto" value="0" step="0.01" oninput="calcular()">
-    </div>
+  <div>
+    <label>Piso (m²): <input type="number" id="metrosPiso" value="0" oninput="testar()" /></label>
   </div>
 
-  <div class="test-section">
-    <h2>💰 Resultados STELION</h2>
-    <div class="result">
-      <div class="result-item highlight">
-        <span>Total STELION:</span>
-        <span>R$ <span id="totalStelion">0,00</span></span>
-      </div>
-      <div class="result-item">
-        <span>Metragem:</span>
-        <span><span id="metragemStelion">0,00</span> m²</span>
-      </div>
-      <div class="result-item">
-        <span>Materiais:</span>
-        <span>R$ <span id="materiaisStelion">0,00</span></span>
-      </div>
-      <div class="result-item">
-        <span>Mão de Obra (R$ 120/m²):</span>
-        <span>R$ <span id="maoObraStelion">0,00</span></span>
-      </div>
-      <div class="result-item">
-        <span>Impostos (17%):</span>
-        <span>R$ <span id="impostosStelion">0,00</span></span>
-      </div>
-    </div>
+  <div class="result">
+    <h3>Resultado:</h3>
+    <p>Valor digitado: <span id="valor">0</span></p>
+    <p>Com perda (÷0.9): <span id="comPerda">0.00</span></p>
+    <p>Preço STELION (R$ 910): <span id="preco">R$ 0,00</span></p>
   </div>
 
-  <div class="test-section">
-    <h2>💰 Resultados LILIT</h2>
-    <div class="result">
-      <div class="result-item highlight">
-        <span>Total LILIT:</span>
-        <span>R$ <span id="totalLilit">0,00</span></span>
-      </div>
-      <div class="result-item">
-        <span>Metragem:</span>
-        <span><span id="metragemLilit">0,00</span> m²</span>
-      </div>
-      <div class="result-item">
-        <span>Materiais:</span>
-        <span>R$ <span id="materiaisLilit">0,00</span></span>
-      </div>
-      <div class="result-item">
-        <span>Mão de Obra (R$ 120/m²):</span>
-        <span>R$ <span id="maoObraLilit">0,00</span></span>
-      </div>
-      <div class="result-item">
-        <span>Impostos (17%):</span>
-        <span>R$ <span id="impostosLilit">0,00</span></span>
-      </div>
-    </div>
-  </div>
-
-  <div class="test-section">
-    <h2>📈 Total Geral</h2>
-    <div class="result">
-      <div class="result-item highlight">
-        <span>TOTAL GERAL:</span>
-        <span>R$ <span id="totalGeral">0,00</span></span>
-      </div>
-      <div class="result-item">
-        <span>Metragem Total:</span>
-        <span><span id="metragemGeral">0,00</span> m²</span>
-      </div>
-    </div>
-  </div>
-
-  <div class="test-section">
-    <h2>📝 Console de Logs</h2>
-    <div id="console" class="console"></div>
+  <div class="result">
+    <h3>Console:</h3>
+    <pre id="console" style="color: #0f0;"></pre>
   </div>
 
   <script>
-    const MAO_OBRA_M2 = 120;
-    const IMPOSTOS_PERCENT = 0.17;
-
-    let logs = [];
-
-    function log(message, type = 'info') {
-      const timestamp = new Date().toLocaleTimeString();
-      logs.push({ message, type, timestamp });
-
-      const consoleEl = document.getElementById('console');
-      const logEl = document.createElement('div');
-      logEl.className = `log ${type}`;
-      logEl.textContent = `[${timestamp}] ${message}`;
-      consoleEl.appendChild(logEl);
-      consoleEl.scrollTop = consoleEl.scrollHeight;
+    function log(msg) {
+      const c = document.getElementById('console');
+      c.textContent += msg + '\n';
+      console.log(msg);
     }
 
-    function formatarMoeda(valor) {
-      return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
+    log('✅ Script carregado!');
 
-    function calcular() {
-      log('🔄 Iniciando cálculo...', 'info');
+    window.testar = function() {
+      log('🔄 testar() chamada!');
 
-      const precoBaseStelion = parseFloat(document.getElementById('precoBaseStelion').value) || 0;
-      const precoBaseLilit = parseFloat(document.getElementById('precoBaseLilit').value) || 0;
+      const metros = parseFloat(document.getElementById('metrosPiso').value) || 0;
+      log(`   Metros: ${metros}`);
 
-      const metrosPiso = parseFloat(document.getElementById('metrosPiso').value) || 0;
-      const metrosParede = parseFloat(document.getElementById('metrosParede').value) || 0;
-      const metrosTeto = parseFloat(document.getElementById('metrosTeto').value) || 0;
+      const comPerda = metros / 0.9;
+      log(`   Com perda: ${comPerda.toFixed(2)}`);
 
-      log(`  Preço Base STELION: R$ ${formatarMoeda(precoBaseStelion)}`, 'info');
-      log(`  Preço Base LILIT: R$ ${formatarMoeda(precoBaseLilit)}`, 'info');
-      log(`  Piso: ${metrosPiso} m²`, 'info');
-      log(`  Parede: ${metrosParede} m²`, 'info');
-      log(`  Teto: ${metrosTeto} m²`, 'info');
+      const preco = comPerda * 910;
+      log(`   Preço: R$ ${preco.toFixed(2)}`);
 
-      let valorTotalStelion = 0;
-      let valorTotalLilit = 0;
-      let metragemTotalStelion = 0;
-      let metragemTotalLilit = 0;
+      document.getElementById('valor').textContent = metros;
+      document.getElementById('comPerda').textContent = comPerda.toFixed(2);
+      document.getElementById('preco').textContent = 'R$ ' + preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 
-      // PISO → STELION (1.0x)
-      if (metrosPiso > 0) {
-        const metrosComPerda = metrosPiso / 0.9;
-        valorTotalStelion += metrosComPerda * precoBaseStelion * 1.0;
-        metragemTotalStelion += metrosComPerda;
-        log(`  Piso com perda: ${metrosComPerda.toFixed(2)} m² × R$ ${formatarMoeda(precoBaseStelion)} × 1.0 = R$ ${formatarMoeda(metrosComPerda * precoBaseStelion * 1.0)}`, 'success');
-      }
+      log('✅ DOM atualizado!\n');
+    };
 
-      // PAREDE → LILIT (0.8x)
-      if (metrosParede > 0) {
-        const metrosComPerda = metrosParede / 0.9;
-        valorTotalLilit += metrosComPerda * precoBaseLilit * 0.8;
-        metragemTotalLilit += metrosComPerda;
-        log(`  Parede com perda: ${metrosComPerda.toFixed(2)} m² × R$ ${formatarMoeda(precoBaseLilit)} × 0.8 = R$ ${formatarMoeda(metrosComPerda * precoBaseLilit * 0.8)}`, 'success');
-      }
-
-      // TETO → LILIT (0.8x)
-      if (metrosTeto > 0) {
-        const metrosComPerda = metrosTeto / 0.9;
-        valorTotalLilit += metrosComPerda * precoBaseLilit * 0.8;
-        metragemTotalLilit += metrosComPerda;
-        log(`  Teto com perda: ${metrosComPerda.toFixed(2)} m² × R$ ${formatarMoeda(precoBaseLilit)} × 0.8 = R$ ${formatarMoeda(metrosComPerda * precoBaseLilit * 0.8)}`, 'success');
-      }
-
-      log(`💰 Valores Totais Calculados:`, 'info');
-      log(`  STELION: R$ ${formatarMoeda(valorTotalStelion)} (${metragemTotalStelion.toFixed(2)} m²)`, 'success');
-      log(`  LILIT: R$ ${formatarMoeda(valorTotalLilit)} (${metragemTotalLilit.toFixed(2)} m²)`, 'success');
-
-      // Calcular composição STELION
-      const impostosStelion = valorTotalStelion * IMPOSTOS_PERCENT;
-      const maoObraStelion = MAO_OBRA_M2 * metragemTotalStelion;
-      const materiaisStelion = valorTotalStelion - impostosStelion - maoObraStelion;
-
-      document.getElementById('totalStelion').textContent = formatarMoeda(valorTotalStelion);
-      document.getElementById('metragemStelion').textContent = metragemTotalStelion.toFixed(2);
-      document.getElementById('materiaisStelion').textContent = formatarMoeda(materiaisStelion);
-      document.getElementById('maoObraStelion').textContent = formatarMoeda(maoObraStelion);
-      document.getElementById('impostosStelion').textContent = formatarMoeda(impostosStelion);
-
-      log(`📦 STELION Composição:`, 'info');
-      log(`  Materiais: R$ ${formatarMoeda(materiaisStelion)}`, 'info');
-      log(`  Mão de Obra: R$ ${formatarMoeda(maoObraStelion)}`, 'info');
-      log(`  Impostos: R$ ${formatarMoeda(impostosStelion)}`, 'info');
-
-      // Calcular composição LILIT
-      const impostosLilit = valorTotalLilit * IMPOSTOS_PERCENT;
-      const maoObraLilit = MAO_OBRA_M2 * metragemTotalLilit;
-      const materiaisLilit = valorTotalLilit - impostosLilit - maoObraLilit;
-
-      document.getElementById('totalLilit').textContent = formatarMoeda(valorTotalLilit);
-      document.getElementById('metragemLilit').textContent = metragemTotalLilit.toFixed(2);
-      document.getElementById('materiaisLilit').textContent = formatarMoeda(materiaisLilit);
-      document.getElementById('maoObraLilit').textContent = formatarMoeda(maoObraLilit);
-      document.getElementById('impostosLilit').textContent = formatarMoeda(impostosLilit);
-
-      log(`📦 LILIT Composição:`, 'info');
-      log(`  Materiais: R$ ${formatarMoeda(materiaisLilit)}`, 'info');
-      log(`  Mão de Obra: R$ ${formatarMoeda(maoObraLilit)}`, 'info');
-      log(`  Impostos: R$ ${formatarMoeda(impostosLilit)}`, 'info');
-
-      // Totais gerais
-      const metragemGeral = metragemTotalStelion + metragemTotalLilit;
-      const valorGeral = valorTotalStelion + valorTotalLilit;
-
-      document.getElementById('totalGeral').textContent = formatarMoeda(valorGeral);
-      document.getElementById('metragemGeral').textContent = metragemGeral.toFixed(2);
-
-      log(`📈 TOTAL GERAL: R$ ${formatarMoeda(valorGeral)} (${metragemGeral.toFixed(2)} m²)`, 'success');
-      log('✅ Cálculo concluído!', 'success');
-      log('─'.repeat(80), 'info');
-    }
-
-    // Calcular valores iniciais
-    log('🚀 Sistema de teste inicializado', 'success');
-    log('─'.repeat(80), 'info');
-    calcular();
+    log('✅ Função testar() definida!');
+    log('🚀 Teste se digitar no campo funciona...\n');
   </script>
 </body>
 </html>

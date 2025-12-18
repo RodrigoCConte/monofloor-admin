@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processador de Vídeos - Monofloor</title>
+    <meta name="description" content="Sistema de processamento de vídeos de visita técnica com IA">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: #000;
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 60px;
+            padding: 40px 0;
+        }
+
+        .logo {
+            width: 200px;
+            height: auto;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 300;
+            letter-spacing: -0.5px;
+            margin-bottom: 12px;
+        }
+
+        .subtitle {
+            color: #999;
+            font-size: 14px;
+            font-weight: 300;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 400;
+            margin-bottom: 8px;
+            color: #ccc;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input[type="text"],
+        input[type="date"],
+        select {
+            width: 100%;
+            padding: 14px 16px;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 15px;
+            transition: all 0.2s;
+            outline: none;
+        }
+
+        select {
+            cursor: pointer;
+        }
+
+        select option {
+            background: #111;
+            color: #fff;
+        }
+
+        input[type="text"]:focus,
+        input[type="date"]:focus,
+        select:focus {
+            border-color: #666;
+            background: #1a1a1a;
+        }
+
+        input[type="text"]::placeholder {
+            color: #555;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .file-upload {
+            margin-top: 8px;
+            padding: 40px 20px;
+            border: 2px dashed #333;
+            border-radius: 4px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #0a0a0a;
+        }
+
+        .file-upload:hover {
+            border-color: #666;
+            background: #111;
+        }
+
+        .file-upload input {
+            display: none;
+        }
+
+        .file-upload-text {
+            font-size: 15px;
+            margin-bottom: 8px;
+        }
+
+        .file-upload-hint {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .file-list {
+            margin-top: 16px;
+            padding: 16px;
+            background: #0a0a0a;
+            border: 1px solid #222;
+            border-radius: 4px;
+        }
+
+        .file-list-title {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .file-item {
+            padding: 12px;
+            margin: 8px 0;
+            background: #111;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+        }
+
+        .file-size {
+            color: #666;
+            font-size: 12px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            background: #fff;
+            border: none;
+            border-radius: 4px;
+            color: #000;
+            font-weight: 500;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 32px;
+            letter-spacing: 0.3px;
+        }
+
+        .btn:hover:not(:disabled) {
+            background: #f0f0f0;
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 24px;
+            padding: 16px;
+            border-radius: 4px;
+            font-size: 14px;
+            display: none;
+            border: 1px solid;
+        }
+
+        .status.info {
+            background: #0a1929;
+            border-color: #1e3a5f;
+            color: #90caf9;
+        }
+
+        .status.success {
+            background: #0d2818;
+            border-color: #1e5128;
+            color: #81c784;
+        }
+
+        .status.error {
+            background: #2d0a0a;
+            border-color: #5f1e1e;
+            color: #ef5350;
+        }
+
+        .progress {
+            margin-top: 16px;
+            height: 2px;
+            background: #222;
+            border-radius: 1px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: #fff;
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .info-box {
+            margin-top: 48px;
+            padding: 24px;
+            background: #0a0a0a;
+            border: 1px solid #222;
+            border-radius: 4px;
+        }
+
+        .info-box h3 {
+            font-size: 14px;
+            font-weight: 400;
+            margin-bottom: 16px;
+            color: #ccc;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-box ul {
+            list-style: none;
+        }
+
+        .info-box li {
+            padding: 8px 0;
+            color: #888;
+            font-size: 13px;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .info-box li::before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #666;
+        }
+
+        @media (max-width: 600px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header {
+                padding: 20px 0;
+                margin-bottom: 40px;
+            }
+
+            .logo {
+                width: 150px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAGl3uuilMmSmSiGWdiV9ySwKq70nNEX-E&libraries=places&language=pt-BR"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="logo.png" alt="Monofloor" class="logo">
+            <h1>Processador de Vídeos</h1>
+            <p class="subtitle">Sistema de Relatórios Técnicos com IA</p>
+        </div>
+
+        <form id="videoForm">
+            <div class="form-group">
+                <label>Cliente</label>
+                <input type="text" id="clientName" required placeholder="Ex: Erika Casão">
+            </div>
+
+            <div class="grid">
+                <div class="form-group">
+                    <label>Técnico</label>
+                    <select id="technicianName" required>
+                        <option value="">Selecione o técnico</option>
+                        <option value="Nathan">Nathan</option>
+                        <option value="Marcio">Marcio</option>
+                        <option value="Braiam">Braiam</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Data da Visita</label>
+                    <input type="date" id="visitDate" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Endereço da Obra</label>
+                <input type="text" id="address" required placeholder="Digite o endereço...">
+            </div>
+
+            <div class="form-group">
+                <label>Vídeos da Visita</label>
+                <div class="file-upload" onclick="document.getElementById('videoFiles').click()">
+                    <input type="file" id="videoFiles" accept="video/*" multiple>
+                    <div class="file-upload-text">Clique para selecionar</div>
+                    <div class="file-upload-hint">Aceita múltiplos vídeos (MP4, MOV, AVI)</div>
+                </div>
+                <div id="fileList" class="file-list" style="display: none;"></div>
+            </div>
+
+            <button type="submit" class="btn" id="submitBtn">
+                Gerar Relatório
+            </button>
+        </form>
+
+        <div id="status" class="status"></div>
+        <div class="progress" id="progress">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+
+        <div class="info-box">
+            <h3>Como funciona</h3>
+            <ul>
+                <li>Extrai áudio dos vídeos automaticamente</li>
+                <li>Transcreve com Whisper (OpenAI)</li>
+                <li>Analisa com Claude Opus 4.5</li>
+                <li>Gera relatório DOCX profissional</li>
+                <li>Download automático</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://devoted-wholeness-production.up.railway.app/api/admin/reports';
+        let selectedFiles = [];
+
+        // Inicializar Google Maps Autocomplete
+        function initAutocomplete() {
+            const addressInput = document.getElementById('address');
+            if (typeof google !== 'undefined' && google.maps && google.maps.places) {
+                // Tentar obter localização do usuário
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            // Com localização: priorizar endereços próximos
+                            const userLocation = new google.maps.LatLng(
+                                position.coords.latitude,
+                                position.coords.longitude
+                            );
+
+                            // Criar área de priorização (aproximadamente 5km em cada direção)
+                            const defaultBounds = new google.maps.LatLngBounds(
+                                new google.maps.LatLng(
+                                    position.coords.latitude - 0.045,  // ~5km ao sul
+                                    position.coords.longitude - 0.045  // ~5km ao oeste
+                                ),
+                                new google.maps.LatLng(
+                                    position.coords.latitude + 0.045,  // ~5km ao norte
+                                    position.coords.longitude + 0.045  // ~5km ao leste
+                                )
+                            );
+
+                            const autocomplete = new google.maps.places.Autocomplete(addressInput, {
+                                componentRestrictions: { country: 'br' },
+                                fields: ['formatted_address', 'geometry'],
+                                types: ['address'],
+                                bounds: defaultBounds,
+                                strictBounds: false // Permite resultados fora, mas prioriza dentro
+                            });
+                        },
+                        (error) => {
+                            // Sem localização: autocomplete normal
+                            console.log('Geolocalização negada, usando autocomplete sem priorização');
+                            const autocomplete = new google.maps.places.Autocomplete(addressInput, {
+                                componentRestrictions: { country: 'br' },
+                                fields: ['formatted_address', 'geometry'],
+                                types: ['address']
+                            });
+                        }
+                    );
+                } else {
+                    // Navegador não suporta geolocalização
+                    const autocomplete = new google.maps.places.Autocomplete(addressInput, {
+                        componentRestrictions: { country: 'br' },
+                        fields: ['formatted_address', 'geometry'],
+                        types: ['address']
+                    });
+                }
+            }
+        }
+
+        // Inicializar quando a página carregar
+        window.addEventListener('load', initAutocomplete);
+
+        document.getElementById('visitDate').valueAsDate = new Date();
+
+        document.getElementById('videoFiles').addEventListener('change', (e) => {
+            selectedFiles = Array.from(e.target.files);
+            const fileList = document.getElementById('fileList');
+
+            if (selectedFiles.length > 0) {
+                fileList.style.display = 'block';
+                fileList.innerHTML = `
+                    <div class="file-list-title">${selectedFiles.length} vídeo(s) selecionado(s)</div>
+                    ${selectedFiles.map((f, i) => `
+                        <div class="file-item">
+                            <span>${f.name}</span>
+                            <span class="file-size">${(f.size / 1024 / 1024).toFixed(2)} MB</span>
+                        </div>
+                    `).join('')}
+                `;
+            } else {
+                fileList.style.display = 'none';
+            }
+        });
+
+        document.getElementById('videoForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (selectedFiles.length === 0) {
+                showStatus('error', 'Selecione pelo menos um vídeo');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('projectName', document.getElementById('clientName').value);
+            formData.append('technicianName', document.getElementById('technicianName').value);
+            formData.append('visitDate', document.getElementById('visitDate').value);
+            formData.append('clientName', document.getElementById('clientName').value);
+            formData.append('address', document.getElementById('address').value);
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Enviando...';
+
+            showStatus('info', 'Preparando upload...');
+            showProgress();
+            setProgress(0);
+
+            const endpoint = selectedFiles.length === 1
+                ? `${API_URL}/simple-video`
+                : `${API_URL}/simple-video-multiple`;
+
+            if (selectedFiles.length === 1) {
+                formData.append('video', selectedFiles[0]);
+            } else {
+                selectedFiles.forEach(file => {
+                    formData.append('videos', file);
+                });
+            }
+
+            // Calcular tamanho total
+            const totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+            const totalMB = (totalSize / 1024 / 1024).toFixed(1);
+
+            console.log('Enviando para:', endpoint, 'Tamanho:', totalMB, 'MB');
+
+            // Usar XMLHttpRequest para progresso REAL de upload
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', endpoint);
+            xhr.responseType = 'blob';
+            xhr.timeout = 600000; // 10 minutos
+
+            let uploadComplete = false;
+            let processingStartTime = null;
+
+            // Progresso de UPLOAD (0-50%)
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 50);
+                    const loadedMB = (e.loaded / 1024 / 1024).toFixed(1);
+                    setProgress(percent);
+                    showStatus('info', `Enviando: ${loadedMB}MB / ${totalMB}MB (${percent * 2}%)`);
+                }
+            };
+
+            xhr.upload.onload = () => {
+                uploadComplete = true;
+                processingStartTime = Date.now();
+                setProgress(50);
+                showStatus('info', 'Upload completo! Processando no servidor...');
+                submitBtn.textContent = 'Processando...';
+
+                // Simular progresso de processamento (50-95%)
+                simulateProcessing();
+            };
+
+            xhr.upload.onerror = () => {
+                showStatus('error', 'Erro no upload. Verifique sua conexão.');
+                hideProgress();
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Gerar Relatório';
+            };
+
+            xhr.ontimeout = () => {
+                showStatus('error', 'Timeout: o servidor demorou mais de 10 minutos.');
+                hideProgress();
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Gerar Relatório';
+            };
+
+            xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    const blob = xhr.response;
+
+                    if (blob.size < 1000) {
+                        // Provavelmente é um erro JSON
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            console.error('Resposta inesperada:', reader.result);
+                            showStatus('error', 'Erro do servidor: ' + reader.result.substring(0, 200));
+                            hideProgress();
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Gerar Relatório';
+                        };
+                        reader.readAsText(blob);
+                        return;
+                    }
+
+                    // Sucesso! Download do DOCX
+                    setProgress(100);
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    const timestamp = new Date().toISOString().slice(0, 10);
+                    a.download = `relatorio-${document.getElementById('clientName').value.replace(/\s+/g, '-')}-${timestamp}.docx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+
+                    const processingTime = processingStartTime ? Math.round((Date.now() - processingStartTime) / 1000) : 0;
+                    showStatus('success', `Relatório gerado com sucesso! (${processingTime}s de processamento)`);
+
+                    setTimeout(() => {
+                        hideProgress();
+                        document.getElementById('videoForm').reset();
+                        selectedFiles = [];
+                        document.getElementById('fileList').style.display = 'none';
+                        document.getElementById('visitDate').valueAsDate = new Date();
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Gerar Relatório';
+                    }, 3000);
+                } else {
+                    // Erro HTTP
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        let errorMsg = `Erro HTTP ${xhr.status}`;
+                        try {
+                            const errorJson = JSON.parse(reader.result);
+                            errorMsg = errorJson.message || errorJson.error || reader.result;
+                        } catch {
+                            errorMsg = reader.result || `Erro HTTP ${xhr.status}`;
+                        }
+                        showStatus('error', `Erro: ${errorMsg}`);
+                        hideProgress();
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Gerar Relatório';
+                    };
+                    reader.readAsText(xhr.response);
+                }
+            };
+
+            xhr.onerror = () => {
+                showStatus('error', 'Erro de conexão. Verifique sua internet.');
+                hideProgress();
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Gerar Relatório';
+            };
+
+            xhr.send(formData);
+        });
+
+        function simulateProcessing() {
+            const steps = [
+                { progress: 55, msg: 'Extraindo áudio com FFmpeg...' },
+                { progress: 65, msg: 'Transcrevendo com Whisper...' },
+                { progress: 80, msg: 'Analisando com Claude Opus 4.5...' },
+                { progress: 90, msg: 'Gerando documento DOCX...' }
+            ];
+
+            let stepIndex = 0;
+            const interval = setInterval(() => {
+                if (stepIndex < steps.length) {
+                    const step = steps[stepIndex];
+                    setProgress(step.progress);
+                    showStatus('info', step.msg);
+                    stepIndex++;
+                } else {
+                    clearInterval(interval);
+                }
+            }, 15000); // 15 segundos entre cada etapa
+        }
+
+        function showStatus(type, message) {
+            const status = document.getElementById('status');
+            status.className = `status ${type}`;
+            status.textContent = message;
+            status.style.display = 'block';
+        }
+
+        function showProgress() {
+            document.getElementById('progress').style.display = 'block';
+        }
+
+        function hideProgress() {
+            document.getElementById('progress').style.display = 'none';
+            document.getElementById('progressBar').style.width = '0%';
+        }
+
+        function setProgress(percent) {
+            document.getElementById('progressBar').style.width = `${percent}%`;
+        }
+    </script>
+</body>
+</html>

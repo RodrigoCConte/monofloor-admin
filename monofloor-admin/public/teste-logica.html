@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Teste da Lógica de Cálculo</title>
+  <style>
+    body {
+      font-family: Arial;
+      padding: 20px;
+      background: #000;
+      color: #fff;
+    }
+    input, select {
+      padding: 10px;
+      margin: 5px;
+      background: #222;
+      color: #fff;
+      border: 1px solid #444;
+      font-size: 16px;
+    }
+    .result {
+      background: #1a1a1a;
+      padding: 20px;
+      margin: 20px 0;
+      border: 1px solid #333;
+    }
+    .big-number {
+      font-size: 48px;
+      font-weight: bold;
+      color: #c9a962;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 Teste Simplificado - Calculadora de Prazos</h1>
+
+  <div>
+    <label>Metragem (m²): </label>
+    <input type="number" id="metros" value="100" oninput="testar()" />
+  </div>
+
+  <div>
+    <label>Prestadores: </label>
+    <input type="number" id="prestadores" value="" placeholder="Auto" oninput="testar()" />
+  </div>
+
+  <div>
+    <label>Tipo: </label>
+    <select id="tipo" onchange="testar()">
+      <option value="piso">🪨 Apenas Piso</option>
+      <option value="misto">🧱 Piso + Paredes (30% menos produtivo)</option>
+    </select>
+  </div>
+
+  <div class="result">
+    <h3>RESULTADO:</h3>
+    <div>Produção diária: <span id="producao" style="color: #0f0;">0</span></div>
+    <div>Dias de instalação: <span id="diasInst" style="color: #0f0;">0</span></div>
+    <div>Dias de cura: <span style="color: #0f0;">2</span></div>
+    <div style="margin-top: 20px;">
+      <div style="color: #666;">Prazo Total Estimado</div>
+      <div class="big-number" id="total">0</div>
+      <div style="color: #666;">dias úteis</div>
+    </div>
+  </div>
+
+  <div class="result">
+    <h3>CONSOLE:</h3>
+    <pre id="console" style="color: #0f0; font-size: 12px;"></pre>
+  </div>
+
+  <script>
+    function log(msg) {
+      const c = document.getElementById('console');
+      c.textContent += msg + '\n';
+      console.log(msg);
+    }
+
+    log('✅ Script carregado!\n');
+
+    // Tabela de produtividade REAL
+    const tabelaProdutividade = [
+      { area: 50, prestadores: 2, dias: 5, m2PorHomemDia: 5.0 },
+      { area: 80, prestadores: 2, dias: 5, m2PorHomemDia: 8.0 },
+      { area: 150, prestadores: 3, dias: 8, m2PorHomemDia: 6.25 },
+      { area: 200, prestadores: 3, dias: 8, m2PorHomemDia: 8.33 },
+      { area: 250, prestadores: 4, dias: 10, m2PorHomemDia: 6.25 },
+      { area: 300, prestadores: 4, dias: 12, m2PorHomemDia: 6.25 },
+      { area: 350, prestadores: 4, dias: 12, m2PorHomemDia: 7.29 },
+      { area: 400, prestadores: 5, dias: 11, m2PorHomemDia: 7.27 },
+      { area: 500, prestadores: 5, dias: 12, m2PorHomemDia: 8.33 },
+      { area: 600, prestadores: 6, dias: 12, m2PorHomemDia: 8.33 },
+      { area: 700, prestadores: 6, dias: 16, m2PorHomemDia: 7.29 },
+      { area: 800, prestadores: 7, dias: 17, m2PorHomemDia: 6.72 },
+      { area: 900, prestadores: 8, dias: 18, m2PorHomemDia: 6.25 },
+      { area: 1000, prestadores: 9, dias: 20, m2PorHomemDia: 5.56 },
+      { area: 1200, prestadores: 12, dias: 20, m2PorHomemDia: 5.0 },
+    ];
+
+    const DIAS_CURA = 2;
+    const REDUCAO_PAREDE = 0.70;
+
+    function buscarJanela(area) {
+      log('🔍 Buscando janela para: ' + area + 'm²');
+
+      // Buscar valor exato
+      const exato = tabelaProdutividade.find(d => d.area === area);
+      if (exato) {
+        log('✅ Valor EXATO encontrado: ' + exato.area + 'm²');
+        return exato;
+      }
+
+      // Menor que 50m²
+      if (area < 50) {
+        log('⚠️ Menor que 50m² - usando janela de 50m²');
+        return tabelaProdutividade[0];
+      }
+
+      // Maior que 1200m²
+      if (area > 1200) {
+        log('⚠️ Maior que 1200m² - usando janela de 1200m²');
+        return tabelaProdutividade[tabelaProdutividade.length - 1];
+      }
+
+      // Encontrar o MAIS PRÓXIMO
+      let maisProximo = tabelaProdutividade[0];
+      let menorDiferenca = Math.abs(area - tabelaProdutividade[0].area);
+
+      for (let i = 1; i < tabelaProdutividade.length; i++) {
+        const diferenca = Math.abs(area - tabelaProdutividade[i].area);
+        if (diferenca < menorDiferenca) {
+          menorDiferenca = diferenca;
+          maisProximo = tabelaProdutividade[i];
+        }
+      }
+
+      log('✅ Janela encontrada (mais próximo): ' + maisProximo.area + 'm²');
+      return maisProximo;
+    }
+
+    window.testar = function() {
+      log('\n📊 === CALCULANDO PRAZO ===');
+
+      const m2 = parseFloat(document.getElementById('metros').value) || 0;
+      let prestadores = parseInt(document.getElementById('prestadores').value);
+      const tipo = document.getElementById('tipo').value;
+      const ehParede = (tipo === 'misto');
+
+      log('📏 Metragem: ' + m2 + 'm²');
+      log('👷 Prestadores (input): ' + (prestadores || 'Auto'));
+      log('🏗️ Tipo: ' + tipo + ' → ' + (ehParede ? 'COM REDUÇÃO (-30%)' : 'SEM REDUÇÃO'));
+
+      if (m2 <= 0) {
+        log('⚠️ Metragem inválida - zerando campos\n');
+        document.getElementById('producao').textContent = '0 m²/dia';
+        document.getElementById('diasInst').textContent = '0 dias';
+        document.getElementById('total').textContent = '0';
+        return;
+      }
+
+      // Buscar janela (VALORES FIXOS)
+      const janela = buscarJanela(m2);
+
+      // Sugerir time se vazio
+      if (!prestadores || prestadores <= 0) {
+        prestadores = janela.prestadores;
+        document.getElementById('prestadores').value = prestadores;
+        log('💡 Sugestão automática de time: ' + prestadores + ' prestadores');
+      }
+
+      // Calcular produtividade
+      let producaoM2PorDia = janela.m2PorHomemDia * prestadores;
+      log('📈 Produção base: ' + janela.m2PorHomemDia + ' m²/H-D × ' + prestadores + ' = ' + producaoM2PorDia.toFixed(1) + ' m²/dia');
+
+      // Aplicar redução se parede
+      if (ehParede) {
+        producaoM2PorDia = producaoM2PorDia * REDUCAO_PAREDE;
+        log('📉 Com redução de parede (70%): ' + producaoM2PorDia.toFixed(1) + ' m²/dia');
+      }
+
+      let diasInstalacao = Math.ceil(m2 / producaoM2PorDia);
+      log('⏱️ Dias de instalação: ' + diasInstalacao + ' dias');
+
+      // Total = instalação + cura
+      const total = diasInstalacao + DIAS_CURA;
+      log('🎯 TOTAL: ' + diasInstalacao + ' + ' + DIAS_CURA + ' (cura) = ' + total + ' dias');
+
+      // Atualizar interface
+      document.getElementById('producao').textContent = producaoM2PorDia.toFixed(1) + ' m²/dia';
+      document.getElementById('diasInst').textContent = diasInstalacao + ' dias';
+      document.getElementById('total').textContent = total;
+
+      log('✅ Interface atualizada!');
+      log('========================\n');
+    };
+
+    log('✅ Função testar() definida!');
+    log('🚀 Teste se digitar valores funciona...\n');
+
+    // Calcular inicial
+    testar();
+  </script>
+</body>
+</html>

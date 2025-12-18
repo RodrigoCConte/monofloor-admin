@@ -1,6 +1,6 @@
 // API Configuration
 // const API_URL = 'https://devoted-wholeness-production.up.railway.app'; // Production (Railway needs DATABASE_URL fix)
-const API_URL = 'http://localhost:3000'; // Local server for testing
+const API_URL = 'http://localhost:3001'; // Local server for testing
 
 // =============================================
 // CHARACTER ICONS BY ROLE

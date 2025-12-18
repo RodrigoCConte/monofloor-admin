@@ -6,7 +6,7 @@
 import { io, Socket } from 'socket.io-client';
 import { ref } from 'vue';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 // Socket instance
 let socket: Socket | null = null;

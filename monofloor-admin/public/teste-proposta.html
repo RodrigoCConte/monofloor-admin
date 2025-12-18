@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teste - Gerador de Proposta</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+      color: #ffffff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: #1a1a1a;
+      border: 2px solid #333333;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 600px;
+      width: 100%;
+    }
+
+    h1 {
+      color: #c9a962;
+      font-size: 28px;
+      margin-bottom: 30px;
+      text-align: center;
+    }
+
+    .test-data {
+      background: #0a0a0a;
+      border: 1px solid #333333;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 30px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    button {
+      width: 100%;
+      padding: 16px 32px;
+      background: linear-gradient(135deg, #c9a962 0%, #a88b4a 100%);
+      color: #000000;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(201, 169, 98, 0.4);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-top: 20px;
+      padding: 16px;
+      border-radius: 8px;
+      text-align: center;
+      font-weight: 600;
+      display: none;
+    }
+
+    .status.success {
+      background: rgba(34, 197, 94, 0.2);
+      border: 1px solid #22c55e;
+      color: #22c55e;
+      display: block;
+    }
+
+    .status.error {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid #ef4444;
+      color: #ef4444;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 Teste - Gerador de Proposta</h1>
+
+    <div class="test-data">
+      <strong style="color: #c9a962;">DADOS DE TESTE (Toggle STELION):</strong><br><br>
+      <strong>STELION™ (Piso + Superfícies Especiais):</strong><br>
+      - Área: 100,00 m² (Piso 70m² + Bancadas/Escadas 30m²)<br>
+      - Materiais: R$ 50.000,00<br>
+      - Instalação: R$ 12.000,00<br>
+      - Impostos: R$ 15.470,00<br>
+      - Total: R$ 77.470,00<br>
+      - Por m²: R$ 774,70<br><br>
+
+      <strong>LILIT™ (Parede + Teto):</strong><br>
+      - Área: 50,00 m²<br>
+      - Materiais: R$ 20.000,00<br>
+      - Instalação: R$ 6.000,00<br>
+      - Impostos: R$ 4.420,00<br>
+      - Total: R$ 30.420,00<br>
+      - Por m²: R$ 608,40<br><br>
+
+      <strong style="color: #c9a962;">TOTAIS:</strong><br>
+      - Área Total: 150,00 m²<br>
+      - Materiais: R$ 70.000,00<br>
+      - Instalação: R$ 18.000,00<br>
+      - Impostos: R$ 19.890,00<br>
+      - <strong>VALOR TOTAL: R$ 107.890,00</strong>
+    </div>
+
+    <button id="btnGerar" onclick="gerarProposta()">
+      📄 Gerar Proposta com Dados de Teste
+    </button>
+
+    <div id="status" class="status"></div>
+  </div>
+
+  <script>
+    async function gerarProposta() {
+      const btn = document.getElementById('btnGerar');
+      const status = document.getElementById('status');
+
+      try {
+        btn.disabled = true;
+        btn.textContent = '⏳ Gerando proposta...';
+        status.className = 'status';
+        status.style.display = 'none';
+
+        // Dados de teste limpos
+        const testData = {
+          // STELION
+          metragemTotalStelion: 100.00,
+          materiaisStelion: 50000.00,
+          maoObraStelion: 12000.00,
+          impostosStelion: 15470.00,
+          valorTotalStelion: 77470.00,
+
+          // LILIT
+          metragemTotalLilit: 50.00,
+          materiaisLilit: 20000.00,
+          maoObraLilit: 6000.00,
+          impostosLilit: 4420.00,
+          valorTotalLilit: 30420.00,
+
+          // TOTAIS
+          metragemTotal: 150.00,
+          materiaisTotal: 70000.00,
+          maoObraTotal: 18000.00,
+          impostosTotal: 19890.00,
+          valorTotal: 107890.00,
+
+          // PREÇOS BASE
+          precoBaseStelion: 910,
+          precoBaseLilit: 590,
+
+          // SUPERFÍCIES (Toggle STELION: piso vai para STELION, parede/teto vai para LILIT)
+          pisoStelion: 70.00,      // Piso vai para STELION
+          paredeStelion: 0,        // Parede NUNCA vai para STELION
+          pisoLilit: 0,            // Piso NÃO vai para LILIT (toggle STELION)
+          paredeLilit: 50.00,      // Parede + Teto vai para LILIT
+        };
+
+        console.log('📊 Enviando dados:', testData);
+
+        const response = await fetch('http://localhost:3001/api/proposals/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(testData),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Erro ao gerar proposta');
+        }
+
+        // Download do PDF
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Proposta-Teste-${Date.now()}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        status.className = 'status success';
+        status.textContent = '✅ Proposta gerada com sucesso!';
+        console.log('✅ Download concluído!');
+
+      } catch (error) {
+        console.error('❌ Erro:', error);
+        status.className = 'status error';
+        status.textContent = '❌ Erro: ' + error.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '📄 Gerar Proposta com Dados de Teste';
+      }
+    }
+  </script>
+</body>
+</html>

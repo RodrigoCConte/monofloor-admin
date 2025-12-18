@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>DEBUG TEST</title>
+</head>
+<body>
+  <h1>TEST - Digite aqui:</h1>
+  <input type="number" id="test" value="0" oninput="window.testFunc()" />
+  <p>Resultado: <span id="result">0</span></p>
+
+  <script>
+    console.log('1. Script loaded');
+
+    window.testFunc = function() {
+      console.log('2. testFunc called!');
+      const val = document.getElementById('test').value;
+      console.log('3. Value:', val);
+      document.getElementById('result').textContent = val;
+      console.log('4. Updated!');
+    };
+
+    console.log('5. Function defined');
+  </script>
+</body>
+</html>

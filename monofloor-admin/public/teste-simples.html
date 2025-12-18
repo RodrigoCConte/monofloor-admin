@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>TESTE ISOLADO - Calculadora</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      padding: 40px;
+      background: #000;
+      color: #fff;
+    }
+    h1 { margin-bottom: 30px; color: #c9a962; }
+    .campo {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #999;
+    }
+    input, select {
+      width: 100%;
+      max-width: 400px;
+      padding: 12px;
+      font-size: 16px;
+      background: #222;
+      color: #fff;
+      border: 1px solid #444;
+      border-radius: 4px;
+    }
+    .resultado {
+      margin-top: 40px;
+      padding: 30px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      max-width: 500px;
+    }
+    .resultado h2 {
+      color: #c9a962;
+      margin-bottom: 20px;
+    }
+    .linha {
+      padding: 10px 0;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+    }
+    .linha:last-child {
+      border-bottom: none;
+      font-weight: bold;
+      font-size: 18px;
+      color: #c9a962;
+    }
+    .console {
+      margin-top: 30px;
+      padding: 20px;
+      background: #0a0a0a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      max-width: 800px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #0f0;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 TESTE ISOLADO - Calculadora de Prazos</h1>
+  <p style="color: #666; margin-bottom: 20px;">Digite nos campos abaixo. Deve atualizar INSTANTANEAMENTE.</p>
+
+  <div class="campo">
+    <label>Metragem Total (m²)</label>
+    <input type="number" id="metros" value="100" min="1">
+  </div>
+
+  <div class="campo">
+    <label>Número de Prestadores (deixe vazio para sugestão automática)</label>
+    <input type="number" id="prestadores" value="" placeholder="Auto" min="1">
+  </div>
+
+  <div class="campo">
+    <label>Tipo de Obra</label>
+    <select id="tipo">
+      <option value="piso">🪨 Apenas Piso</option>
+      <option value="misto">🧱 Piso + Paredes (30% menos produtivo)</option>
+    </select>
+  </div>
+
+  <div class="resultado">
+    <h2>📊 Resultado</h2>
+    <div class="linha">
+      <span>Produção diária da equipe</span>
+      <span id="producao">-</span>
+    </div>
+    <div class="linha">
+      <span>Dias de instalação</span>
+      <span id="diasInst">-</span>
+    </div>
+    <div class="linha">
+      <span>Dias de cura</span>
+      <span>2 dias</span>
+    </div>
+    <div class="linha">
+      <span>PRAZO TOTAL ESTIMADO</span>
+      <span id="total">-</span>
+    </div>
+  </div>
+
+  <div class="console">
+    <h3 style="color: #fff; margin-bottom: 10px;">Console de Debug:</h3>
+    <pre id="log"></pre>
+  </div>
+
+  <script>
+    console.log('🚀 Script carregando...');
+
+    // Função de log
+    function log(msg) {
+      const el = document.getElementById('log');
+      el.textContent += msg + '\n';
+      console.log(msg);
+    }
+
+    log('✅ Funções de log definidas');
+
+    // Tabela de produtividade REAL
+    const tabela = [
+      { area: 50, prestadores: 2, dias: 5, m2PorHomemDia: 5.0 },
+      { area: 80, prestadores: 2, dias: 5, m2PorHomemDia: 8.0 },
+      { area: 150, prestadores: 3, dias: 8, m2PorHomemDia: 6.25 },
+      { area: 200, prestadores: 3, dias: 8, m2PorHomemDia: 8.33 },
+      { area: 250, prestadores: 4, dias: 10, m2PorHomemDia: 6.25 },
+      { area: 300, prestadores: 4, dias: 12, m2PorHomemDia: 6.25 },
+      { area: 350, prestadores: 4, dias: 12, m2PorHomemDia: 7.29 },
+      { area: 400, prestadores: 5, dias: 11, m2PorHomemDia: 7.27 },
+      { area: 500, prestadores: 5, dias: 12, m2PorHomemDia: 8.33 },
+      { area: 600, prestadores: 6, dias: 12, m2PorHomemDia: 8.33 },
+      { area: 700, prestadores: 6, dias: 16, m2PorHomemDia: 7.29 },
+      { area: 800, prestadores: 7, dias: 17, m2PorHomemDia: 6.72 },
+      { area: 900, prestadores: 8, dias: 18, m2PorHomemDia: 6.25 },
+      { area: 1000, prestadores: 9, dias: 20, m2PorHomemDia: 5.56 },
+      { area: 1200, prestadores: 12, dias: 20, m2PorHomemDia: 5.0 },
+    ];
+
+    const DIAS_CURA = 2;
+    const REDUCAO_PAREDE = 0.70;
+
+    log('✅ Constantes definidas');
+
+    // Buscar janela (valor mais próximo)
+    function buscarJanela(area) {
+      log('🔍 Buscando janela para ' + area + 'm²...');
+
+      // Valor exato?
+      const exato = tabela.find(d => d.area === area);
+      if (exato) {
+        log('   ✅ Valor EXATO: ' + exato.area + 'm²');
+        return exato;
+      }
+
+      // Menor que 50?
+      if (area < 50) {
+        log('   ⚠️ Menor que 50m² - usando 50m²');
+        return tabela[0];
+      }
+
+      // Maior que 1200?
+      if (area > 1200) {
+        log('   ⚠️ Maior que 1200m² - usando 1200m²');
+        return tabela[tabela.length - 1];
+      }
+
+      // Achar o mais próximo
+      let maisProximo = tabela[0];
+      let menorDif = Math.abs(area - tabela[0].area);
+
+      for (let i = 1; i < tabela.length; i++) {
+        const dif = Math.abs(area - tabela[i].area);
+        if (dif < menorDif) {
+          menorDif = dif;
+          maisProximo = tabela[i];
+        }
+      }
+
+      log('   ✅ Mais próximo: ' + maisProximo.area + 'm²');
+      return maisProximo;
+    }
+
+    log('✅ Função buscarJanela() definida');
+
+    // Calcular prazo
+    function calcular() {
+      log('\n📊 === CALCULANDO ===');
+
+      const m2 = parseFloat(document.getElementById('metros').value) || 0;
+      let prest = parseInt(document.getElementById('prestadores').value);
+      const tipo = document.getElementById('tipo').value;
+      const ehParede = (tipo === 'misto');
+
+      log('   Metragem: ' + m2 + 'm²');
+      log('   Prestadores: ' + (prest || 'Auto'));
+      log('   Tipo: ' + tipo);
+
+      if (m2 <= 0) {
+        log('   ⚠️ Metragem inválida!');
+        document.getElementById('producao').textContent = '-';
+        document.getElementById('diasInst').textContent = '-';
+        document.getElementById('total').textContent = '-';
+        return;
+      }
+
+      // Buscar janela
+      const janela = buscarJanela(m2);
+
+      // Auto-sugerir time
+      if (!prest || prest <= 0) {
+        prest = janela.prestadores;
+        document.getElementById('prestadores').value = prest;
+        log('   💡 Auto-sugestão: ' + prest + ' prestadores');
+      }
+
+      // Calcular produção
+      let prod = janela.m2PorHomemDia * prest;
+      log('   📈 Produção base: ' + prod.toFixed(1) + ' m²/dia');
+
+      // Redução de parede?
+      if (ehParede) {
+        prod = prod * REDUCAO_PAREDE;
+        log('   📉 Com redução (70%): ' + prod.toFixed(1) + ' m²/dia');
+      }
+
+      // Calcular dias
+      const diasInst = Math.ceil(m2 / prod);
+      const total = diasInst + DIAS_CURA;
+
+      log('   ⏱️ Dias instalação: ' + diasInst);
+      log('   ⏱️ Dias cura: ' + DIAS_CURA);
+      log('   🎯 TOTAL: ' + total + ' dias');
+
+      // Atualizar interface
+      document.getElementById('producao').textContent = prod.toFixed(1) + ' m²/dia';
+      document.getElementById('diasInst').textContent = diasInst + ' dias';
+      document.getElementById('total').textContent = total + ' dias';
+
+      log('   ✅ Interface atualizada!\n');
+    }
+
+    log('✅ Função calcular() definida');
+
+    // Esperar DOM carregar
+    document.addEventListener('DOMContentLoaded', function() {
+      log('\n🎬 DOM CARREGADO!');
+
+      // Adicionar eventos
+      document.getElementById('metros').addEventListener('input', calcular);
+      document.getElementById('prestadores').addEventListener('input', calcular);
+      document.getElementById('tipo').addEventListener('change', calcular);
+
+      log('✅ Eventos adicionados aos campos');
+      log('🚀 Pronto! Digite nos campos acima.\n');
+
+      // Calcular inicial
+      calcular();
+    });
+
+    log('✅ Script configurado - aguardando DOM...');
+  </script>
+</body>
+</html>

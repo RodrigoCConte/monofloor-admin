@@ -34,6 +34,10 @@ app.use(express.static('public', {
 
 // Rota principal - serve o arquivo propostas.html
 app.get('/', (req, res) => {
+  // Disable cache for development
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.sendFile(path.join(__dirname, 'public', 'propostas.html'));
 });
 
