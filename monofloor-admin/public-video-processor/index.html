@@ -219,20 +219,40 @@
             color: #ef5350;
         }
 
-        .progress {
+        .progress-container {
             margin-top: 16px;
-            height: 2px;
-            background: #222;
-            border-radius: 1px;
-            overflow: hidden;
             display: none;
+        }
+
+        .progress {
+            height: 8px;
+            background: #222;
+            border-radius: 4px;
+            overflow: hidden;
         }
 
         .progress-bar {
             height: 100%;
-            background: #fff;
+            background: linear-gradient(90deg, #c9a962, #e0c080);
             width: 0%;
             transition: width 0.3s;
+        }
+
+        .progress-text {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #888;
+            text-align: center;
+        }
+
+        .phase-indicator {
+            margin-top: 12px;
+            padding: 8px 12px;
+            background: #111;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #c9a962;
+            text-align: center;
         }
 
         .info-box {
@@ -344,64 +364,77 @@
         </form>
 
         <div id="status" class="status"></div>
-        <div class="progress" id="progress">
-            <div class="progress-bar" id="progressBar"></div>
+        <div class="progress-container" id="progressContainer">
+            <div class="progress">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div class="progress-text" id="progressText">0%</div>
+            <div class="phase-indicator" id="phaseIndicator"></div>
         </div>
 
         <div class="info-box">
             <h3>Como funciona</h3>
             <ul>
-                <li>Extrai áudio dos vídeos automaticamente</li>
-                <li>Transcreve com Whisper (OpenAI)</li>
-                <li>Analisa com Claude Opus 4.5</li>
-                <li>Gera relatório DOCX profissional</li>
-                <li>Download automático</li>
+                <li>Upload dos vídeos para o servidor</li>
+                <li>Extração de áudio com FFmpeg</li>
+                <li>Transcrição com Whisper (OpenAI)</li>
+                <li>Análise com Claude Opus 4.5</li>
+                <li>Geração de relatório DOCX profissional</li>
             </ul>
         </div>
     </div>
 
     <script>
-        const API_URL = 'https://devoted-wholeness-production.up.railway.app/api/admin/reports';
+        // API URL - usar Railway em produção
+        const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:3000/api/admin/reports'
+            : 'https://devoted-wholeness-production.up.railway.app/api/admin/reports';
+
         let selectedFiles = [];
+        let currentJobId = null;
+        let pollInterval = null;
+
+        // Fases do processamento
+        const phases = {
+            'queued': 'Aguardando na fila...',
+            'starting': 'Iniciando processamento...',
+            'extracting': 'Extraindo áudio dos vídeos...',
+            'transcribing': 'Transcrevendo com Whisper...',
+            'analyzing': 'Analisando com Claude Opus 4.5...',
+            'generating': 'Gerando documento DOCX...',
+            'saving': 'Salvando arquivo...',
+            'completed': 'Processamento concluído!',
+            'failed': 'Erro no processamento'
+        };
 
         // Inicializar Google Maps Autocomplete
         function initAutocomplete() {
             const addressInput = document.getElementById('address');
             if (typeof google !== 'undefined' && google.maps && google.maps.places) {
-                // Tentar obter localização do usuário
                 if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
-                            // Com localização: priorizar endereços próximos
-                            const userLocation = new google.maps.LatLng(
-                                position.coords.latitude,
-                                position.coords.longitude
-                            );
-
-                            // Criar área de priorização (aproximadamente 5km em cada direção)
                             const defaultBounds = new google.maps.LatLngBounds(
                                 new google.maps.LatLng(
-                                    position.coords.latitude - 0.045,  // ~5km ao sul
-                                    position.coords.longitude - 0.045  // ~5km ao oeste
+                                    position.coords.latitude - 0.045,
+                                    position.coords.longitude - 0.045
                                 ),
                                 new google.maps.LatLng(
-                                    position.coords.latitude + 0.045,  // ~5km ao norte
-                                    position.coords.longitude + 0.045  // ~5km ao leste
+                                    position.coords.latitude + 0.045,
+                                    position.coords.longitude + 0.045
                                 )
                             );
 
-                            const autocomplete = new google.maps.places.Autocomplete(addressInput, {
+                            new google.maps.places.Autocomplete(addressInput, {
                                 componentRestrictions: { country: 'br' },
                                 fields: ['formatted_address', 'geometry'],
                                 types: ['address'],
                                 bounds: defaultBounds,
-                                strictBounds: false // Permite resultados fora, mas prioriza dentro
+                                strictBounds: false
                             });
                         },
-                        (error) => {
-                            // Sem localização: autocomplete normal
-                            console.log('Geolocalização negada, usando autocomplete sem priorização');
-                            const autocomplete = new google.maps.places.Autocomplete(addressInput, {
+                        () => {
+                            new google.maps.places.Autocomplete(addressInput, {
                                 componentRestrictions: { country: 'br' },
                                 fields: ['formatted_address', 'geometry'],
                                 types: ['address']
@@ -409,8 +442,7 @@
                         }
                     );
                 } else {
-                    // Navegador não suporta geolocalização
-                    const autocomplete = new google.maps.places.Autocomplete(addressInput, {
+                    new google.maps.places.Autocomplete(addressInput, {
                         componentRestrictions: { country: 'br' },
                         fields: ['formatted_address', 'geometry'],
                         types: ['address']
@@ -419,9 +451,7 @@
             }
         }
 
-        // Inicializar quando a página carregar
         window.addEventListener('load', initAutocomplete);
-
         document.getElementById('visitDate').valueAsDate = new Date();
 
         document.getElementById('videoFiles').addEventListener('change', (e) => {
@@ -432,7 +462,7 @@
                 fileList.style.display = 'block';
                 fileList.innerHTML = `
                     <div class="file-list-title">${selectedFiles.length} vídeo(s) selecionado(s)</div>
-                    ${selectedFiles.map((f, i) => `
+                    ${selectedFiles.map((f) => `
                         <div class="file-item">
                             <span>${f.name}</span>
                             <span class="file-size">${(f.size / 1024 / 1024).toFixed(2)} MB</span>
@@ -459,167 +489,156 @@
             formData.append('clientName', document.getElementById('clientName').value);
             formData.append('address', document.getElementById('address').value);
 
+            // Adicionar todos os vídeos
+            selectedFiles.forEach(file => {
+                formData.append('videos', file);
+            });
+
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = true;
             submitBtn.textContent = 'Enviando...';
 
-            showStatus('info', 'Preparando upload...');
+            showStatus('info', 'Enviando vídeos para o servidor...');
             showProgress();
-            setProgress(0);
+            setProgress(0, 'Preparando upload...');
 
-            const endpoint = selectedFiles.length === 1
-                ? `${API_URL}/simple-video`
-                : `${API_URL}/simple-video-multiple`;
+            try {
+                // Calcular tamanho total
+                const totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+                const totalMB = (totalSize / 1024 / 1024).toFixed(1);
 
-            if (selectedFiles.length === 1) {
-                formData.append('video', selectedFiles[0]);
-            } else {
-                selectedFiles.forEach(file => {
-                    formData.append('videos', file);
+                // Enviar para o endpoint assíncrono
+                const response = await fetch(`${API_URL}/video-job`, {
+                    method: 'POST',
+                    body: formData
                 });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `Erro HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                currentJobId = data.jobId;
+
+                console.log('Job criado:', currentJobId);
+                showStatus('info', 'Vídeos enviados! Processando...');
+                setProgress(10, 'Aguardando na fila...');
+
+                // Iniciar polling do status
+                startPolling();
+
+            } catch (error) {
+                console.error('Erro:', error);
+                showStatus('error', `Erro: ${error.message}`);
+                hideProgress();
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Gerar Relatório';
             }
-
-            // Calcular tamanho total
-            const totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
-            const totalMB = (totalSize / 1024 / 1024).toFixed(1);
-
-            console.log('Enviando para:', endpoint, 'Tamanho:', totalMB, 'MB');
-
-            // Usar XMLHttpRequest para progresso REAL de upload
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', endpoint);
-            xhr.responseType = 'blob';
-            xhr.timeout = 600000; // 10 minutos
-
-            let uploadComplete = false;
-            let processingStartTime = null;
-
-            // Progresso de UPLOAD (0-50%)
-            xhr.upload.onprogress = (e) => {
-                if (e.lengthComputable) {
-                    const percent = Math.round((e.loaded / e.total) * 50);
-                    const loadedMB = (e.loaded / 1024 / 1024).toFixed(1);
-                    setProgress(percent);
-                    showStatus('info', `Enviando: ${loadedMB}MB / ${totalMB}MB (${percent * 2}%)`);
-                }
-            };
-
-            xhr.upload.onload = () => {
-                uploadComplete = true;
-                processingStartTime = Date.now();
-                setProgress(50);
-                showStatus('info', 'Upload completo! Processando no servidor...');
-                submitBtn.textContent = 'Processando...';
-
-                // Simular progresso de processamento (50-95%)
-                simulateProcessing();
-            };
-
-            xhr.upload.onerror = () => {
-                showStatus('error', 'Erro no upload. Verifique sua conexão.');
-                hideProgress();
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Gerar Relatório';
-            };
-
-            xhr.ontimeout = () => {
-                showStatus('error', 'Timeout: o servidor demorou mais de 10 minutos.');
-                hideProgress();
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Gerar Relatório';
-            };
-
-            xhr.onload = () => {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                    const blob = xhr.response;
-
-                    if (blob.size < 1000) {
-                        // Provavelmente é um erro JSON
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                            console.error('Resposta inesperada:', reader.result);
-                            showStatus('error', 'Erro do servidor: ' + reader.result.substring(0, 200));
-                            hideProgress();
-                            submitBtn.disabled = false;
-                            submitBtn.textContent = 'Gerar Relatório';
-                        };
-                        reader.readAsText(blob);
-                        return;
-                    }
-
-                    // Sucesso! Download do DOCX
-                    setProgress(100);
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    const timestamp = new Date().toISOString().slice(0, 10);
-                    a.download = `relatorio-${document.getElementById('clientName').value.replace(/\s+/g, '-')}-${timestamp}.docx`;
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-
-                    const processingTime = processingStartTime ? Math.round((Date.now() - processingStartTime) / 1000) : 0;
-                    showStatus('success', `Relatório gerado com sucesso! (${processingTime}s de processamento)`);
-
-                    setTimeout(() => {
-                        hideProgress();
-                        document.getElementById('videoForm').reset();
-                        selectedFiles = [];
-                        document.getElementById('fileList').style.display = 'none';
-                        document.getElementById('visitDate').valueAsDate = new Date();
-                        submitBtn.disabled = false;
-                        submitBtn.textContent = 'Gerar Relatório';
-                    }, 3000);
-                } else {
-                    // Erro HTTP
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        let errorMsg = `Erro HTTP ${xhr.status}`;
-                        try {
-                            const errorJson = JSON.parse(reader.result);
-                            errorMsg = errorJson.message || errorJson.error || reader.result;
-                        } catch {
-                            errorMsg = reader.result || `Erro HTTP ${xhr.status}`;
-                        }
-                        showStatus('error', `Erro: ${errorMsg}`);
-                        hideProgress();
-                        submitBtn.disabled = false;
-                        submitBtn.textContent = 'Gerar Relatório';
-                    };
-                    reader.readAsText(xhr.response);
-                }
-            };
-
-            xhr.onerror = () => {
-                showStatus('error', 'Erro de conexão. Verifique sua internet.');
-                hideProgress();
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Gerar Relatório';
-            };
-
-            xhr.send(formData);
         });
 
-        function simulateProcessing() {
-            const steps = [
-                { progress: 55, msg: 'Extraindo áudio com FFmpeg...' },
-                { progress: 65, msg: 'Transcrevendo com Whisper...' },
-                { progress: 80, msg: 'Analisando com Claude Opus 4.5...' },
-                { progress: 90, msg: 'Gerando documento DOCX...' }
-            ];
+        function startPolling() {
+            // Parar polling anterior se existir
+            if (pollInterval) {
+                clearInterval(pollInterval);
+            }
 
-            let stepIndex = 0;
-            const interval = setInterval(() => {
-                if (stepIndex < steps.length) {
-                    const step = steps[stepIndex];
-                    setProgress(step.progress);
-                    showStatus('info', step.msg);
-                    stepIndex++;
-                } else {
-                    clearInterval(interval);
+            // Verificar status a cada 3 segundos
+            pollInterval = setInterval(checkJobStatus, 3000);
+            checkJobStatus(); // Verificar imediatamente
+        }
+
+        async function checkJobStatus() {
+            if (!currentJobId) return;
+
+            try {
+                const response = await fetch(`${API_URL}/video-job/${currentJobId}`);
+
+                if (!response.ok) {
+                    throw new Error('Erro ao verificar status');
                 }
-            }, 15000); // 15 segundos entre cada etapa
+
+                const job = await response.json();
+                console.log('Status do job:', job);
+
+                // Atualizar progresso
+                const phaseText = phases[job.currentPhase] || job.currentPhase;
+                setProgress(job.progress, phaseText);
+
+                if (job.status === 'COMPLETED') {
+                    // Parar polling
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+
+                    showStatus('success', 'Relatório gerado com sucesso!');
+                    setProgress(100, 'Concluído!');
+
+                    // Baixar arquivo
+                    await downloadReport();
+
+                    // Resetar formulário
+                    setTimeout(() => {
+                        resetForm();
+                    }, 3000);
+
+                } else if (job.status === 'FAILED') {
+                    // Parar polling
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+
+                    showStatus('error', `Erro: ${job.error || 'Falha no processamento'}`);
+                    hideProgress();
+
+                    const submitBtn = document.getElementById('submitBtn');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Gerar Relatório';
+                }
+
+            } catch (error) {
+                console.error('Erro ao verificar status:', error);
+                // Continuar tentando
+            }
+        }
+
+        async function downloadReport() {
+            try {
+                const response = await fetch(`${API_URL}/video-job/${currentJobId}/download`);
+
+                if (!response.ok) {
+                    throw new Error('Erro ao baixar arquivo');
+                }
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+
+                const clientName = document.getElementById('clientName').value;
+                const visitDate = document.getElementById('visitDate').value;
+                a.download = `relatorio-${clientName.replace(/[^a-z0-9]/gi, '-')}-${visitDate}.docx`;
+
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+            } catch (error) {
+                console.error('Erro ao baixar:', error);
+                showStatus('error', 'Erro ao baixar arquivo. Tente novamente.');
+            }
+        }
+
+        function resetForm() {
+            hideProgress();
+            document.getElementById('videoForm').reset();
+            selectedFiles = [];
+            currentJobId = null;
+            document.getElementById('fileList').style.display = 'none';
+            document.getElementById('visitDate').valueAsDate = new Date();
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Gerar Relatório';
         }
 
         function showStatus(type, message) {
@@ -630,16 +649,22 @@
         }
 
         function showProgress() {
-            document.getElementById('progress').style.display = 'block';
+            document.getElementById('progressContainer').style.display = 'block';
         }
 
         function hideProgress() {
-            document.getElementById('progress').style.display = 'none';
+            document.getElementById('progressContainer').style.display = 'none';
             document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('progressText').textContent = '0%';
+            document.getElementById('phaseIndicator').textContent = '';
         }
 
-        function setProgress(percent) {
+        function setProgress(percent, phase) {
             document.getElementById('progressBar').style.width = `${percent}%`;
+            document.getElementById('progressText').textContent = `${percent}%`;
+            if (phase) {
+                document.getElementById('phaseIndicator').textContent = phase;
+            }
         }
     </script>
 </body>

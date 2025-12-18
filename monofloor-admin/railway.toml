@@ -3,9 +3,10 @@ builder = "dockerfile"
 
 [deploy]
 healthcheckPath = "/health"
-healthcheckTimeout = 300
+healthcheckTimeout = 600
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 5
 
-# Aumentar timeout para 5 minutos (300 segundos)
+# Aumentar timeout para 10 minutos (600 segundos)
 # Necessário para processamento de vídeos com AI
+# Arquitetura assíncrona implementada para evitar timeouts HTTP

@@ -5,6 +5,7 @@ import { config } from './config';
 import { PrismaClient } from '@prisma/client';
 import { setSocketServer } from './services/socket.service';
 import { startLunchScheduler } from './services/lunch-scheduler.service';
+import { videoJobWorker, cleanupOldJobs } from './services/video-job-worker.service';
 
 const prisma = new PrismaClient();
 
@@ -71,6 +72,14 @@ async function main() {
 
       // Start lunch reminder scheduler
       startLunchScheduler();
+
+      // Start video job worker
+      videoJobWorker.start();
+      console.log('🎬 Video Job Worker started');
+
+      // Cleanup old jobs every 30 minutes
+      setInterval(cleanupOldJobs, 30 * 60 * 1000);
+      console.log('🗑️ Cleanup scheduler started (every 30 min)');
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
@@ -81,12 +90,14 @@ async function main() {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down...');
+  videoJobWorker.stop();
   await prisma.$disconnect();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down...');
+  videoJobWorker.stop();
   await prisma.$disconnect();
   process.exit(0);
 });

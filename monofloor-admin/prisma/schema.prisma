@@ -1124,3 +1124,45 @@ enum TaskStatus {
   BLOCKED        // Bloqueada (dependência não concluída)
   CANCELLED      // Cancelada
 }
+
+// =============================================
+// VIDEO JOBS (Processamento assíncrono de vídeos)
+// =============================================
+model VideoJob {
+  id          String         @id @default(uuid())
+  status      VideoJobStatus @default(PENDING)
+  progress    Int            @default(0)  // 0-100
+
+  // Arquivos de entrada
+  inputFiles  Json           @map("input_files")  // Array de nomes dos arquivos
+
+  // Arquivo de saída
+  outputUrl   String?        @map("output_url")   // URL/path do arquivo gerado
+  outputType  String?        @map("output_type")  // "docx" | "pdf"
+
+  // Metadados do relatório
+  metadata    Json?          // projectName, technicianName, clientName, address, visitDate
+
+  // Erro (se falhou)
+  error       String?        @db.Text
+
+  // Fase atual do processamento
+  currentPhase String?       @map("current_phase")  // "upload", "extracting", "transcribing", "analyzing", "generating"
+
+  // Timestamps
+  startedAt   DateTime?      @map("started_at")
+  completedAt DateTime?      @map("completed_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("video_jobs")
+}
+
+enum VideoJobStatus {
+  PENDING     // Aguardando processamento
+  PROCESSING  // Em processamento
+  COMPLETED   // Concluído com sucesso
+  FAILED      // Falhou
+}
