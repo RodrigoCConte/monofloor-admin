@@ -117,7 +117,8 @@ export class VideoJobWorker {
         // Processar um único vídeo
         result = await this.processWithProgress(
           job.id,
-          () => simpleVideoService.generateReport(videoPaths[0], {
+          () => simpleVideoService.generateReport({
+            videoPath: videoPaths[0],
             projectName: metadata.projectName || metadata.clientName || 'Projeto',
             technicianName: metadata.technicianName || 'Técnico',
             visitDate: metadata.visitDate || new Date().toISOString().split('T')[0],
@@ -127,9 +128,10 @@ export class VideoJobWorker {
         );
       } else {
         // Processar múltiplos vídeos
+        const videos = videoPaths.map((p: string) => ({ path: p, name: path.basename(p) }));
         result = await this.processWithProgress(
           job.id,
-          () => simpleVideoService.generateMultipleReport(videoPaths, {
+          () => simpleVideoService.generateMultiVideoReport(videos, {
             projectName: metadata.projectName || metadata.clientName || 'Projeto',
             technicianName: metadata.technicianName || 'Técnico',
             visitDate: metadata.visitDate || new Date().toISOString().split('T')[0],
