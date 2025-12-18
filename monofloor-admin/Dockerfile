@@ -83,8 +83,10 @@ RUN pip3 install -r requirements.txt
 # Create temp directories
 RUN mkdir -p temp/uploads temp/frames
 
-# Expose port
-EXPOSE 3000
+# Railway sets PORT environment variable
+# Default to 8080 for Railway compatibility
+ENV PORT=8080
+EXPOSE 8080
 
 # Start command
 CMD ["node", "dist/index.js"]
