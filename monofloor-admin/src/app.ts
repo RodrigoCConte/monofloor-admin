@@ -12,6 +12,12 @@ import proposalsRoutes from './routes/proposals.routes';
 
 const app = express();
 
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`📥 ${new Date().toISOString()} ${req.method} ${req.path}`);
+  next();
+});
+
 // CORS configuration - allow all origins for video processing
 app.use(cors({
   origin: true, // Allow all origins
