@@ -249,6 +249,7 @@ router.put(
     body('mRodape').optional().isFloat({ min: 0 }),
     body('responsiblePhones').optional().isArray(),
     body('responsiblePhones.*').optional().isString().trim(),
+    body('isTravelMode').optional().isBoolean(),
   ],
   validate,
   async (req, res, next) => {
@@ -297,6 +298,7 @@ router.put(
         'allowSaturday',
         'allowSunday',
         'allowNightWork',
+        'isTravelMode',
       ];
 
       for (const field of allowedFields) {
@@ -428,7 +430,7 @@ router.post(
   [
     param('id').isUUID(),
     body('userId').isUUID(),
-    body('projectRole').optional().isIn(['APLICADOR', 'LIDER']),
+    body('projectRole').optional().isIn(['AUXILIAR', 'PREPARADOR', 'LIDER_PREPARACAO', 'APLICADOR_I', 'APLICADOR_II', 'APLICADOR_III', 'LIDER']),
   ],
   validate,
   async (req, res, next) => {
@@ -473,7 +475,7 @@ router.post(
             data: {
               isActive: true,
               removedAt: null,
-              projectRole: projectRole || 'APLICADOR',
+              projectRole: projectRole || 'APLICADOR_I',
               assignedById: req.user!.sub,
               assignedAt: new Date(),
             },
@@ -482,7 +484,7 @@ router.post(
             data: {
               userId,
               projectId: req.params.id,
-              projectRole: projectRole || 'APLICADOR',
+              projectRole: projectRole || 'APLICADOR_I',
               assignedById: req.user!.sub,
             },
           });

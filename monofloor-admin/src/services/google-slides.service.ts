@@ -780,7 +780,8 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
     if (hasProductData) {
       console.log('📄 Gerando slide 27 (Detalhamento por Produto)...');
       const html27 = createSurfacesTableHTML(data);
-      await page.setContent(html27, { waitUntil: 'networkidle0', timeout: 60000 });
+      // Usar 'domcontentloaded' pois a fonte já está em cache do slide 26
+      await page.setContent(html27, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
       slide27Buffer = await page.pdf({
         width: '1080px',

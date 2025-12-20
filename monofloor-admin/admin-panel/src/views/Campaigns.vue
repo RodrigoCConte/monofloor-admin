@@ -1374,7 +1374,7 @@ onMounted(() => {
               </div>
               <div class="participant-info">
                 <span class="participant-name">{{ participant.user?.name || 'Aplicador' }}</span>
-                <span class="participant-role">{{ participant.user?.role || 'APLICADOR' }}</span>
+                <span class="participant-role">{{ participant.user?.role || 'APLICADOR_I' }}</span>
               </div>
               <div class="participant-xp" v-if="participantsMode === 'winners' && isWinnerSelected(participant.userId)" @click.stop>
                 <label>XP:</label>

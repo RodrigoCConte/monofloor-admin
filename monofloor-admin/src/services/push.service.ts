@@ -181,12 +181,13 @@ export async function sendRoleEvolutionPush(
   newRole: string
 ): Promise<void> {
   const roleNames: Record<string, string> = {
-    AUXILIAR: 'Ajudante',
+    AUXILIAR: 'Auxiliar',
     PREPARADOR: 'Preparador',
-    LIDER_PREPARACAO: 'Lider de Preparacao',
-    APLICADOR_AUX: 'Aplicador Auxiliar',
-    APLICADOR: 'Aplicador',
-    LIDER: 'Lider de Equipe',
+    LIDER_PREPARACAO: 'Lider da Preparacao',
+    APLICADOR_I: 'Aplicador I',
+    APLICADOR_II: 'Aplicador II',
+    APLICADOR_III: 'Aplicador III',
+    LIDER: 'Lider',
   };
 
   const payload: PushPayload = {
@@ -284,6 +285,72 @@ export async function sendContributionResultPush(
   };
 
   await sendPushToUser(userId, payload);
+}
+
+/**
+ * Send report reminder push notification
+ */
+export async function sendReportReminderPush(
+  userId: string,
+  projectName: string,
+  reminderNumber: number,
+  reminderId: string
+): Promise<{ sent: number; failed: number }> {
+  const messages = [
+    'Nao esqueca de enviar seu relatorio do dia!',
+    'Lembrete: seu relatorio ainda nao foi enviado.',
+    'ULTIMO AVISO: envie seu relatorio agora ou -7000 XP!',
+  ];
+
+  const payload: PushPayload = {
+    title: `Relatorio Pendente (${reminderNumber} de 3)`,
+    body: `${projectName}: ${messages[reminderNumber - 1] || messages[0]}`,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/badge-72.png',
+    tag: `report-reminder-${reminderId}`,
+    requireInteraction: reminderNumber === 3, // Last reminder requires interaction
+    data: {
+      type: 'report:reminder',
+      reminderId,
+      reminderNumber,
+      url: '/#report',
+    },
+    actions: [
+      { action: 'send', title: 'Enviar Agora' },
+      { action: 'dismiss', title: reminderNumber < 3 ? 'Depois' : 'Ignorar (-7000 XP)' },
+    ],
+  };
+
+  return await sendPushToUser(userId, payload);
+}
+
+/**
+ * Send XP penalty push notification
+ * Sent when a user loses XP due to not submitting a report
+ */
+export async function sendXPPenaltyPush(
+  userId: string,
+  xpAmount: number,
+  projectName: string,
+  reason: string
+): Promise<{ sent: number; failed: number }> {
+  const payload: PushPayload = {
+    title: 'XP Perdido!',
+    body: `${projectName}: -${xpAmount} XP - ${reason}`,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/badge-72.png',
+    tag: 'xp-penalty',
+    requireInteraction: true,
+    data: {
+      type: 'xp:penalty',
+      amount: -xpAmount,
+      projectName,
+      reason,
+      url: '/#profile',
+    },
+  };
+
+  return await sendPushToUser(userId, payload);
 }
 
 /**

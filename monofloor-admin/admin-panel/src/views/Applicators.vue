@@ -92,9 +92,10 @@ const getStatusLabel = (status: string) => {
 const getRoleLabel = (role: string) => {
   switch (role) {
     case 'LIDER': return 'Lider';
-    case 'APLICADOR': return 'Aplicador';
-    case 'APLICADOR_AUX': return 'Aplicador Aux.';
-    case 'LIDER_PREPARACAO': return 'Lider Preparacao';
+    case 'APLICADOR_III': return 'Aplicador III';
+    case 'APLICADOR_II': return 'Aplicador II';
+    case 'APLICADOR_I': return 'Aplicador I';
+    case 'LIDER_PREPARACAO': return 'Lider da Preparacao';
     case 'PREPARADOR': return 'Preparador';
     case 'AUXILIAR': return 'Auxiliar';
     default: return role;
@@ -104,8 +105,9 @@ const getRoleLabel = (role: string) => {
 const getRoleColor = (role: string) => {
   switch (role) {
     case 'LIDER': return '#FF6B35';
-    case 'APLICADOR': return '#9B5DE5';
-    case 'APLICADOR_AUX': return '#9B5DE5';
+    case 'APLICADOR_III': return '#7C3AED';
+    case 'APLICADOR_II': return '#9B5DE5';
+    case 'APLICADOR_I': return '#A78BFA';
     case 'LIDER_PREPARACAO': return '#3B82F6';
     case 'PREPARADOR': return '#00D4FF';
     case 'AUXILIAR': return '#8B7355';
@@ -117,8 +119,9 @@ const getRoleColor = (role: string) => {
 const getCharacterIcon = (role: string): string => {
   switch (role) {
     case 'LIDER': return '/icons/lider.png';
-    case 'APLICADOR': return '/icons/aplicador-1.png';
-    case 'APLICADOR_AUX': return '/icons/aplicador-2.png';
+    case 'APLICADOR_III': return '/icons/aplicador-3.png';
+    case 'APLICADOR_II': return '/icons/aplicador-2.png';
+    case 'APLICADOR_I': return '/icons/aplicador-1.png';
     case 'LIDER_PREPARACAO': return '/icons/lider-preparacao.png';
     case 'PREPARADOR': return '/icons/preparador.png';
     case 'AUXILIAR': return '/icons/ajudante.png';
@@ -126,14 +129,15 @@ const getCharacterIcon = (role: string): string => {
   }
 };
 
-// Lista de roles disponíveis
+// Lista de roles disponíveis (ordem hierárquica)
 const availableRoles = [
-  { value: 'LIDER', label: 'Lider' },
-  { value: 'APLICADOR', label: 'Aplicador' },
-  { value: 'APLICADOR_AUX', label: 'Aplicador Aux.' },
-  { value: 'LIDER_PREPARACAO', label: 'Lider Preparacao' },
-  { value: 'PREPARADOR', label: 'Preparador' },
   { value: 'AUXILIAR', label: 'Auxiliar' },
+  { value: 'PREPARADOR', label: 'Preparador' },
+  { value: 'LIDER_PREPARACAO', label: 'Lider da Preparacao' },
+  { value: 'APLICADOR_I', label: 'Aplicador I' },
+  { value: 'APLICADOR_II', label: 'Aplicador II' },
+  { value: 'APLICADOR_III', label: 'Aplicador III' },
+  { value: 'LIDER', label: 'Lider' },
 ];
 
 // Modal de edição de role

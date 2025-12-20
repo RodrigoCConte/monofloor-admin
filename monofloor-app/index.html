@@ -505,6 +505,24 @@
                     <div class="loading-team">Carregando equipe...</div>
                 </div>
 
+                <!-- Task Block Section (shown after check-in) -->
+                <div id="taskBlockSection" class="task-block-section" style="display: none;">
+                    <div class="task-block-header">
+                        <div class="task-block-title">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 11l3 3L22 4"/>
+                                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                            </svg>
+                            <span>Tarefas do Dia</span>
+                        </div>
+                        <span id="taskBlockCount" class="task-block-count">0/0</span>
+                    </div>
+                    <div id="taskBlockItems" class="task-block-items">
+                        <!-- Tarefas do bloco atual serao carregadas aqui -->
+                        <div class="task-loading">Carregando tarefas...</div>
+                    </div>
+                </div>
+
                 <!-- Check-in Button -->
                 <button class="btn-checkin-large disabled" id="checkinBtn" onclick="doCheckin()" disabled>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -745,13 +763,15 @@
             </div>
         </div>
 
-        <!-- Tela de Horas (Simplificada) -->
+        <!-- Tela de Horas e Ganhos -->
         <div id="screen-hours" class="screen">
             <div class="header">
                 <div class="header-left">
-                    <h1 class="header-title">Minhas Horas</h1>
+                    <h1 class="header-title">Horas e Ganhos</h1>
                 </div>
-                <div class="header-right"></div>
+                <div class="header-right">
+                    <span class="user-role-badge" id="hoursUserRole">-</span>
+                </div>
             </div>
 
             <div class="content">
@@ -770,16 +790,71 @@
                     </button>
                 </div>
 
-                <!-- Hours Summary -->
-                <div class="hours-summary-simple">
-                    <div class="hours-total">
-                        <span class="hours-big" id="hoursTotalValue">0h</span>
-                        <span class="hours-label">Total do Mes</span>
+                <!-- Earnings Summary Card -->
+                <div class="earnings-summary-card">
+                    <div class="earnings-main">
+                        <span class="earnings-label">Valor Total do Mes</span>
+                        <span class="earnings-value" id="earningsTotalValue">R$ 0,00</span>
+                    </div>
+                    <div class="earnings-details">
+                        <div class="earnings-detail-row">
+                            <span class="detail-label">Horas trabalhadas</span>
+                            <span class="detail-value" id="earningsTotalHours">0h</span>
+                        </div>
+                        <div class="earnings-detail-row">
+                            <span class="detail-label">Valor/hora atual</span>
+                            <span class="detail-value" id="earningsHourlyRate">R$ 0,00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hours Breakdown -->
+                <div class="hours-breakdown-card">
+                    <div class="breakdown-title">Detalhamento de Horas</div>
+                    <div class="breakdown-grid">
+                        <div class="breakdown-item">
+                            <span class="breakdown-hours" id="hoursNormalValue">0h</span>
+                            <span class="breakdown-label">Normais</span>
+                        </div>
+                        <div class="breakdown-item overtime">
+                            <span class="breakdown-hours" id="hoursOvertimeValue">0h</span>
+                            <span class="breakdown-label">Extras (+20%)</span>
+                        </div>
+                        <div class="breakdown-item travel">
+                            <span class="breakdown-hours" id="hoursTravelModeValue">0h</span>
+                            <span class="breakdown-label">Viagem (+20%)</span>
+                        </div>
+                        <div class="breakdown-item supplies">
+                            <span class="breakdown-hours" id="hoursTravelValue">0h</span>
+                            <span class="breakdown-label">Deslocamento</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- XP Summary -->
+                <div class="xp-summary-card">
+                    <div class="xp-summary-header">
+                        <span class="xp-icon">⭐</span>
+                        <span class="xp-title">XP do Mes</span>
+                    </div>
+                    <div class="xp-summary-content">
+                        <div class="xp-stat earned">
+                            <span class="xp-stat-value" id="xpEarnedValue">+0</span>
+                            <span class="xp-stat-label">Ganhos</span>
+                        </div>
+                        <div class="xp-stat penalty">
+                            <span class="xp-stat-value" id="xpPenaltyValue">-0</span>
+                            <span class="xp-stat-label">Penalidades</span>
+                        </div>
+                        <div class="xp-stat total">
+                            <span class="xp-stat-value" id="xpTotalValue">0</span>
+                            <span class="xp-stat-label">Total</span>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Hours by Project -->
-                <div class="section-title">Horas por Projeto</div>
+                <div class="section-title">Ganhos por Projeto</div>
                 <div class="hours-project-list" id="hoursProjectList">
                     <!-- Estado vazio -->
                     <div class="empty-state-small" id="hoursEmptyState">
@@ -1320,6 +1395,109 @@
             </div>
         </div>
 
+        <!-- Modal de Aviso: Saindo da Area do Projeto (Auto-checkout) -->
+        <div id="auto-checkout-warning-modal" class="modal">
+            <div class="modal-content leaving-modal-content auto-checkout-warning">
+                <div class="leaving-icon warning-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                </div>
+                <h2>Voce esta saindo da area do projeto</h2>
+                <p id="auto-checkout-distance">Distancia: 105m</p>
+                <p class="auto-checkout-question">O que voce vai fazer?</p>
+
+                <div class="auto-checkout-countdown">
+                    <span>Checkout automatico em: </span>
+                    <span id="auto-checkout-timer" class="countdown-timer">30</span>
+                    <span> segundos</span>
+                </div>
+
+                <div class="leaving-options">
+                    <button class="leaving-option" onclick="selectAutoCheckoutReason('almoco')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/>
+                            <path d="M7 2v20"/>
+                            <path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>
+                        </svg>
+                        <span>Almoco / Intervalo</span>
+                    </button>
+                    <button class="leaving-option" onclick="selectAutoCheckoutReason('insumos')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="9" cy="21" r="1"/>
+                            <circle cx="20" cy="21" r="1"/>
+                            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                        </svg>
+                        <span>Comprar insumos</span>
+                    </button>
+                    <button class="leaving-option" onclick="selectAutoCheckoutReason('outro')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        <span>Outro projeto</span>
+                    </button>
+                    <button class="leaving-option" onclick="selectAutoCheckoutReason('fim')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12,6 12,12 16,14"/>
+                        </svg>
+                        <span>Fim do expediente</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal de Auto-checkout Realizado -->
+        <div id="auto-checkout-done-modal" class="modal">
+            <div class="modal-content auto-checkout-done-content">
+                <div class="auto-checkout-done-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                </div>
+                <h2>Check Out Realizado</h2>
+                <p>Voce saiu da area do projeto e o checkout foi feito automaticamente.</p>
+                <p id="auto-checkout-done-project" class="project-name"></p>
+                <p id="auto-checkout-done-hours" class="hours-worked"></p>
+
+                <button class="btn-justify" onclick="showAutoCheckoutJustification()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                    Essa informacao esta errada? Clique aqui e explique.
+                </button>
+
+                <button class="btn-secondary" onclick="closeAutoCheckoutDoneModal()">Fechar</button>
+            </div>
+        </div>
+
+        <!-- Modal de Justificativa do Auto-checkout -->
+        <div id="auto-checkout-justify-modal" class="modal">
+            <div class="modal-content auto-checkout-justify-content">
+                <h2>Explique o que aconteceu</h2>
+                <p>O checkout automatico estava incorreto? Nos conte o que realmente aconteceu:</p>
+
+                <textarea id="auto-checkout-justification-text"
+                    placeholder="Ex: Estava dentro do projeto mas o GPS oscilou. / Fui ao banheiro no predio ao lado. / etc."
+                    rows="4"
+                    maxlength="500"></textarea>
+                <div class="char-counter">
+                    <span id="justify-char-count">0</span>/500 caracteres (minimo 10)
+                </div>
+
+                <div class="justify-actions">
+                    <button class="btn-secondary" onclick="closeAutoCheckoutJustifyModal()">Cancelar</button>
+                    <button class="btn-primary" id="submitJustificationBtn" onclick="submitAutoCheckoutJustification()" disabled>
+                        Enviar Justificativa
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Publishing Modal (Instagram style) -->
         <div id="publishing-modal" class="modal publishing-modal">
             <div class="publishing-content">
@@ -1810,6 +1988,41 @@
             <button class="evolution-continue-btn" onclick="closeEvolutionNotification()">Continuar</button>
         </div>
 
+        <!-- XP Reward Modal (Mobile Style - Pokemon inspired) -->
+        <div id="xpRewardOverlay" class="xp-reward-overlay">
+            <div class="xp-reward-content">
+                <!-- Glow effect -->
+                <div class="xp-reward-glow"></div>
+
+                <!-- Sparkles -->
+                <div class="xp-reward-sparkle"></div>
+                <div class="xp-reward-sparkle"></div>
+                <div class="xp-reward-sparkle"></div>
+                <div class="xp-reward-sparkle"></div>
+                <div class="xp-reward-sparkle"></div>
+                <div class="xp-reward-sparkle"></div>
+                <div class="xp-reward-sparkle"></div>
+                <div class="xp-reward-sparkle"></div>
+
+                <!-- XP Icon -->
+                <div class="xp-reward-icon">⭐</div>
+
+                <!-- XP Amount -->
+                <div id="xpRewardAmount" class="xp-reward-amount">+100 XP</div>
+
+                <!-- Reason -->
+                <div id="xpRewardReason" class="xp-reward-reason">Check-in na obra</div>
+
+                <!-- Total XP -->
+                <div id="xpRewardTotal" class="xp-reward-total">
+                    <span class="label">Total:</span>
+                    <span id="xpRewardTotalValue" class="value">1.500 XP</span>
+                </div>
+            </div>
+
+            <button class="xp-reward-continue-btn" onclick="closeXPRewardModal()">Continuar</button>
+        </div>
+
         <!-- =============================================
              ONBOARDING SEQUENCE (3 Pop-ups gamificados)
              ============================================= -->
@@ -1941,6 +2154,104 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="20 6 9 17 4 12"/>
                         </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================================
+             TASK COMPLETION MODAL (Checkout Flow)
+             ============================================= -->
+        <div id="taskCompletionModal" class="modal-overlay">
+            <div class="modal-content task-completion-modal">
+                <div class="task-completion-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 11l3 3L22 4"/>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                    </svg>
+                    <h3>Voce concluiu as tarefas de hoje?</h3>
+                </div>
+                <p class="task-completion-subtitle">Marque as tarefas que foram concluidas</p>
+
+                <div id="todayTasksList" class="today-tasks-list">
+                    <!-- Tarefas do dia serao carregadas aqui dinamicamente -->
+                    <div class="task-loading">Carregando tarefas...</div>
+                </div>
+
+                <button class="btn-all-tasks" onclick="showAllProjectTasks()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    <span>Concluir tarefas fora da lista</span>
+                </button>
+
+                <div class="task-completion-buttons">
+                    <button class="btn-secondary" onclick="skipTaskCompletion()">Pular</button>
+                    <button class="btn-primary" onclick="submitTaskCompletions()">Confirmar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================================
+             ALL TASKS MODAL (Tasks outside the daily block)
+             ============================================= -->
+        <div id="allTasksModal" class="modal-overlay">
+            <div class="modal-content all-tasks-modal">
+                <div class="modal-header-with-back">
+                    <button class="btn-back-modal" onclick="closeAllTasksModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                    </button>
+                    <h3>Todas as Tarefas do Projeto</h3>
+                </div>
+
+                <div id="allTasksList" class="all-tasks-list">
+                    <!-- Todas as tarefas serao carregadas aqui -->
+                    <div class="task-loading">Carregando tarefas...</div>
+                </div>
+
+                <div class="all-tasks-buttons">
+                    <button class="btn-primary" onclick="confirmAllTaskSelection()">Confirmar Selecao</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================================
+             REPORT REMINDER MODAL (After task completion)
+             ============================================= -->
+        <div id="reportReminderModal" class="modal-overlay">
+            <div class="modal-content report-reminder-modal">
+                <div class="report-reminder-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                </div>
+                <h3>Enviar relatorio do dia?</h3>
+                <p class="report-reminder-subtitle">Compartilhe como foi o trabalho de hoje</p>
+
+                <div class="report-reminder-options">
+                    <button class="btn-report-option primary" onclick="goToReportScreen()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 20h9"/>
+                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                        </svg>
+                        <span>Enviar agora</span>
+                    </button>
+                    <button class="btn-report-option" onclick="scheduleReportReminder()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        <span>Lembrar em 60 minutos</span>
+                    </button>
+                    <button class="btn-report-option skip" onclick="skipReportReminder()">
+                        <span>Nao lembrar</span>
                     </button>
                 </div>
             </div>

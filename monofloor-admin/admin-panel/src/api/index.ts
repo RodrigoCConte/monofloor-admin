@@ -122,6 +122,8 @@ export const projectsApi = {
     api.put(`/api/admin/projects/${projectId}/tasks/reorder`, { taskIds }),
   getTasksStats: (projectId: string) =>
     api.get(`/api/admin/projects/${projectId}/tasks/stats`),
+  publishTasks: (projectId: string) =>
+    api.post(`/api/admin/projects/${projectId}/tasks/publish`),
 };
 
 // Tasks API (standalone for task-types)
@@ -147,6 +149,13 @@ export const locationsApi = {
   getById: (userId: string) => api.get(`/api/admin/locations/${userId}`),
   getHistory: (userId: string, hours?: number) =>
     api.get(`/api/admin/locations/${userId}/history`, { params: { hours } }),
+  // Timeline for playback
+  getTimeline: (userId: string, date?: string) =>
+    api.get(`/api/admin/locations/${userId}/timeline`, { params: { date } }),
+  // List of applicators with status
+  getApplicatorsList: () => api.get('/api/admin/locations/applicators/list'),
+  // Projects with coordinates for map
+  getProjectsForMap: () => api.get('/api/admin/locations/projects'),
 };
 
 // Contributions API

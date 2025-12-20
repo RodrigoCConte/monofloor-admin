@@ -344,7 +344,7 @@ router.put(
   adminAuth,
   [
     param('id').isUUID(),
-    body('role').isIn(['LIDER', 'APLICADOR', 'APLICADOR_AUX', 'LIDER_PREPARACAO', 'PREPARADOR', 'AUXILIAR']),
+    body('role').isIn(['AUXILIAR', 'PREPARADOR', 'LIDER_PREPARACAO', 'APLICADOR_I', 'APLICADOR_II', 'APLICADOR_III', 'LIDER']),
   ],
   validate,
   async (req, res, next) => {
@@ -511,7 +511,7 @@ router.post(
   [
     param('id').isUUID(),
     body('projectId').isUUID(),
-    body('projectRole').optional().isIn(['APLICADOR', 'LIDER']),
+    body('projectRole').optional().isIn(['AUXILIAR', 'PREPARADOR', 'LIDER_PREPARACAO', 'APLICADOR_I', 'APLICADOR_II', 'APLICADOR_III', 'LIDER']),
   ],
   validate,
   async (req, res, next) => {
@@ -561,7 +561,7 @@ router.post(
             data: {
               isActive: true,
               removedAt: null,
-              projectRole: projectRole || 'APLICADOR',
+              projectRole: projectRole || 'APLICADOR_I',
               assignedById: req.user!.sub,
               assignedAt: new Date(),
             },
@@ -570,7 +570,7 @@ router.post(
             data: {
               userId: req.params.id,
               projectId,
-              projectRole: projectRole || 'APLICADOR',
+              projectRole: projectRole || 'APLICADOR_I',
               assignedById: req.user!.sub,
             },
           });

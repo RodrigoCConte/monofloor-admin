@@ -42,7 +42,7 @@ async function main() {
       status: 'APPROVED',
       approvedAt: new Date(),
       approvedById: superAdmin.id,
-      role: 'APLICADOR',
+      role: 'APLICADOR_II',
       xpTotal: 2500,
       level: 8,
       totalHoursWorked: 450,
@@ -84,7 +84,7 @@ async function main() {
       status: 'APPROVED',
       approvedAt: new Date(),
       approvedById: superAdmin.id,
-      role: 'APLICADOR',
+      role: 'APLICADOR_I',
       xpTotal: 850,
       level: 4,
       totalHoursWorked: 120,
@@ -192,7 +192,7 @@ async function main() {
     create: {
       userId: aplicador1.id,
       projectId: project1.id,
-      projectRole: 'APLICADOR',
+      projectRole: 'APLICADOR_II',
       assignedById: superAdmin.id,
     },
   });
@@ -224,7 +224,7 @@ async function main() {
     create: {
       userId: aplicador3.id,
       projectId: project1.id,
-      projectRole: 'APLICADOR',
+      projectRole: 'APLICADOR_I',
       assignedById: superAdmin.id,
     },
   });

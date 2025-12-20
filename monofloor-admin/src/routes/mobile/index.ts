@@ -613,12 +613,39 @@ router.post(
       // Check if this is an irregular check-in (no location provided)
       const isIrregular = !latitude || !longitude;
 
+      // Get project coordinates for distance calculation
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { id: true, title: true, cliente: true, latitude: true, longitude: true },
+      });
+
+      // Calculate distance from project pin
+      let checkinDistance: number | null = null;
+      let isDistantCheckin = false;
+      if (latitude && longitude && project?.latitude && project?.longitude) {
+        const { isDistantFromProject } = await import('../../services/worktime.service');
+        const distanceResult = isDistantFromProject(
+          latitude,
+          longitude,
+          Number(project.latitude),
+          Number(project.longitude)
+        );
+        checkinDistance = distanceResult.distance;
+        isDistantCheckin = distanceResult.isDistant;
+      }
+
+      // Cancel any pending lunch break alerts (user is returning from lunch)
+      const { cancelLunchBreakAlerts } = await import('../../services/lunch-alert.service');
+      await cancelLunchBreakAlerts(req.user!.sub);
+
       const checkin = await prisma.checkin.create({
         data: {
           userId: req.user!.sub,
           projectId,
           checkinLatitude: latitude,
           checkinLongitude: longitude,
+          checkinDistance,
+          isDistantCheckin,
           isIrregular,
         },
         include: {
@@ -719,7 +746,8 @@ router.put(
     param('id').isUUID(),
     body('latitude').optional().isFloat({ min: -90, max: 90 }),
     body('longitude').optional().isFloat({ min: -180, max: 180 }),
-    body('reason').optional().isIn(['FIM_EXPEDIENTE', 'OUTRO_PROJETO', 'COMPRA_INSUMOS', 'ALMOCO_INTERVALO']),
+    body('reason').optional().isIn(['FIM_EXPEDIENTE', 'OUTRO_PROJETO', 'COMPRA_INSUMOS', 'ALMOCO_INTERVALO', 'AUTO_DISTANTE']),
+    body('isAutoCheckout').optional().isBoolean(),
   ],
   validate,
   async (req, res, next) => {
@@ -732,7 +760,7 @@ router.put(
         },
         include: {
           project: {
-            select: { id: true, title: true },
+            select: { id: true, title: true, latitude: true, longitude: true },
           },
         },
       });
@@ -752,6 +780,21 @@ router.put(
       const hoursWorked =
         (checkoutAt.getTime() - checkin.checkinAt.getTime()) / (1000 * 60 * 60);
 
+      // Calculate distance from project pin (if coordinates provided)
+      let checkoutDistance: number | null = null;
+      let isDistantCheckout = false;
+      if (req.body.latitude && req.body.longitude && checkin.project.latitude && checkin.project.longitude) {
+        const { isDistantFromProject } = await import('../../services/worktime.service');
+        const distanceResult = isDistantFromProject(
+          req.body.latitude,
+          req.body.longitude,
+          Number(checkin.project.latitude),
+          Number(checkin.project.longitude)
+        );
+        checkoutDistance = distanceResult.distance;
+        isDistantCheckout = distanceResult.isDistant;
+      }
+
       const updatedCheckin = await prisma.checkin.update({
         where: { id: checkin.id },
         data: {
@@ -759,9 +802,18 @@ router.put(
           checkoutLatitude: req.body.latitude,
           checkoutLongitude: req.body.longitude,
           checkoutReason: req.body.reason,
+          checkoutDistance,
+          isDistantCheckout,
           hoursWorked,
+          isAutoCheckout: req.body.isAutoCheckout || false,
         },
       });
+
+      // Create lunch break alerts if this is a lunch checkout
+      if (req.body.reason === 'ALMOCO_INTERVALO') {
+        const { createLunchBreakAlerts } = await import('../../services/lunch-alert.service');
+        await createLunchBreakAlerts(req.user!.sub, checkin.id, checkoutAt);
+      }
 
       // Update user's total hours
       await prisma.user.update({
@@ -804,11 +856,89 @@ router.put(
         timestamp: checkoutAt,
       });
 
+      // =============================================
+      // XP REWARD: Baseado nos minutos trabalhados
+      // 1ª hora: 100 XP (~1.67 XP/min)
+      // 2ª hora: 110 XP (~1.83 XP/min)
+      // 3ª hora: 120 XP (~2.00 XP/min)
+      // Mínimo: 10 XP por checkout
+      // =============================================
+      const calculateWorkXP = (hours: number): number => {
+        if (hours <= 0) return 10; // Mínimo 10 XP
+
+        const completeHours = Math.floor(hours);
+        const partialHour = hours - completeHours;
+
+        // XP para horas completas: sum(90 + 10*h) para h de 1 a N
+        // = 90*N + 10*(N*(N+1)/2) = 90*N + 5*N*(N+1)
+        let totalXP = 0;
+        if (completeHours > 0) {
+          totalXP = 90 * completeHours + 5 * completeHours * (completeHours + 1);
+        }
+
+        // XP proporcional para hora parcial
+        // Próxima hora seria: 90 + 10*(completeHours + 1) = 100 + 10*completeHours
+        if (partialHour > 0) {
+          const nextHourXP = 100 + 10 * completeHours;
+          totalXP += Math.round(nextHourXP * partialHour);
+        }
+
+        // Garantir mínimo de 10 XP
+        return Math.max(totalXP, 10);
+      };
+
+      const workXP = calculateWorkXP(hoursWorked);
+      const minutesWorked = Math.round(hoursWorked * 60);
+
+      // Log para debug
+      console.log(`[XP Checkout] User: ${req.user!.sub}, Hours: ${hoursWorked.toFixed(2)}, Minutes: ${minutesWorked}, XP: ${workXP}`);
+
+      // Criar transação de XP
+      await prisma.xpTransaction.create({
+        data: {
+          userId: req.user!.sub,
+          amount: workXP,
+          type: 'CHECKOUT',
+          reason: minutesWorked >= 60
+            ? `${hoursWorked.toFixed(1)}h trabalhadas em ${checkin.project.title}`
+            : `${minutesWorked}min trabalhados em ${checkin.project.title}`,
+          checkinId: checkin.id,
+          projectId: checkin.projectId,
+        },
+      });
+
+      // Atualizar XP total do usuário
+      const updatedUser = await prisma.user.update({
+        where: { id: req.user!.sub },
+        data: {
+          xpTotal: { increment: workXP },
+        },
+        select: { xpTotal: true, level: true },
+      });
+
+      // Formatar tempo para exibição
+      const timeDisplay = minutesWorked >= 60
+        ? `${hoursWorked.toFixed(1)}h`
+        : `${minutesWorked}min`;
+
+      console.log(`[XP Checkout] Success! Total XP now: ${updatedUser.xpTotal}`);
+
       res.json({
         success: true,
         data: {
           ...updatedCheckin,
           hoursWorked: Number(updatedCheckin.hoursWorked),
+        },
+        xp: {
+          earned: workXP,
+          reason: `${timeDisplay} trabalhados`,
+          total: updatedUser.xpTotal,
+          level: updatedUser.level,
+          breakdown: {
+            minutes: minutesWorked,
+            hours: hoursWorked,
+            formula: '~1.67 XP/min (1ª hora) → ~1.83 XP/min (2ª hora) → +0.17 XP/min por hora',
+          },
         },
       });
     } catch (error) {
@@ -951,6 +1081,284 @@ router.get(
             project: projectsMap.get(p.projectId),
             hours: Number(p._sum.hoursWorked) || 0,
             checkins: p._count,
+          })),
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/mobile/earnings - Get user's earnings with role-based calculation
+router.get(
+  '/earnings',
+  mobileAuth,
+  [
+    query('month').optional().isInt({ min: 1, max: 12 }),
+    query('year').optional().isInt({ min: 2020, max: 2100 }),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const userId = req.user!.sub;
+      const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0, 23, 59, 59);
+
+      // Get user's current role
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true, xpTotal: true },
+      });
+
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
+      }
+
+      // Get daily work summaries (already processed with role snapshots)
+      const dailySummaries = await prisma.dailyWorkSummary.findMany({
+        where: {
+          userId,
+          workDate: { gte: startDate, lte: endDate },
+        },
+        orderBy: { workDate: 'desc' },
+      });
+
+      // Get all checkins for the month (including today's unprocessed)
+      const checkins = await prisma.checkin.findMany({
+        where: {
+          userId,
+          checkinAt: { gte: startDate, lte: endDate },
+          checkoutAt: { not: null },
+        },
+        include: {
+          project: {
+            select: { id: true, title: true, cliente: true, isTravelMode: true },
+          },
+        },
+        orderBy: { checkinAt: 'desc' },
+      });
+
+      // Get XP transactions for the month
+      const xpTransactions = await prisma.xpTransaction.findMany({
+        where: {
+          userId,
+          createdAt: { gte: startDate, lte: endDate },
+        },
+        include: {
+          project: {
+            select: { id: true, title: true },
+          },
+        },
+      });
+
+      // Import role rates for calculation
+      const { getRoleRates, calculatePayment } = await import('../../config/payroll.config');
+
+      // Calculate totals from daily summaries
+      let totalEarnings = 0;
+      let totalHoursNormal = 0;
+      let totalHoursOvertime = 0;
+      let totalHoursTravelMode = 0;
+      let totalHoursTravel = 0;
+      let totalHoursSupplies = 0;
+      let totalLunchPenaltyXP = 0;
+
+      for (const summary of dailySummaries) {
+        totalEarnings += Number(summary.totalPayment) || 0;
+        totalHoursNormal += Number(summary.hoursNormal) || 0;
+        totalHoursOvertime += Number(summary.hoursOvertime) || 0;
+        totalHoursTravelMode += Number(summary.hoursTravelMode) || 0;
+        totalHoursTravel += Number(summary.hoursTravel) || 0;
+        totalHoursSupplies += Number(summary.hoursSupplies) || 0;
+        totalLunchPenaltyXP += summary.lunchPenaltyXP || 0;
+      }
+
+      // Calculate today's unprocessed earnings (if any)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(today);
+      todayEnd.setHours(23, 59, 59, 999);
+
+      const todaysCheckins = checkins.filter((c) => {
+        const checkinDate = new Date(c.checkinAt);
+        return checkinDate >= today && checkinDate <= todayEnd;
+      });
+
+      // Check if today has already been processed
+      const todayProcessed = dailySummaries.some((s) => {
+        const summaryDate = new Date(s.workDate);
+        return summaryDate >= today && summaryDate <= todayEnd;
+      });
+
+      let todayEarnings = 0;
+      let todayHours = 0;
+
+      if (!todayProcessed && todaysCheckins.length > 0) {
+        const rates = getRoleRates(user.role);
+        if (rates) {
+          for (const checkin of todaysCheckins) {
+            const hours = Number(checkin.hoursWorked) || 0;
+            todayHours += hours;
+            // Simple calculation for today (full breakdown happens at 23:59)
+            todayEarnings += hours * rates.hourlyRate;
+          }
+        }
+      }
+
+      // Group checkins by project for breakdown
+      const projectMap = new Map<string, {
+        project: { id: string; title: string; cliente: string | null; isTravelMode: boolean };
+        hours: number;
+        hoursNormal: number;
+        hoursOvertime: number;
+        hoursTravel: number;
+        hoursSupplies: number;
+        earnings: number;
+        checkins: number;
+        xpEarned: number;
+        xpPenalty: number;
+      }>();
+
+      // Process daily summaries by project (from checkins)
+      for (const checkin of checkins) {
+        if (!checkin.project) continue;
+
+        const projectId = checkin.project.id;
+        let entry = projectMap.get(projectId);
+
+        if (!entry) {
+          entry = {
+            project: checkin.project,
+            hours: 0,
+            hoursNormal: 0,
+            hoursOvertime: 0,
+            hoursTravel: 0,
+            hoursSupplies: 0,
+            earnings: 0,
+            checkins: 0,
+            xpEarned: 0,
+            xpPenalty: 0,
+          };
+          projectMap.set(projectId, entry);
+        }
+
+        entry.hours += Number(checkin.hoursWorked) || 0;
+        entry.hoursNormal += Number(checkin.hoursNormal) || 0;
+        entry.hoursOvertime += Number(checkin.hoursOvertime) || 0;
+        entry.hoursTravel += Number(checkin.hoursTravel) || 0;
+        entry.hoursSupplies += Number(checkin.hoursSupplies) || 0;
+        entry.checkins += 1;
+
+        // Calculate earnings based on hours and role at checkout time
+        // For simplicity, use current role rates (detailed calculation is in DailyWorkSummary)
+        const rates = getRoleRates(user.role);
+        if (rates) {
+          const normalHours = Number(checkin.hoursNormal) || 0;
+          const overtimeHours = Number(checkin.hoursOvertime) || 0;
+          const travelHours = Number(checkin.hoursTravel) || 0;
+          const suppliesHours = Number(checkin.hoursSupplies) || 0;
+
+          // If project is travel mode, apply travel rates
+          if (checkin.project.isTravelMode) {
+            entry.earnings += normalHours * rates.travelRate;
+            entry.earnings += overtimeHours * rates.travelOvertimeRate;
+          } else {
+            entry.earnings += normalHours * rates.hourlyRate;
+            entry.earnings += overtimeHours * rates.overtimeRate;
+          }
+          entry.earnings += (travelHours + suppliesHours) * rates.hourlyRate;
+        }
+      }
+
+      // Add XP data to projects
+      for (const tx of xpTransactions) {
+        if (tx.projectId) {
+          const entry = projectMap.get(tx.projectId);
+          if (entry) {
+            if (tx.amount > 0) {
+              entry.xpEarned += tx.amount;
+            } else {
+              entry.xpPenalty += Math.abs(tx.amount);
+            }
+          }
+        }
+      }
+
+      // Calculate total XP earned and penalties
+      const totalXpEarned = xpTransactions
+        .filter((tx) => tx.amount > 0)
+        .reduce((sum, tx) => sum + tx.amount, 0);
+
+      const totalXpPenalty = xpTransactions
+        .filter((tx) => tx.amount < 0)
+        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+
+      // Convert project map to array
+      const byProject = Array.from(projectMap.values()).map((entry) => ({
+        project: {
+          id: entry.project.id,
+          title: entry.project.title,
+          cliente: entry.project.cliente,
+          isTravelMode: entry.project.isTravelMode,
+        },
+        hours: Math.round(entry.hours * 100) / 100,
+        hoursNormal: Math.round(entry.hoursNormal * 100) / 100,
+        hoursOvertime: Math.round(entry.hoursOvertime * 100) / 100,
+        hoursTravel: Math.round(entry.hoursTravel * 100) / 100,
+        hoursSupplies: Math.round(entry.hoursSupplies * 100) / 100,
+        earnings: Math.round(entry.earnings * 100) / 100,
+        checkins: entry.checkins,
+        xpEarned: entry.xpEarned,
+        xpPenalty: entry.xpPenalty,
+      }));
+
+      // Sort by earnings descending
+      byProject.sort((a, b) => b.earnings - a.earnings);
+
+      // Get current role rates for display
+      const currentRates = getRoleRates(user.role);
+
+      res.json({
+        success: true,
+        data: {
+          month,
+          year,
+          currentRole: user.role,
+          currentRates: currentRates ? {
+            dailyRate: currentRates.dailyRate,
+            hourlyRate: currentRates.hourlyRate,
+            overtimeRate: currentRates.overtimeRate,
+            travelRate: currentRates.travelRate,
+            travelOvertimeRate: currentRates.travelOvertimeRate,
+          } : null,
+          summary: {
+            totalEarnings: Math.round((totalEarnings + todayEarnings) * 100) / 100,
+            totalHours: Math.round((totalHoursNormal + totalHoursOvertime + totalHoursTravelMode + totalHoursTravel + totalHoursSupplies + todayHours) * 100) / 100,
+            hoursNormal: Math.round(totalHoursNormal * 100) / 100,
+            hoursOvertime: Math.round(totalHoursOvertime * 100) / 100,
+            hoursTravelMode: Math.round(totalHoursTravelMode * 100) / 100,
+            hoursTravel: Math.round(totalHoursTravel * 100) / 100,
+            hoursSupplies: Math.round(totalHoursSupplies * 100) / 100,
+            todayEarnings: Math.round(todayEarnings * 100) / 100,
+            todayHours: Math.round(todayHours * 100) / 100,
+          },
+          xp: {
+            total: user.xpTotal,
+            earnedThisMonth: totalXpEarned,
+            penaltyThisMonth: totalXpPenalty,
+            lunchPenalty: totalLunchPenaltyXP,
+          },
+          byProject,
+          dailySummaries: dailySummaries.map((s) => ({
+            date: s.workDate,
+            role: s.userRole,
+            hoursWorked: Number(s.totalHoursWorked) || 0,
+            earnings: Number(s.totalPayment) || 0,
+            lunchPenaltyXP: s.lunchPenaltyXP,
           })),
         },
       });
@@ -1515,7 +1923,7 @@ router.post(
           name: user.name,
           cpf: user.cpf || 'CPF nao informado',
           phone: user.phone || undefined,
-          role: assignment.projectRole || 'APLICADOR',
+          role: assignment.projectRole || 'APLICADOR_I',
         }],
       });
 
@@ -2866,6 +3274,803 @@ router.post(
 );
 
 // =============================================
+// PROJECT TASKS (Tarefas do projeto)
+// =============================================
+
+// GET /api/mobile/projects/:projectId/tasks - Get tasks for a project
+router.get(
+  '/projects/:projectId/tasks',
+  mobileAuth,
+  [param('projectId').isUUID()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const projectId = req.params.projectId;
+      const userId = req.user!.sub;
+
+      // Check if user is assigned to this project
+      const assignment = await prisma.projectAssignment.findFirst({
+        where: {
+          userId,
+          projectId,
+          isActive: true,
+        },
+      });
+
+      if (!assignment) {
+        throw new AppError('Voce nao esta atribuido a este projeto', 403, 'NOT_ASSIGNED');
+      }
+
+      // Get all PUBLISHED tasks for the project, ordered by sortOrder
+      const tasks = await prisma.projectTask.findMany({
+        where: {
+          projectId,
+          publishedToApp: true,
+        },
+        orderBy: { sortOrder: 'asc' },
+      });
+
+      // Organize tasks by phase
+      const tasksByPhase = {
+        PREPARO: tasks.filter((t) => t.phase === 'PREPARO'),
+        APLICACAO: tasks.filter((t) => t.phase === 'APLICACAO'),
+        ACABAMENTO: tasks.filter((t) => t.phase === 'ACABAMENTO'),
+      };
+
+      // Helper function to calculate phase deadline and remaining days
+      const calculatePhaseDeadline = (phaseTasks: typeof tasks) => {
+        const tasksWithEndDate = phaseTasks.filter((t) => t.endDate !== null);
+        if (tasksWithEndDate.length === 0) return { deadline: null, daysRemaining: null };
+
+        // Get the latest endDate for this phase
+        const maxEndDate = new Date(Math.max(...tasksWithEndDate.map((t) => t.endDate!.getTime())));
+
+        // Calculate days remaining (considering only calendar days)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        maxEndDate.setHours(0, 0, 0, 0);
+
+        const diffTime = maxEndDate.getTime() - today.getTime();
+        const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        return {
+          deadline: maxEndDate.toISOString(),
+          daysRemaining: daysRemaining,
+        };
+      };
+
+      // Calculate deadlines for each phase
+      const phaseDeadlines = {
+        PREPARO: calculatePhaseDeadline(tasksByPhase.PREPARO),
+        APLICACAO: calculatePhaseDeadline(tasksByPhase.APLICACAO),
+        ACABAMENTO: calculatePhaseDeadline(tasksByPhase.ACABAMENTO),
+      };
+
+      // Calculate progress by phase
+      const phaseProgress = {
+        PREPARO: {
+          completed: tasksByPhase.PREPARO.filter((t) => t.status === 'COMPLETED').length,
+          total: tasksByPhase.PREPARO.length,
+          percentage: tasksByPhase.PREPARO.length > 0
+            ? Math.round((tasksByPhase.PREPARO.filter((t) => t.status === 'COMPLETED').length / tasksByPhase.PREPARO.length) * 100)
+            : 0,
+        },
+        APLICACAO: {
+          completed: tasksByPhase.APLICACAO.filter((t) => t.status === 'COMPLETED').length,
+          total: tasksByPhase.APLICACAO.length,
+          percentage: tasksByPhase.APLICACAO.length > 0
+            ? Math.round((tasksByPhase.APLICACAO.filter((t) => t.status === 'COMPLETED').length / tasksByPhase.APLICACAO.length) * 100)
+            : 0,
+        },
+        ACABAMENTO: {
+          completed: tasksByPhase.ACABAMENTO.filter((t) => t.status === 'COMPLETED').length,
+          total: tasksByPhase.ACABAMENTO.length,
+          percentage: tasksByPhase.ACABAMENTO.length > 0
+            ? Math.round((tasksByPhase.ACABAMENTO.filter((t) => t.status === 'COMPLETED').length / tasksByPhase.ACABAMENTO.length) * 100)
+            : 0,
+        },
+      };
+
+      // Determine current active phase
+      // Rule: PREPARO must be 100% complete before APLICACAO is available
+      //       APLICACAO must be 100% complete before ACABAMENTO is available
+      let currentPhase: 'PREPARO' | 'APLICACAO' | 'ACABAMENTO' = 'PREPARO';
+      const phaseUnlocked = {
+        PREPARO: true,
+        APLICACAO: phaseProgress.PREPARO.percentage === 100,
+        ACABAMENTO: phaseProgress.PREPARO.percentage === 100 && phaseProgress.APLICACAO.percentage === 100,
+      };
+
+      if (phaseProgress.PREPARO.percentage === 100) {
+        currentPhase = 'APLICACAO';
+        if (phaseProgress.APLICACAO.percentage === 100) {
+          currentPhase = 'ACABAMENTO';
+        }
+      }
+
+      // Get tasks for the current phase (only pending/in_progress ones)
+      const currentPhaseTasks = tasksByPhase[currentPhase].filter(
+        (t) => t.status === 'PENDING' || t.status === 'IN_PROGRESS'
+      );
+
+      // Total progress
+      const completedCount = tasks.filter((t) => t.status === 'COMPLETED').length;
+      const totalCount = tasks.length;
+      const percentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+      // Map task for response
+      const mapTask = (t: typeof tasks[0]) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        taskType: t.taskType,
+        color: t.color,
+        status: t.status,
+        sortOrder: t.sortOrder,
+        phase: t.phase,
+        surface: t.surface,
+        progress: t.progress,
+        completionType: t.completionType,
+        estimatedHours: t.estimatedHours ? Number(t.estimatedHours) : null,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          // Current phase info
+          currentPhase,
+          phaseUnlocked,
+
+          // Tasks for current phase (what should be shown now)
+          currentPhaseTasks: currentPhaseTasks.map(mapTask),
+
+          // All tasks organized by phase
+          tasksByPhase: {
+            PREPARO: tasksByPhase.PREPARO.map(mapTask),
+            APLICACAO: tasksByPhase.APLICACAO.map(mapTask),
+            ACABAMENTO: tasksByPhase.ACABAMENTO.map(mapTask),
+          },
+
+          // Progress by phase
+          phaseProgress,
+
+          // Phase deadlines with days remaining
+          phaseDeadlines,
+
+          // Total project progress
+          projectProgress: {
+            completed: completedCount,
+            total: totalCount,
+            percentage,
+          },
+
+          // Legacy support - currentTaskBlock for backward compatibility
+          currentTaskBlock: currentPhaseTasks.map(mapTask),
+          allTasks: tasks.map(mapTask),
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST /api/mobile/tasks/:taskId/toggle-complete - Toggle task completion during active check-in
+// Accepts optional body: { completionType: 'INTEGRAL' | 'PARTIAL', progress: number (0-100) }
+router.post(
+  '/tasks/:taskId/toggle-complete',
+  mobileAuth,
+  [param('taskId').isUUID()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { taskId } = req.params;
+      const userId = req.user!.sub;
+      const { completionType, progress: progressValue } = req.body;
+
+      // Check if user has active check-in
+      const activeCheckin = await prisma.checkin.findFirst({
+        where: {
+          userId,
+          checkoutAt: null,
+        },
+        include: {
+          project: { select: { id: true, title: true } },
+        },
+      });
+
+      if (!activeCheckin) {
+        throw new AppError('Voce precisa estar em check-in para marcar tarefas', 400, 'NO_ACTIVE_CHECKIN');
+      }
+
+      // Verify task exists and belongs to the project
+      const task = await prisma.projectTask.findFirst({
+        where: {
+          id: taskId,
+          projectId: activeCheckin.projectId,
+          publishedToApp: true,
+        },
+      });
+
+      if (!task) {
+        throw new AppError('Tarefa nao encontrada', 404, 'TASK_NOT_FOUND');
+      }
+
+      // Check if task is already completed in this check-in
+      const existingCompletion = await prisma.taskCompletion.findUnique({
+        where: {
+          projectTaskId_checkinId: {
+            projectTaskId: taskId,
+            checkinId: activeCheckin.id,
+          },
+        },
+      });
+
+      let isCompleted = false;
+      let xpEarned = 0;
+      let taskProgress = 0;
+      let taskCompletionType: 'INTEGRAL' | 'PARTIAL' | null = null;
+
+      if (existingCompletion && !completionType) {
+        // Task is already completed and no new completion type specified - remove completion (toggle off)
+        await prisma.taskCompletion.delete({
+          where: { id: existingCompletion.id },
+        });
+
+        // Update task status back to PENDING if no other completions exist
+        const otherCompletions = await prisma.taskCompletion.findFirst({
+          where: { projectTaskId: taskId },
+        });
+
+        if (!otherCompletions) {
+          await prisma.projectTask.update({
+            where: { id: taskId },
+            data: {
+              status: 'PENDING',
+              progress: 0,
+              completionType: null,
+            },
+          });
+        }
+
+        isCompleted = false;
+        taskProgress = 0;
+      } else {
+        // Determine completion type and progress
+        const isPartial = completionType === 'PARTIAL';
+        taskCompletionType = isPartial ? 'PARTIAL' : 'INTEGRAL';
+        taskProgress = isPartial ? (progressValue || 50) : 100;
+
+        // XP based on completion type
+        const baseXP = 50;
+        xpEarned = isPartial ? Math.round(baseXP * (taskProgress / 100)) : baseXP;
+
+        if (existingCompletion) {
+          // Update existing completion
+          await prisma.taskCompletion.update({
+            where: { id: existingCompletion.id },
+            data: { completedAt: new Date() },
+          });
+        } else {
+          // Create new completion
+          await prisma.taskCompletion.create({
+            data: {
+              projectTaskId: taskId,
+              userId,
+              checkinId: activeCheckin.id,
+            },
+          });
+        }
+
+        // Update task status and progress
+        await prisma.projectTask.update({
+          where: { id: taskId },
+          data: {
+            status: isPartial ? 'IN_PROGRESS' : 'COMPLETED',
+            progress: taskProgress,
+            completionType: taskCompletionType,
+          },
+        });
+
+        // Award XP for task completion (only if not previously completed or upgrading)
+        if (!existingCompletion || taskProgress > task.progress) {
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { xpTotal: true },
+          });
+
+          if (user) {
+            await prisma.user.update({
+              where: { id: userId },
+              data: { xpTotal: user.xpTotal + xpEarned },
+            });
+
+            await prisma.xpTransaction.create({
+              data: {
+                userId,
+                amount: xpEarned,
+                type: 'TASK_COMPLETED',
+                reason: `Tarefa "${task.title}" ${isPartial ? `${taskProgress}% concluida` : 'concluida'}`,
+                projectId: activeCheckin.projectId,
+              },
+            });
+          }
+        } else {
+          xpEarned = 0; // No XP if downgrading or re-completing
+        }
+
+        isCompleted = taskProgress === 100;
+      }
+
+      // Get updated progress including phase progress
+      const allTasks = await prisma.projectTask.findMany({
+        where: { projectId: activeCheckin.projectId, publishedToApp: true },
+      });
+
+      // Calculate phase progress
+      const tasksByPhase = {
+        PREPARO: allTasks.filter((t) => t.phase === 'PREPARO'),
+        APLICACAO: allTasks.filter((t) => t.phase === 'APLICACAO'),
+        ACABAMENTO: allTasks.filter((t) => t.phase === 'ACABAMENTO'),
+      };
+
+      const phaseProgress = {
+        PREPARO: {
+          completed: tasksByPhase.PREPARO.filter((t) => t.status === 'COMPLETED').length,
+          total: tasksByPhase.PREPARO.length,
+          percentage: tasksByPhase.PREPARO.length > 0
+            ? Math.round((tasksByPhase.PREPARO.filter((t) => t.status === 'COMPLETED').length / tasksByPhase.PREPARO.length) * 100)
+            : 0,
+        },
+        APLICACAO: {
+          completed: tasksByPhase.APLICACAO.filter((t) => t.status === 'COMPLETED').length,
+          total: tasksByPhase.APLICACAO.length,
+          percentage: tasksByPhase.APLICACAO.length > 0
+            ? Math.round((tasksByPhase.APLICACAO.filter((t) => t.status === 'COMPLETED').length / tasksByPhase.APLICACAO.length) * 100)
+            : 0,
+        },
+        ACABAMENTO: {
+          completed: tasksByPhase.ACABAMENTO.filter((t) => t.status === 'COMPLETED').length,
+          total: tasksByPhase.ACABAMENTO.length,
+          percentage: tasksByPhase.ACABAMENTO.length > 0
+            ? Math.round((tasksByPhase.ACABAMENTO.filter((t) => t.status === 'COMPLETED').length / tasksByPhase.ACABAMENTO.length) * 100)
+            : 0,
+        },
+      };
+
+      // Determine unlocked phases
+      const phaseUnlocked = {
+        PREPARO: true,
+        APLICACAO: phaseProgress.PREPARO.percentage === 100,
+        ACABAMENTO: phaseProgress.PREPARO.percentage === 100 && phaseProgress.APLICACAO.percentage === 100,
+      };
+
+      // Determine current phase
+      let currentPhase: 'PREPARO' | 'APLICACAO' | 'ACABAMENTO' = 'PREPARO';
+      if (phaseProgress.PREPARO.percentage === 100) {
+        currentPhase = 'APLICACAO';
+        if (phaseProgress.APLICACAO.percentage === 100) {
+          currentPhase = 'ACABAMENTO';
+        }
+      }
+
+      const completedCount = allTasks.filter((t) => t.status === 'COMPLETED').length;
+
+      res.json({
+        success: true,
+        data: {
+          taskId,
+          isCompleted,
+          xpEarned,
+          taskProgress,
+          completionType: taskCompletionType,
+          progress: {
+            completed: completedCount,
+            total: allTasks.length,
+            percentage: Math.round((completedCount / allTasks.length) * 100),
+          },
+          phaseProgress,
+          phaseUnlocked,
+          currentPhase,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST /api/mobile/checkins/:id/complete-tasks - Complete checkout with task completions
+router.post(
+  '/checkins/:id/complete-tasks',
+  mobileAuth,
+  [
+    param('id').isUUID(),
+    body('completedTaskIds').isArray(),
+    body('completedTaskIds.*').isUUID(),
+    body('taskCompletions').optional().isArray(),
+    body('taskCompletions.*.taskId').optional().isUUID(),
+    body('taskCompletions.*.completionType').optional().isIn(['INTEGRAL', 'PARTIAL']),
+    body('taskCompletions.*.progress').optional().isInt({ min: 0, max: 100 }),
+    body('checkoutReason').isIn(['OUTRO_PROJETO', 'FIM_EXPEDIENTE']),
+    body('reportOption').isIn(['NOW', 'LATER_60MIN', 'SKIP']),
+    body('latitude').optional().isFloat({ min: -90, max: 90 }),
+    body('longitude').optional().isFloat({ min: -180, max: 180 }),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const checkinId = req.params.id;
+      const userId = req.user!.sub;
+      const { completedTaskIds, taskCompletions: taskCompletionsBody, checkoutReason, reportOption, latitude, longitude } = req.body;
+
+      // Build a map of task completions for quick lookup
+      const taskCompletionsMap: Record<string, { completionType: string; progress: number }> = {};
+      if (taskCompletionsBody && Array.isArray(taskCompletionsBody)) {
+        for (const tc of taskCompletionsBody) {
+          if (tc.taskId) {
+            taskCompletionsMap[tc.taskId] = {
+              completionType: tc.completionType || 'INTEGRAL',
+              progress: tc.progress || 100,
+            };
+          }
+        }
+      }
+
+      // Get the checkin
+      const checkin = await prisma.checkin.findFirst({
+        where: {
+          id: checkinId,
+          userId,
+          checkoutAt: null,
+        },
+        include: {
+          project: {
+            select: { id: true, title: true, cliente: true },
+          },
+        },
+      });
+
+      if (!checkin) {
+        throw new AppError('Check-in nao encontrado', 404, 'CHECKIN_NOT_FOUND');
+      }
+
+      // Get user info
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      });
+
+      // Calculate hours worked
+      const checkoutAt = new Date();
+      const hoursWorked = (checkoutAt.getTime() - checkin.checkinAt.getTime()) / (1000 * 60 * 60);
+
+      // Update checkin with checkout
+      const updatedCheckin = await prisma.checkin.update({
+        where: { id: checkinId },
+        data: {
+          checkoutAt,
+          checkoutLatitude: latitude,
+          checkoutLongitude: longitude,
+          checkoutReason,
+          hoursWorked,
+        },
+      });
+
+      // Update user's total hours
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          totalHoursWorked: { increment: hoursWorked },
+        },
+      });
+
+      // Update project's worked hours
+      await prisma.project.update({
+        where: { id: checkin.projectId },
+        data: {
+          workedHours: { increment: hoursWorked },
+        },
+      });
+
+      // Update UserLocation
+      await prisma.userLocation.updateMany({
+        where: { userId },
+        data: {
+          currentProjectId: null,
+          isOnline: false,
+          isOutOfArea: false,
+          distanceFromProject: null,
+        },
+      });
+
+      // Record task completions
+      let tasksCompleted = 0;
+      let totalTaskXP = 0;
+      const taskXpPerTask = 50; // 50 XP per 100% task
+
+      if (completedTaskIds && completedTaskIds.length > 0) {
+        // Verify all tasks belong to this project and are NOT already completed
+        const validTasks = await prisma.projectTask.findMany({
+          where: {
+            id: { in: completedTaskIds },
+            projectId: checkin.projectId,
+            // Only process tasks that are not already COMPLETED
+            status: { not: 'COMPLETED' },
+          },
+        });
+
+        for (const task of validTasks) {
+          // Get completion details from the map or use defaults
+          const completion = taskCompletionsMap[task.id] || { completionType: 'INTEGRAL', progress: 100 };
+          const isIntegral = completion.completionType === 'INTEGRAL';
+          const oldProgress = task.progress || 0;
+
+          // For INTEGRAL, always set to 100%
+          // For PARTIAL, never decrease progress - use max of old and new
+          const requestedProgress = isIntegral ? 100 : completion.progress;
+          const newProgress = isIntegral ? 100 : Math.max(requestedProgress, oldProgress);
+          const progressGain = Math.max(0, newProgress - oldProgress);
+
+          // Skip if no progress gain (task already at this level or higher)
+          if (progressGain === 0) {
+            continue;
+          }
+
+          // COMPLETED only when 100%, otherwise IN_PROGRESS
+          const newStatus = newProgress >= 100 ? 'COMPLETED' : 'IN_PROGRESS';
+
+          // Create task completion record (tracks who contributed)
+          await prisma.taskCompletion.create({
+            data: {
+              projectTaskId: task.id,
+              userId,
+              checkinId,
+            },
+          }).catch(() => {
+            // Ignore if already exists (unique constraint)
+          });
+
+          // Update task status and progress
+          await prisma.projectTask.update({
+            where: { id: task.id },
+            data: {
+              status: newStatus,
+              progress: newProgress,
+              completionType: isIntegral ? 'INTEGRAL' : 'PARTIAL',
+            },
+          });
+
+          // Calculate XP based on progress gain (proportional to 50 XP for 100%)
+          const xpForThisTask = Math.round((progressGain / 100) * taskXpPerTask);
+          totalTaskXP += xpForThisTask;
+          tasksCompleted++;
+        }
+
+        // Create XP transaction for tasks
+        if (totalTaskXP > 0) {
+          await prisma.xpTransaction.create({
+            data: {
+              userId,
+              amount: totalTaskXP,
+              type: 'TASK_COMPLETED',
+              reason: `${tasksCompleted} tarefa(s) atualizada(s) em ${checkin.project.title}`,
+              checkinId,
+              projectId: checkin.projectId,
+            },
+          });
+
+          await prisma.user.update({
+            where: { id: userId },
+            data: { xpTotal: { increment: totalTaskXP } },
+          });
+        }
+      }
+
+      // Calculate work XP (same formula as regular checkout)
+      const calculateWorkXP = (hours: number): number => {
+        if (hours <= 0) return 10;
+        const completeHours = Math.floor(hours);
+        const partialHour = hours - completeHours;
+        let totalXP = 0;
+        if (completeHours > 0) {
+          totalXP = 90 * completeHours + 5 * completeHours * (completeHours + 1);
+        }
+        if (partialHour > 0) {
+          const nextHourXP = 100 + 10 * completeHours;
+          totalXP += Math.round(nextHourXP * partialHour);
+        }
+        return Math.max(totalXP, 10);
+      };
+
+      const workXP = calculateWorkXP(hoursWorked);
+      const totalXP = workXP + totalTaskXP;
+
+      // Create work XP transaction
+      await prisma.xpTransaction.create({
+        data: {
+          userId,
+          amount: workXP,
+          type: 'CHECKOUT',
+          reason: `${hoursWorked.toFixed(1)}h trabalhadas em ${checkin.project.title}`,
+          checkinId,
+          projectId: checkin.projectId,
+        },
+      });
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { xpTotal: { increment: workXP } },
+      });
+
+      // Handle report reminder
+      let reportReminder = null;
+      let requiresReport = false;
+
+      // Check if a report was already submitted today for this project
+      const { wasReportSubmittedToday, createReportReminder } = await import('../../services/report-reminder.service');
+      const reportAlreadySubmitted = await wasReportSubmittedToday(checkin.projectId);
+
+      if (!reportAlreadySubmitted) {
+        if (reportOption === 'NOW') {
+          // Flag that report is required before completing checkout flow
+          requiresReport = true;
+        } else if (reportOption === 'LATER_60MIN') {
+          // Create reminder for 60 minutes from now
+          reportReminder = await createReportReminder(userId, checkin.projectId, checkinId);
+        }
+        // SKIP option - no reminder needed
+      }
+
+      // Emit checkout event
+      emitCheckout({
+        userId,
+        userName: user?.name || 'Aplicador',
+        projectId: checkin.projectId,
+        projectName: checkin.project.title,
+        hoursWorked,
+        timestamp: checkoutAt,
+      });
+
+      // Get final user XP
+      const finalUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { xpTotal: true, level: true },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          checkin: {
+            ...updatedCheckin,
+            hoursWorked: Number(updatedCheckin.hoursWorked),
+          },
+          tasksCompleted,
+          reportReminder,
+          requiresReport, // If true, frontend should navigate to report screen
+          reportAlreadySubmitted, // If true, no report/reminder needed
+        },
+        xp: {
+          workXP,
+          taskXP: totalTaskXP,
+          totalEarned: totalXP,
+          total: finalUser?.xpTotal || 0,
+          level: finalUser?.level || 1,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================
+// REPORT REMINDERS
+// =============================================
+
+// GET /api/mobile/report-reminders/pending - Get pending reminders
+router.get('/report-reminders/pending', mobileAuth, async (req, res, next) => {
+  try {
+    const userId = req.user!.sub;
+    const { getPendingReminders } = await import('../../services/report-reminder.service');
+    const reminders = await getPendingReminders(userId);
+
+    res.json({
+      success: true,
+      data: reminders,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/mobile/report-reminders/:id/dismiss - Dismiss a reminder
+router.post(
+  '/report-reminders/:id/dismiss',
+  mobileAuth,
+  [param('id').isUUID()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const reminderId = req.params.id;
+      const { dismissReminder } = await import('../../services/report-reminder.service');
+      const dismissed = await dismissReminder(reminderId);
+
+      res.json({
+        success: true,
+        data: { dismissed },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST /api/mobile/reports - Create report (updated to cancel reminders)
+// This hook cancels pending reminders when a report is submitted
+router.post(
+  '/reports/with-reminder-cancel',
+  mobileAuth,
+  [
+    body('projectId').isUUID(),
+    body('notes').optional().trim(),
+    body('tags').optional().isArray(),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const userId = req.user!.sub;
+      const { projectId, notes, tags } = req.body;
+
+      // Check if user is assigned
+      const assignment = await prisma.projectAssignment.findFirst({
+        where: {
+          userId,
+          projectId,
+          isActive: true,
+        },
+      });
+
+      if (!assignment) {
+        throw new AppError('Not assigned to this project', 403, 'NOT_ASSIGNED');
+      }
+
+      // Get active checkin
+      const activeCheckin = await prisma.checkin.findFirst({
+        where: {
+          userId,
+          projectId,
+          checkoutAt: null,
+        },
+      });
+
+      const report = await prisma.report.create({
+        data: {
+          userId,
+          projectId,
+          checkinId: activeCheckin?.id,
+          notes,
+          tags: tags || [],
+          status: 'SUBMITTED',
+          submittedAt: new Date(),
+        },
+      });
+
+      // Cancel any pending reminders for this user/project
+      const { cancelRemindersForUser } = await import('../../services/report-reminder.service');
+      await cancelRemindersForUser(userId, projectId);
+
+      res.status(201).json({
+        success: true,
+        data: report,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================
 // XP RANKING
 // =============================================
 
@@ -2901,5 +4106,111 @@ router.get('/ranking/top10', mobileAuth, async (req, res, next) => {
     next(error);
   }
 });
+
+// =============================================
+// AUTO-CHECKOUT JUSTIFICATION
+// =============================================
+
+// POST /api/mobile/checkins/:id/justify-auto-checkout - Justify an auto-checkout
+router.post(
+  '/checkins/:id/justify-auto-checkout',
+  mobileAuth,
+  [
+    param('id').isUUID(),
+    body('justification').isString().trim().isLength({ min: 10, max: 500 }),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      // Find the checkin
+      const checkin = await prisma.checkin.findFirst({
+        where: {
+          id: req.params.id,
+          userId: req.user!.sub,
+          isAutoCheckout: true,
+          autoCheckoutJustification: null, // Not yet justified
+        },
+        include: {
+          project: {
+            select: { id: true, title: true },
+          },
+        },
+      });
+
+      if (!checkin) {
+        throw new AppError(
+          'Check-in not found or already justified',
+          404,
+          'CHECKIN_NOT_FOUND'
+        );
+      }
+
+      // Update with justification
+      const updatedCheckin = await prisma.checkin.update({
+        where: { id: checkin.id },
+        data: {
+          autoCheckoutJustification: req.body.justification,
+          autoCheckoutJustifiedAt: new Date(),
+        },
+      });
+
+      console.log(`[AutoCheckout] User ${req.user!.sub} justified auto-checkout ${checkin.id}: "${req.body.justification}"`);
+
+      res.json({
+        success: true,
+        message: 'Justificativa registrada com sucesso',
+        data: {
+          id: updatedCheckin.id,
+          projectName: checkin.project.title,
+          justification: req.body.justification,
+          justifiedAt: updatedCheckin.autoCheckoutJustifiedAt,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/mobile/checkins/pending-justifications - Get auto-checkouts pending justification
+router.get(
+  '/checkins/pending-justifications',
+  mobileAuth,
+  async (req, res, next) => {
+    try {
+      const pendingJustifications = await prisma.checkin.findMany({
+        where: {
+          userId: req.user!.sub,
+          isAutoCheckout: true,
+          autoCheckoutJustification: null,
+        },
+        include: {
+          project: {
+            select: { id: true, title: true, cliente: true },
+          },
+        },
+        orderBy: { checkoutAt: 'desc' },
+        take: 10,
+      });
+
+      res.json({
+        success: true,
+        data: pendingJustifications.map((c) => ({
+          id: c.id,
+          projectId: c.projectId,
+          projectName: c.project.title,
+          projectCliente: c.project.cliente,
+          checkinAt: c.checkinAt,
+          checkoutAt: c.checkoutAt,
+          checkoutDistance: c.checkoutDistance,
+          hoursWorked: c.hoursWorked,
+        })),
+        count: pendingJustifications.length,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 export { router as mobileRoutes };

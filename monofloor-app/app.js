@@ -1,6 +1,6 @@
 // API Configuration
 // const API_URL = 'https://devoted-wholeness-production.up.railway.app'; // Production (Railway needs DATABASE_URL fix)
-const API_URL = 'http://localhost:3001'; // Local server for testing
+const API_URL = 'http://localhost:3000'; // Local server for testing
 
 // =============================================
 // CHARACTER ICONS BY ROLE
@@ -8,8 +8,9 @@ const API_URL = 'http://localhost:3001'; // Local server for testing
 function getCharacterIcon(role) {
     const icons = {
         'LIDER': 'icons/lider.png',
-        'APLICADOR': 'icons/aplicador-1.png',
-        'APLICADOR_AUX': 'icons/aplicador-2.png',
+        'APLICADOR_III': 'icons/aplicador-3.png',
+        'APLICADOR_II': 'icons/aplicador-2.png',
+        'APLICADOR_I': 'icons/aplicador-1.png',
         'LIDER_PREPARACAO': 'icons/lider-preparacao.png',
         'PREPARADOR': 'icons/preparador.png',
         'AUXILIAR': 'icons/ajudante.png'
@@ -20,9 +21,10 @@ function getCharacterIcon(role) {
 function getCharacterLabel(role) {
     const labels = {
         'LIDER': 'Lider',
-        'APLICADOR': 'Aplicador',
-        'APLICADOR_AUX': 'Aplicador Aux.',
-        'LIDER_PREPARACAO': 'Lider Preparacao',
+        'APLICADOR_III': 'Aplicador III',
+        'APLICADOR_II': 'Aplicador II',
+        'APLICADOR_I': 'Aplicador I',
+        'LIDER_PREPARACAO': 'Lider da Preparacao',
         'PREPARADOR': 'Preparador',
         'AUXILIAR': 'Auxiliar'
     };
@@ -34,7 +36,7 @@ function getCharacterLabel(role) {
 // =============================================
 
 // Role hierarchy - from lowest to highest
-const ROLE_HIERARCHY = ['AUXILIAR', 'PREPARADOR', 'LIDER_PREPARACAO', 'APLICADOR_AUX', 'APLICADOR', 'LIDER'];
+const ROLE_HIERARCHY = ['AUXILIAR', 'PREPARADOR', 'LIDER_PREPARACAO', 'APLICADOR_I', 'APLICADOR_II', 'APLICADOR_III', 'LIDER'];
 
 // Check if a role change is a promotion
 function isPromotion(oldRole, newRole) {
@@ -137,19 +139,21 @@ const onboardingRoleIcons = {
     'AUXILIAR': 'icons/ajudante.png',
     'PREPARADOR': 'icons/preparador.png',
     'LIDER_PREPARACAO': 'icons/lider-preparacao.png',
-    'APLICADOR_AUX': 'icons/aplicador-1.png',
-    'APLICADOR': 'icons/aplicador-2.png',
+    'APLICADOR_I': 'icons/aplicador-1.png',
+    'APLICADOR_II': 'icons/aplicador-2.png',
+    'APLICADOR_III': 'icons/aplicador-3.png',
     'LIDER': 'icons/lider.png'
 };
 
 // Role display names for onboarding
 const onboardingRoleNames = {
-    'AUXILIAR': 'Ajudante',
+    'AUXILIAR': 'Auxiliar',
     'PREPARADOR': 'Preparador',
-    'LIDER_PREPARACAO': 'Lider de Preparacao',
-    'APLICADOR_AUX': 'Aplicador Auxiliar',
-    'APLICADOR': 'Aplicador',
-    'LIDER': 'Lider de Equipe'
+    'LIDER_PREPARACAO': 'Lider da Preparacao',
+    'APLICADOR_I': 'Aplicador I',
+    'APLICADOR_II': 'Aplicador II',
+    'APLICADOR_III': 'Aplicador III',
+    'LIDER': 'Lider'
 };
 
 // Check if onboarding was already completed
@@ -1519,6 +1523,27 @@ async function initPushNotifications() {
                     }, 500);
                 }
             }
+
+            if (event.data.type === 'DISMISS_REPORT_REMINDER') {
+                // Dismiss report reminder via API
+                const reminderId = event.data.reminderId;
+                if (reminderId) {
+                    try {
+                        const token = getAuthToken();
+                        if (token) {
+                            await fetch(`${API_URL}/api/mobile/report-reminders/${reminderId}/dismiss`, {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': `Bearer ${token}`
+                                }
+                            });
+                            console.log('[Push] Report reminder dismissed:', reminderId);
+                        }
+                    } catch (error) {
+                        console.error('[Push] Error dismissing report reminder:', error);
+                    }
+                }
+            }
         });
 
         // Request notification permission
@@ -2220,7 +2245,16 @@ function hideLeavingModal() {
 async function confirmLeavingReason(reason) {
     hideLeavingModal();
 
-    if (activeCheckinId) {
+    if (!activeCheckinId) return;
+
+    // Store the reason for later use
+    pendingCheckoutReason = reason;
+
+    // For "Outro projeto" and "Fim expediente", show task completion flow
+    if (reason === 'OUTRO_PROJETO' || reason === 'FIM_EXPEDIENTE') {
+        await showTaskCompletionModal();
+    } else {
+        // For lunch/supplies, do regular checkout
         await doCheckoutWithReason(reason);
     }
 }
@@ -2282,24 +2316,34 @@ async function doCheckoutWithReason(reason) {
             restartLocationTracking();
 
             const hoursWorked = data.data.hoursWorked ? data.data.hoursWorked.toFixed(1) : '0';
-            let message = '';
-            switch(reason) {
-                case 'ALMOCO_INTERVALO':
-                    message = `Pausa para almoco registrada. Voce trabalhou ${hoursWorked}h neste periodo.`;
-                    break;
-                case 'COMPRA_INSUMOS':
-                    message = `Compra de insumos registrada. Voce trabalhou ${hoursWorked}h neste periodo.`;
-                    break;
-                case 'OUTRO_PROJETO':
-                    message = `Check-out realizado. Voce trabalhou ${hoursWorked}h. Pode fazer check-in em outro projeto.`;
-                    break;
-                case 'FIM_EXPEDIENTE':
-                    message = `Expediente encerrado. Voce trabalhou ${hoursWorked}h hoje. Bom descanso!`;
-                    break;
-                default:
-                    message = `Check-out realizado. Voce trabalhou ${hoursWorked}h.`;
+
+            // Mostrar XP ganho se disponível
+            if (data.xp) {
+                // Atualizar XP na tela de perfil se existir
+                updateUserXP(data.xp.total, data.xp.level);
+                // Mostrar modal de XP (fullscreen mobile) - usa razão da API
+                showXPNotification(data.xp.earned, data.xp.reason, data.xp.total);
+            } else {
+                // Se não tiver XP, mostrar modal de sucesso normal
+                let message = '';
+                switch(reason) {
+                    case 'ALMOCO_INTERVALO':
+                        message = `Pausa para almoco registrada. Voce trabalhou ${hoursWorked}h neste periodo.`;
+                        break;
+                    case 'COMPRA_INSUMOS':
+                        message = `Compra de insumos registrada. Voce trabalhou ${hoursWorked}h neste periodo.`;
+                        break;
+                    case 'OUTRO_PROJETO':
+                        message = `Check-out realizado. Voce trabalhou ${hoursWorked}h. Pode fazer check-in em outro projeto.`;
+                        break;
+                    case 'FIM_EXPEDIENTE':
+                        message = `Expediente encerrado. Voce trabalhou ${hoursWorked}h hoje. Bom descanso!`;
+                        break;
+                    default:
+                        message = `Check-out realizado. Voce trabalhou ${hoursWorked}h.`;
+                }
+                showSuccessModal('Check-out Realizado', message);
             }
-            showSuccessModal('Check-out Realizado', message);
         } else {
             showSuccessModal('Erro', 'Nao foi possivel fazer o check-out. Tente novamente.');
         }
@@ -2836,6 +2880,12 @@ let isCheckedIn = false;
 let activeCheckinId = null;
 let currentProjectForCheckin = null;
 
+// Task completion flow variables
+let pendingCheckoutReason = null;
+let currentProjectTasks = null;
+let selectedTaskIds = [];
+let allProjectTasksFromModal = [];
+
 // =============================================
 // GEOFENCING SYSTEM
 // =============================================
@@ -2844,6 +2894,16 @@ let geolocationWatchId = null;
 let currentUserLocation = null;
 let geolocationState = 'loading'; // 'loading' | 'valid' | 'invalid' | 'error' | 'permission_denied'
 let currentDistanceToProject = null;
+
+// =============================================
+// AUTO-CHECKOUT SYSTEM (quando sai da área >100m)
+// =============================================
+const AUTO_CHECKOUT_DISTANCE_METERS = 100; // Distância para trigger de auto-checkout
+const AUTO_CHECKOUT_COUNTDOWN_SECONDS = 30; // Tempo para responder antes do auto-checkout
+let autoCheckoutCountdownInterval = null;
+let autoCheckoutTimeRemaining = AUTO_CHECKOUT_COUNTDOWN_SECONDS;
+let isAutoCheckoutWarningShown = false; // Evitar múltiplos alertas
+let lastAutoCheckoutCheckinId = null; // ID do último checkout automático (para justificativa)
 
 // Fórmula Haversine para calcular distância entre dois pontos
 function haversineDistance(lat1, lon1, lat2, lon2) {
@@ -3022,6 +3082,21 @@ function onGeolocationSuccess(position) {
 
     geolocationState = geofenceResult.isWithinGeofence ? 'valid' : 'invalid';
     updateLocationUI();
+
+    // AUTO-CHECKOUT: Verificar se usuário saiu da área (>100m) durante checkin ativo
+    if (isCheckedIn && activeCheckinId && currentDistanceToProject > AUTO_CHECKOUT_DISTANCE_METERS) {
+        // Só mostrar aviso se ainda não foi mostrado
+        if (!isAutoCheckoutWarningShown) {
+            console.log(`[Auto-checkout] Usuário a ${currentDistanceToProject}m do projeto, mostrando aviso...`);
+            showAutoCheckoutWarning();
+        }
+    } else if (currentDistanceToProject <= AUTO_CHECKOUT_DISTANCE_METERS) {
+        // Se voltou para a área, cancelar o warning se estiver ativo
+        if (isAutoCheckoutWarningShown) {
+            console.log(`[Auto-checkout] Usuário voltou para a área (${currentDistanceToProject}m), cancelando aviso`);
+            cancelAutoCheckoutWarning();
+        }
+    }
 }
 
 // Callback de erro do watchPosition
@@ -3076,6 +3151,339 @@ function stopGeolocationWatch() {
     if (geolocationWatchId !== null) {
         navigator.geolocation.clearWatch(geolocationWatchId);
         geolocationWatchId = null;
+    }
+}
+
+// =============================================
+// AUTO-CHECKOUT FUNCTIONS
+// =============================================
+
+// Mostrar modal de aviso de auto-checkout
+function showAutoCheckoutWarning() {
+    isAutoCheckoutWarningShown = true;
+    autoCheckoutTimeRemaining = AUTO_CHECKOUT_COUNTDOWN_SECONDS;
+
+    const modal = document.getElementById('auto-checkout-warning-modal');
+    const countdownEl = document.getElementById('auto-checkout-timer');
+    const distanceEl = document.getElementById('auto-checkout-distance');
+
+    if (distanceEl) {
+        distanceEl.textContent = `Distância: ${currentDistanceToProject}m`;
+    }
+
+    if (countdownEl) {
+        countdownEl.textContent = autoCheckoutTimeRemaining;
+    }
+
+    if (modal) {
+        modal.classList.add('show');
+    }
+
+    // Iniciar countdown
+    startAutoCheckoutCountdown();
+
+    console.log('[Auto-checkout] Aviso mostrado, countdown iniciado');
+}
+
+// Cancelar aviso de auto-checkout (quando volta para área)
+function cancelAutoCheckoutWarning() {
+    isAutoCheckoutWarningShown = false;
+
+    // Parar countdown
+    if (autoCheckoutCountdownInterval) {
+        clearInterval(autoCheckoutCountdownInterval);
+        autoCheckoutCountdownInterval = null;
+    }
+
+    // Fechar modal
+    const modal = document.getElementById('auto-checkout-warning-modal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+
+    console.log('[Auto-checkout] Aviso cancelado (usuário voltou para área)');
+}
+
+// Iniciar contagem regressiva
+function startAutoCheckoutCountdown() {
+    // Limpar intervalo anterior se existir
+    if (autoCheckoutCountdownInterval) {
+        clearInterval(autoCheckoutCountdownInterval);
+    }
+
+    autoCheckoutCountdownInterval = setInterval(() => {
+        autoCheckoutTimeRemaining--;
+
+        const countdownEl = document.getElementById('auto-checkout-timer');
+        if (countdownEl) {
+            countdownEl.textContent = autoCheckoutTimeRemaining;
+        }
+
+        if (autoCheckoutTimeRemaining <= 0) {
+            // Tempo esgotado - fazer checkout automático
+            clearInterval(autoCheckoutCountdownInterval);
+            autoCheckoutCountdownInterval = null;
+            executeAutoCheckout();
+        }
+    }, 1000);
+}
+
+// Mapear opção selecionada para reason code (chamada pelo HTML)
+function selectAutoCheckoutReason(option) {
+    const reasonMap = {
+        'almoco': 'ALMOCO_INTERVALO',
+        'insumos': 'COMPRA_INSUMOS',
+        'outro': 'OUTRO_PROJETO',
+        'fim': 'FIM_EXPEDIENTE'
+    };
+
+    const reason = reasonMap[option] || 'FIM_EXPEDIENTE';
+    handleAutoCheckoutOption(reason);
+}
+
+// Opção selecionada no modal de auto-checkout
+function handleAutoCheckoutOption(reason) {
+    console.log(`[Auto-checkout] Usuário escolheu: ${reason}`);
+
+    // Fechar modal de aviso
+    cancelAutoCheckoutWarning();
+
+    // Fazer checkout com a razão selecionada
+    doCheckoutWithReason(reason, false); // isAutoCheckout = false porque usuário escolheu
+}
+
+// Executar checkout automático (quando tempo esgota)
+async function executeAutoCheckout() {
+    console.log('[Auto-checkout] Tempo esgotado, executando checkout automático...');
+
+    // Fechar modal de aviso
+    const warningModal = document.getElementById('auto-checkout-warning-modal');
+    if (warningModal) {
+        warningModal.classList.remove('show');
+    }
+    isAutoCheckoutWarningShown = false;
+
+    if (!activeCheckinId) {
+        console.error('[Auto-checkout] Sem checkin ativo para fazer checkout');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/mobile/checkins/${activeCheckinId}/checkout`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({
+                reason: 'AUTO_DISTANTE',
+                isAutoCheckout: true,
+                latitude: currentUserLocation?.lat,
+                longitude: currentUserLocation?.lon
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Salvar ID para possível justificativa
+            lastAutoCheckoutCheckinId = activeCheckinId;
+
+            // Resetar estado
+            isCheckedIn = false;
+            activeCheckinId = null;
+            currentProjectForCheckin = null;
+
+            // Atualizar UI
+            updateCheckInButton();
+            stopActiveCheckinTimer();
+
+            console.log('[Auto-checkout] Checkout automático realizado com sucesso');
+
+            // Mostrar modal de confirmação
+            showAutoCheckoutDoneModal();
+        } else {
+            console.error('[Auto-checkout] Erro no checkout:', data.message);
+            alert('Erro ao fazer checkout automático: ' + data.message);
+        }
+    } catch (error) {
+        console.error('[Auto-checkout] Erro na requisição:', error);
+        alert('Erro de conexão ao fazer checkout automático');
+    }
+}
+
+// Fazer checkout com razão específica (quando usuário escolhe opção)
+async function doCheckoutWithReason(reason, isAutoCheckout = false) {
+    if (!activeCheckinId) {
+        console.error('Sem checkin ativo para fazer checkout');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/mobile/checkins/${activeCheckinId}/checkout`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({
+                reason: reason,
+                isAutoCheckout: isAutoCheckout,
+                latitude: currentUserLocation?.lat,
+                longitude: currentUserLocation?.lon
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Resetar estado
+            isCheckedIn = false;
+            activeCheckinId = null;
+            currentProjectForCheckin = null;
+
+            // Atualizar UI
+            updateCheckInButton();
+            stopActiveCheckinTimer();
+
+            // Feedback visual
+            const messages = {
+                'ALMOCO_INTERVALO': 'Bom apetite! Lembre de voltar para o projeto.',
+                'COMPRA_INSUMOS': 'Boas compras! Retorne logo ao projeto.',
+                'OUTRO_PROJETO': 'Boa sorte no outro projeto!',
+                'FIM_EXPEDIENTE': 'Bom descanso! Até amanhã.'
+            };
+
+            showSuccessModal('Check-out Realizado!', messages[reason] || 'Checkout realizado com sucesso.');
+        } else {
+            alert('Erro ao fazer checkout: ' + data.message);
+        }
+    } catch (error) {
+        console.error('Erro no checkout:', error);
+        alert('Erro de conexão ao fazer checkout');
+    }
+}
+
+// Mostrar modal de confirmação de auto-checkout
+function showAutoCheckoutDoneModal() {
+    const modal = document.getElementById('auto-checkout-done-modal');
+    if (modal) {
+        modal.classList.add('show');
+    }
+}
+
+// Fechar modal de confirmação de auto-checkout
+function closeAutoCheckoutDoneModal() {
+    const modal = document.getElementById('auto-checkout-done-modal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+    lastAutoCheckoutCheckinId = null;
+}
+
+// Mostrar modal de justificativa (alias para HTML onclick)
+function showAutoCheckoutJustification() {
+    showAutoCheckoutJustifyModal();
+}
+
+// Mostrar modal de justificativa
+function showAutoCheckoutJustifyModal() {
+    // Fechar modal de confirmação
+    const doneModal = document.getElementById('auto-checkout-done-modal');
+    if (doneModal) {
+        doneModal.classList.remove('show');
+    }
+
+    // Abrir modal de justificativa
+    const justifyModal = document.getElementById('auto-checkout-justify-modal');
+    const textarea = document.getElementById('auto-checkout-justification-text');
+
+    if (textarea) {
+        textarea.value = '';
+        updateJustifyCharCount(); // Resetar contador
+    }
+
+    if (justifyModal) {
+        justifyModal.classList.add('show');
+    }
+}
+
+// Fechar modal de justificativa
+function closeAutoCheckoutJustifyModal() {
+    const modal = document.getElementById('auto-checkout-justify-modal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+// Atualizar contador de caracteres da justificativa
+function updateJustifyCharCount() {
+    const textarea = document.getElementById('auto-checkout-justification-text');
+    const counter = document.getElementById('justify-char-count');
+    const submitBtn = document.getElementById('submitJustificationBtn');
+
+    if (textarea && counter) {
+        const len = textarea.value.length;
+        counter.textContent = len;
+
+        // Habilitar botão somente se tiver >= 10 caracteres
+        if (submitBtn) {
+            submitBtn.disabled = len < 10;
+        }
+    }
+}
+
+// Enviar justificativa de auto-checkout
+async function submitAutoCheckoutJustification() {
+    const textarea = document.getElementById('auto-checkout-justification-text');
+    const justification = textarea?.value?.trim();
+
+    if (!justification || justification.length < 10) {
+        alert('Por favor, escreva uma justificativa com pelo menos 10 caracteres');
+        return;
+    }
+
+    if (!lastAutoCheckoutCheckinId) {
+        alert('Erro: ID do checkout não encontrado');
+        closeAutoCheckoutJustifyModal();
+        return;
+    }
+
+    const submitBtn = document.getElementById('submitJustificationBtn');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Enviando...';
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/mobile/checkins/${lastAutoCheckoutCheckinId}/justify-auto-checkout`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({
+                justification: justification
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            closeAutoCheckoutJustifyModal();
+            lastAutoCheckoutCheckinId = null;
+            showSuccessModal('Justificativa Enviada!', 'Sua explicação foi registrada com sucesso.');
+        } else {
+            alert('Erro ao enviar justificativa: ' + data.message);
+        }
+    } catch (error) {
+        console.error('Erro ao enviar justificativa:', error);
+        alert('Erro de conexão ao enviar justificativa');
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Enviar Justificativa';
+        }
     }
 }
 
@@ -3140,10 +3548,27 @@ async function doCheckin() {
             activeCheckinId = data.data.id;
             currentProjectForCheckin = selectedProject.id;
             updateCheckinUI(true);
-            showSuccessModal('Check-in Realizado!', `Bom trabalho! Seu expediente começou às ${getCurrentTime()}.\nDistância: ${currentDistanceToProject}m do projeto.`);
+
+            // Mostrar XP ganho se disponível
+            let successMessage = `Bom trabalho! Seu expediente começou às ${getCurrentTime()}.\nDistância: ${currentDistanceToProject}m do projeto.`;
+            if (data.xp) {
+                // Atualizar XP na tela de perfil se existir
+                updateUserXP(data.xp.total, data.xp.level);
+                // Mostrar modal de XP (fullscreen mobile)
+                showXPNotification(data.xp.earned, data.xp.reason, data.xp.total);
+            } else {
+                // Se não tiver XP, mostrar modal de sucesso normal
+                showSuccessModal('Check-in Realizado!', successMessage);
+            }
 
             // Iniciar envio de localização periódico
             startLocationTracking();
+
+            // Load tasks for the project after check-in
+            if (selectedProject && selectedProject.id) {
+                loadProjectTasks(selectedProject.id);
+                updateTaskBlockVisibility(true);
+            }
         } else {
             throw new Error(data.error?.message || 'Erro ao fazer check-in');
         }
@@ -3397,8 +3822,27 @@ function closeLeavingModal() {
 }
 
 function selectLeavingReason(reason) {
-    // Agora usa a função real de checkout
-    confirmCheckout(reason);
+    // Map old reason names to new format
+    const reasonMap = {
+        'almoco': 'ALMOCO_INTERVALO',
+        'insumos': 'COMPRA_INSUMOS',
+        'outro': 'OUTRO_PROJETO',
+        'fim': 'FIM_EXPEDIENTE'
+    };
+
+    const mappedReason = reasonMap[reason] || reason;
+
+    // Close the old modal
+    closeLeavingModal();
+
+    // For "outro projeto" and "fim expediente", use the task completion flow
+    if (mappedReason === 'OUTRO_PROJETO' || mappedReason === 'FIM_EXPEDIENTE') {
+        pendingCheckoutReason = mappedReason;
+        showTaskCompletionModal();
+    } else {
+        // For lunch/supplies, do regular checkout
+        doCheckoutWithReason(mappedReason);
+    }
 }
 
 // Success Modal
@@ -3412,6 +3856,92 @@ function showSuccessModal(title, message) {
 function closeModal() {
     document.getElementById('success-modal').classList.remove('active');
 }
+
+// =============================================
+// XP SYSTEM - Sistema de experiência
+// =============================================
+
+// Atualizar XP na interface
+function updateUserXP(totalXP, level) {
+    // Atualizar no localStorage
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    userData.xpTotal = totalXP;
+    userData.level = level;
+    localStorage.setItem('userData', JSON.stringify(userData));
+
+    // Atualizar na tela de perfil se visível
+    const xpElement = document.querySelector('.xp-total');
+    if (xpElement) {
+        xpElement.textContent = `${totalXP} XP`;
+    }
+
+    const levelElement = document.querySelector('.user-level');
+    if (levelElement) {
+        levelElement.textContent = `Nível ${level}`;
+    }
+}
+
+// Mostrar modal de XP ganho (estilo mobile fullscreen)
+function showXPNotification(amount, reason, totalXP = null) {
+    const overlay = document.getElementById('xpRewardOverlay');
+    if (!overlay) {
+        console.error('XP Reward Overlay não encontrado');
+        return;
+    }
+
+    const isLoss = amount < 0;
+
+    // Atualizar valores no modal
+    const amountEl = document.getElementById('xpRewardAmount');
+    const reasonEl = document.getElementById('xpRewardReason');
+    const totalEl = document.getElementById('xpRewardTotalValue');
+
+    if (amountEl) {
+        amountEl.textContent = isLoss ? `${amount} XP` : `+${amount} XP`;
+        amountEl.classList.toggle('xp-loss', isLoss);
+    }
+    if (reasonEl) reasonEl.textContent = reason;
+
+    // Update overlay style for loss
+    overlay.classList.toggle('loss-mode', isLoss);
+
+    // Mostrar total se disponível
+    if (totalXP !== null && totalEl) {
+        totalEl.textContent = `${totalXP.toLocaleString('pt-BR')} XP`;
+        document.getElementById('xpRewardTotal').style.display = 'flex';
+    } else {
+        const totalContainer = document.getElementById('xpRewardTotal');
+        if (totalContainer) totalContainer.style.display = 'none';
+    }
+
+    // Mostrar o overlay
+    overlay.classList.add('active');
+
+    // Vibrate device for loss
+    if (isLoss && navigator.vibrate) {
+        navigator.vibrate([100, 50, 100, 50, 200]);
+    }
+
+    console.log(isLoss ? `💔 XP Loss: ${amount} XP - ${reason}` : `🌟 XP Reward: +${amount} XP - ${reason}`);
+}
+
+// Mostrar notificação de perda de XP (atalho)
+function showXPLossNotification(amount, reason, totalXP = null) {
+    showXPNotification(-Math.abs(amount), reason, totalXP);
+}
+
+// Fechar modal de XP
+function closeXPRewardModal() {
+    const overlay = document.getElementById('xpRewardOverlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+    }
+}
+
+// Expor funções de XP globalmente para testes via console
+window.showXPNotification = showXPNotification;
+window.showXPLossNotification = showXPLossNotification;
+window.closeXPRewardModal = closeXPRewardModal;
 
 // Report Success
 function showReportSuccess() {
@@ -5260,6 +5790,11 @@ async function openProject(projectId) {
             selectedProject = { ...selectedProject, ...data.data };
             // Atualizar a equipe na tela
             renderProjectTeam(data.data.team || []);
+
+            // Load tasks if user is checked in to this project
+            if (isCheckedIn && activeCheckinId) {
+                loadProjectTasks(projectId);
+            }
         }
     } catch (error) {
         console.error('Erro ao carregar detalhes do projeto:', error);
@@ -5303,14 +5838,12 @@ function renderProjectTeam(team) {
 function getRoleLabel(role) {
     const labels = {
         'LIDER': 'Líder',
-        'APLICADOR': 'Aplicador',
-        'APLICADOR_1': 'Aplicador 1',
-        'APLICADOR_2': 'Aplicador 2',
-        'APLICADOR_3': 'Aplicador 3',
-        'LIDER_PREPARACAO': 'Líder Preparação',
+        'APLICADOR_III': 'Aplicador III',
+        'APLICADOR_II': 'Aplicador II',
+        'APLICADOR_I': 'Aplicador I',
+        'LIDER_PREPARACAO': 'Líder da Preparação',
         'PREPARADOR': 'Preparador',
-        'AUXILIAR': 'Auxiliar',
-        'AJUDANTE': 'Ajudante'
+        'AUXILIAR': 'Auxiliar'
     };
     return labels[role] || role || 'Membro';
 }
@@ -5906,7 +6439,7 @@ function changeHoursMonth(delta) {
 
 async function loadHours() {
     try {
-        const response = await fetch(`${API_URL}/api/mobile/hours?month=${currentHoursMonth}&year=${currentHoursYear}`, {
+        const response = await fetch(`${API_URL}/api/mobile/earnings?month=${currentHoursMonth}&year=${currentHoursYear}`, {
             headers: {
                 'Authorization': `Bearer ${getAuthToken()}`
             }
@@ -5915,27 +6448,108 @@ async function loadHours() {
         const data = await response.json();
 
         if (data.success) {
-            renderHours(data.data);
+            renderEarnings(data.data);
         }
     } catch (error) {
-        console.error('Erro ao carregar horas:', error);
+        console.error('Erro ao carregar ganhos:', error);
         // Mostrar estado vazio em caso de erro
-        renderHours({ totalHours: 0, byProject: [] });
+        renderEarnings({ summary: { totalEarnings: 0, totalHours: 0 }, byProject: [], xp: {} });
     }
 }
 
-function renderHours(hoursData) {
+// Mapa de labels de cargo
+const roleLabels = {
+    'AUXILIAR': 'Ajudante',
+    'PREPARADOR': 'Preparador',
+    'LIDER_PREPARACAO': 'Finalizador',
+    'APLICADOR_I': 'Aplicador I',
+    'APLICADOR_II': 'Aplicador II',
+    'APLICADOR_III': 'Aplicador III',
+    'LIDER': 'Líder'
+};
+
+// Formatar valor em reais
+function formatCurrency(value) {
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+    }).format(value || 0);
+}
+
+// Formatar horas
+function formatHours(hours) {
+    const h = Math.floor(hours || 0);
+    const m = Math.round(((hours || 0) - h) * 60);
+    return m > 0 ? `${h}h${m.toString().padStart(2, '0')}` : `${h}h`;
+}
+
+function renderEarnings(earningsData) {
     // Atualizar texto do periodo
     const periodText = document.getElementById('hoursPeriodText');
     if (periodText) {
         periodText.textContent = `${monthNames[currentHoursMonth - 1]} ${currentHoursYear}`;
     }
 
-    // Atualizar total de horas
-    const totalHoursEl = document.getElementById('hoursTotalValue');
+    // Atualizar cargo do usuário
+    const roleEl = document.getElementById('hoursUserRole');
+    if (roleEl && earningsData.currentRole) {
+        roleEl.textContent = roleLabels[earningsData.currentRole] || earningsData.currentRole;
+    }
+
+    // Atualizar valor total
+    const earningsTotalEl = document.getElementById('earningsTotalValue');
+    if (earningsTotalEl) {
+        earningsTotalEl.textContent = formatCurrency(earningsData.summary?.totalEarnings);
+    }
+
+    // Atualizar horas trabalhadas
+    const totalHoursEl = document.getElementById('earningsTotalHours');
     if (totalHoursEl) {
-        const total = hoursData.totalHours || 0;
-        totalHoursEl.textContent = total.toFixed(0) + 'h';
+        totalHoursEl.textContent = formatHours(earningsData.summary?.totalHours);
+    }
+
+    // Atualizar valor/hora atual
+    const hourlyRateEl = document.getElementById('earningsHourlyRate');
+    if (hourlyRateEl && earningsData.currentRates) {
+        hourlyRateEl.textContent = formatCurrency(earningsData.currentRates.hourlyRate);
+    }
+
+    // Atualizar breakdown de horas
+    const hoursNormalEl = document.getElementById('hoursNormalValue');
+    if (hoursNormalEl) {
+        hoursNormalEl.textContent = formatHours(earningsData.summary?.hoursNormal);
+    }
+
+    const hoursOvertimeEl = document.getElementById('hoursOvertimeValue');
+    if (hoursOvertimeEl) {
+        hoursOvertimeEl.textContent = formatHours(earningsData.summary?.hoursOvertime);
+    }
+
+    const hoursTravelModeEl = document.getElementById('hoursTravelModeValue');
+    if (hoursTravelModeEl) {
+        hoursTravelModeEl.textContent = formatHours(earningsData.summary?.hoursTravelMode);
+    }
+
+    const hoursTravelEl = document.getElementById('hoursTravelValue');
+    if (hoursTravelEl) {
+        const travel = (earningsData.summary?.hoursTravel || 0) + (earningsData.summary?.hoursSupplies || 0);
+        hoursTravelEl.textContent = formatHours(travel);
+    }
+
+    // Atualizar XP
+    const xpEarnedEl = document.getElementById('xpEarnedValue');
+    if (xpEarnedEl) {
+        xpEarnedEl.textContent = `+${earningsData.xp?.earnedThisMonth || 0}`;
+    }
+
+    const xpPenaltyEl = document.getElementById('xpPenaltyValue');
+    if (xpPenaltyEl) {
+        xpPenaltyEl.textContent = `-${earningsData.xp?.penaltyThisMonth || 0}`;
+    }
+
+    const xpTotalEl = document.getElementById('xpTotalValue');
+    if (xpTotalEl) {
+        xpTotalEl.textContent = earningsData.xp?.total || 0;
     }
 
     // Atualizar lista de projetos
@@ -5944,45 +6558,73 @@ function renderHours(hoursData) {
 
     if (!projectsList) return;
 
-    if (!hoursData.byProject || hoursData.byProject.length === 0) {
+    if (!earningsData.byProject || earningsData.byProject.length === 0) {
         // Mostrar estado vazio
         if (emptyState) emptyState.style.display = 'flex';
         // Remover cards de projeto existentes
-        projectsList.querySelectorAll('.hours-project-card').forEach(card => card.remove());
+        projectsList.querySelectorAll('.project-earnings-card').forEach(card => card.remove());
     } else {
         // Esconder estado vazio
         if (emptyState) emptyState.style.display = 'none';
 
-        // Renderizar projetos
-        const projectsHTML = hoursData.byProject.map(item => {
-            const projectName = item.project?.cliente || item.project?.title || 'Projeto';
+        // Renderizar projetos com ganhos
+        const projectsHTML = earningsData.byProject.map(item => {
+            const projectName = item.project?.title || 'Projeto';
+            const clientName = item.project?.cliente || '';
+            const isTravelMode = item.project?.isTravelMode || false;
+            const earnings = item.earnings || 0;
             const hours = item.hours || 0;
-            const checkins = item.checkinCount || 0;
-            const status = item.project?.status || 'EM_EXECUCAO';
-            const isCompleted = status === 'CONCLUIDO';
+            const hoursNormal = item.hoursNormal || 0;
+            const hoursOvertime = item.hoursOvertime || 0;
+            const checkins = item.checkins || 0;
+            const xpEarned = item.xpEarned || 0;
+            const xpPenalty = item.xpPenalty || 0;
 
             return `
-                <div class="hours-project-card ${isCompleted ? 'completed-project' : 'active-project'}">
-                    <div class="project-hours-header">
-                        <div class="project-status-dot ${isCompleted ? 'completed' : 'active'}"></div>
-                        <h3>${projectName}</h3>
-                        ${isCompleted ? '<span class="completed-badge">Concluido</span>' : ''}
+                <div class="project-earnings-card ${isTravelMode ? 'travel-mode' : ''}">
+                    <div class="project-earnings-header">
+                        <div class="project-earnings-info">
+                            <h3>${projectName} ${isTravelMode ? '<span class="travel-mode-badge">Viagem</span>' : ''}</h3>
+                            ${clientName ? `<span class="client-name">${clientName}</span>` : ''}
+                        </div>
+                        <span class="project-earnings-value">${formatCurrency(earnings)}</span>
                     </div>
-                    <div class="project-hours-stats">
-                        <div class="hours-stat">
-                            <span class="hours-value">${hours.toFixed(0)}h</span>
-                            <span class="hours-desc">registradas</span>
+                    <div class="project-hours-breakdown">
+                        <div class="project-hour-item">
+                            <span class="project-hour-value">${formatHours(hours)}</span>
+                            <span class="project-hour-label">Total</span>
                         </div>
-                        <div class="hours-stat">
-                            <span class="hours-value">${checkins}</span>
-                            <span class="hours-desc">check-ins</span>
+                        <div class="project-hour-item">
+                            <span class="project-hour-value">${formatHours(hoursNormal)}</span>
+                            <span class="project-hour-label">Normais</span>
                         </div>
+                        <div class="project-hour-item">
+                            <span class="project-hour-value">${formatHours(hoursOvertime)}</span>
+                            <span class="project-hour-label">Extras</span>
+                        </div>
+                        <div class="project-hour-item">
+                            <span class="project-hour-value">${checkins}</span>
+                            <span class="project-hour-label">Check-ins</span>
+                        </div>
+                    </div>
+                    <div class="project-xp-row">
+                        <div class="project-xp-item earned">
+                            <span>⭐</span>
+                            <span>+${xpEarned} XP ganho</span>
+                        </div>
+                        ${xpPenalty > 0 ? `
+                        <div class="project-xp-item penalty">
+                            <span>⚠️</span>
+                            <span>-${xpPenalty} XP penalidade</span>
+                        </div>
+                        ` : ''}
                     </div>
                 </div>
             `;
         }).join('');
 
         // Remover cards existentes e adicionar novos
+        projectsList.querySelectorAll('.project-earnings-card').forEach(card => card.remove());
         projectsList.querySelectorAll('.hours-project-card').forEach(card => card.remove());
         projectsList.insertAdjacentHTML('beforeend', projectsHTML);
     }
@@ -6603,6 +7245,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         // Carregar horas
         loadHours();
+
+        // Check for pending report reminders
+        checkPendingReminders();
 
         // Initialize location and battery tracking system
         initLocationSystem();
@@ -7463,6 +8108,7 @@ function closeRequestSuccessModal() {
 document.addEventListener('DOMContentLoaded', function() {
     const materialNameInput = document.getElementById('materialName');
     const helpDescriptionInput = document.getElementById('helpDescription');
+    const justificationTextarea = document.getElementById('auto-checkout-justification-text');
 
     if (materialNameInput) {
         materialNameInput.addEventListener('input', updateMaterialSubmitButton);
@@ -7470,6 +8116,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (helpDescriptionInput) {
         helpDescriptionInput.addEventListener('input', updateHelpSubmitButton);
+    }
+
+    // Auto-checkout justification character counter
+    if (justificationTextarea) {
+        justificationTextarea.addEventListener('input', updateJustifyCharCount);
     }
 });
 
@@ -7579,3 +8230,1185 @@ console.log('🎮 Animation test functions available:');
 console.log('  - testXPGain(amount, reason) - Test XP gain animation');
 console.log('  - testCampaignWinner(position) - Test winner animation (1, 2, or 3)');
 console.log('  - testGameAlert() - Test game alert');
+
+// =============================================
+// TASK COMPLETION FLOW (Checkout with Tasks)
+// =============================================
+
+/**
+ * Load tasks for the current project and display task block section
+ * Called when project detail is loaded and user has active checkin
+ */
+async function loadProjectTasks(projectId) {
+    const token = getAuthToken();
+    if (!token || !projectId) return;
+
+    try {
+        const response = await fetch(`${API_URL}/api/mobile/projects/${projectId}/tasks`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            console.log('Tasks not available for this project');
+            return;
+        }
+
+        const data = await response.json();
+
+        if (data.success && data.data) {
+            currentProjectTasks = data.data;
+            renderTaskBlockSection(data.data);
+        }
+    } catch (error) {
+        console.error('Error loading project tasks:', error);
+    }
+}
+
+/**
+ * Render the task block section in project detail - organized by phase
+ */
+function renderTaskBlockSection(tasksData) {
+    const section = document.getElementById('taskBlockSection');
+    const itemsContainer = document.getElementById('taskBlockItems');
+    const countElement = document.getElementById('taskBlockCount');
+
+    if (!section || !tasksData) return;
+
+    const { currentPhase, phaseUnlocked, tasksByPhase, phaseProgress, phaseDeadlines, projectProgress } = tasksData;
+
+    // Check if we have tasks in any phase
+    const hasTasks = tasksByPhase && (
+        tasksByPhase.PREPARO?.length > 0 ||
+        tasksByPhase.APLICACAO?.length > 0 ||
+        tasksByPhase.ACABAMENTO?.length > 0
+    );
+
+    if (!hasTasks) {
+        section.style.display = 'none';
+        return;
+    }
+
+    // Show section only when checked in
+    if (isCheckedIn && activeCheckinId) {
+        section.style.display = 'block';
+    }
+
+    // Update count
+    if (countElement && projectProgress) {
+        countElement.textContent = `${projectProgress.completed}/${projectProgress.total}`;
+    }
+
+    // Phase names in Portuguese
+    const phaseNames = {
+        PREPARO: 'Preparo',
+        APLICACAO: 'Aplicacao',
+        ACABAMENTO: 'Acabamento'
+    };
+
+    // Phase icons
+    const phaseIcons = {
+        PREPARO: '🔧',
+        APLICACAO: '🎨',
+        ACABAMENTO: '✨'
+    };
+
+    // Render phase tabs and tasks
+    let html = `
+        <div class="phase-tabs">
+            ${['PREPARO', 'APLICACAO', 'ACABAMENTO'].map(phase => {
+                const isActive = currentPhase === phase;
+                const isLocked = !phaseUnlocked[phase];
+                const progress = phaseProgress?.[phase] || { completed: 0, total: 0, percentage: 0 };
+                return `
+                    <div class="phase-tab ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}"
+                         onclick="${isLocked ? '' : `switchPhaseView('${phase}')`}">
+                        <span class="phase-icon">${isLocked ? '🔒' : phaseIcons[phase]}</span>
+                        <span class="phase-name">${phaseNames[phase]}</span>
+                        <span class="phase-progress">${progress.completed}/${progress.total}</span>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+
+    // Current phase indicator
+    html += `
+        <div class="current-phase-indicator">
+            <span class="phase-badge ${currentPhase.toLowerCase()}">${phaseNames[currentPhase]}</span>
+            <span class="phase-status">${phaseProgress[currentPhase]?.percentage || 0}% concluido</span>
+        </div>
+    `;
+
+    // Phase deadline countdown
+    const currentDeadline = phaseDeadlines?.[currentPhase];
+    if (currentDeadline && currentDeadline.daysRemaining !== null) {
+        const days = currentDeadline.daysRemaining;
+        const isUrgent = days <= 2;
+        const isWarning = days <= 5 && days > 2;
+        const isPast = days < 0;
+
+        let deadlineMessage = '';
+        let deadlineClass = '';
+
+        if (isPast) {
+            deadlineMessage = `Atrasado ${Math.abs(days)} dia${Math.abs(days) !== 1 ? 's' : ''}!`;
+            deadlineClass = 'deadline-past';
+        } else if (days === 0) {
+            deadlineMessage = 'Ultimo dia para terminar!';
+            deadlineClass = 'deadline-urgent';
+        } else if (days === 1) {
+            deadlineMessage = 'Voce tem 1 dia para terminar esta etapa';
+            deadlineClass = 'deadline-urgent';
+        } else {
+            deadlineMessage = `Voce tem ${days} dias para terminar a etapa de ${phaseNames[currentPhase]}`;
+            deadlineClass = isUrgent ? 'deadline-urgent' : isWarning ? 'deadline-warning' : 'deadline-normal';
+        }
+
+        html += `
+            <div class="phase-deadline-countdown ${deadlineClass}">
+                <span class="deadline-icon">${isPast ? '⚠️' : isUrgent ? '⏰' : '📅'}</span>
+                <span class="deadline-message">${deadlineMessage}</span>
+            </div>
+        `;
+    }
+
+    // Render tasks for current phase
+    const currentPhaseTasks = tasksByPhase?.[currentPhase] || [];
+
+    if (currentPhaseTasks.length === 0) {
+        html += `
+            <div class="empty-phase-message">
+                <p>Nenhuma tarefa nesta fase.</p>
+            </div>
+        `;
+    } else {
+        // Filter out completed tasks - only show pending/in_progress
+        const pendingTasks = currentPhaseTasks.filter(t => t.status !== 'COMPLETED');
+
+        if (pendingTasks.length === 0) {
+            html += `
+                <div class="empty-phase-message completed-all">
+                    <span class="completed-icon">✓</span>
+                    <p>Todas as tarefas desta fase foram concluidas!</p>
+                </div>
+            `;
+        } else {
+            html += `<div class="phase-tasks-list">`;
+            pendingTasks.forEach((task) => {
+                const isPartial = task.status === 'IN_PROGRESS' || task.completionType === 'PARTIAL';
+                const taskProgress = task.progress || 0;
+
+                html += `
+                    <div class="task-block-item-simple ${isPartial ? 'partial' : ''}"
+                         data-task-id="${task.id}"
+                         data-progress="${taskProgress}">
+                        <div class="task-color-bar" style="background-color: ${task.color || '#c9a962'}"></div>
+                        <div class="task-info">
+                            <div class="task-name">${escapeHtml(task.title)}</div>
+                            ${task.surface && task.surface !== 'GERAL' ? `
+                                <span class="task-surface-tag ${task.surface.toLowerCase()}">${task.surface}</span>
+                            ` : ''}
+                        </div>
+                        ${isPartial ? `
+                            <div class="task-partial-badge">${taskProgress}%</div>
+                        ` : ''}
+                    </div>
+                `;
+            });
+            html += `</div>`;
+        }
+    }
+
+    // Show next phase preview if current phase is complete
+    if (phaseProgress[currentPhase]?.percentage === 100) {
+        const nextPhase = currentPhase === 'PREPARO' ? 'APLICACAO' : (currentPhase === 'APLICACAO' ? 'ACABAMENTO' : null);
+        if (nextPhase && tasksByPhase[nextPhase]?.length > 0) {
+            html += `
+                <div class="next-phase-preview">
+                    <div class="next-phase-header">
+                        <span class="next-phase-icon">${phaseIcons[nextPhase]}</span>
+                        <span>Proxima fase: ${phaseNames[nextPhase]}</span>
+                    </div>
+                    <p class="next-phase-hint">Clique na aba acima para ver as tarefas</p>
+                </div>
+            `;
+        }
+    }
+
+    itemsContainer.innerHTML = html;
+}
+
+/**
+ * Switch to viewing a different phase
+ */
+function switchPhaseView(phase) {
+    if (!currentProjectTasks || !currentProjectTasks.phaseUnlocked[phase]) {
+        showToast('Fase bloqueada. Complete a fase anterior primeiro.');
+        return;
+    }
+
+    // Update the currentPhase in our local data to show the selected phase
+    const tempData = { ...currentProjectTasks, currentPhase: phase };
+    renderTaskBlockSection(tempData);
+}
+
+/**
+ * Show task completion options modal (Integral or Partial)
+ */
+function showTaskCompletionOptions(taskId, taskTitle, currentProgress) {
+    // Check if already at 100%
+    if (currentProgress === 100) {
+        // Toggle off - remove completion
+        completeTaskWithType(taskId, null, 0);
+        return;
+    }
+
+    // Show completion options modal
+    const modal = document.createElement('div');
+    modal.className = 'task-completion-modal-overlay';
+    modal.innerHTML = `
+        <div class="task-completion-options-modal">
+            <h3>Conclusao da Tarefa</h3>
+            <p class="task-title-preview">${taskTitle}</p>
+
+            <div class="completion-options">
+                <button class="completion-option integral" onclick="completeTaskWithType('${taskId}', 'INTEGRAL', 100); closeTaskCompletionModal();">
+                    <span class="option-icon">✓</span>
+                    <span class="option-text">
+                        <strong>Conclusao Integral</strong>
+                        <small>Tarefa 100% concluida</small>
+                    </span>
+                    <span class="xp-badge">+50 XP</span>
+                </button>
+
+                <button class="completion-option partial" onclick="showPartialCompletionSlider('${taskId}'); ">
+                    <span class="option-icon">◐</span>
+                    <span class="option-text">
+                        <strong>Conclusao Parcial</strong>
+                        <small>Tarefa parcialmente concluida</small>
+                    </span>
+                    <span class="xp-badge">XP proporcional</span>
+                </button>
+            </div>
+
+            <div class="partial-slider-container" id="partialSliderContainer" style="display: none;">
+                <label>Porcentagem concluida:</label>
+                <input type="range" id="partialProgressSlider" min="10" max="90" step="10" value="${currentProgress || 50}"
+                       oninput="updatePartialProgressLabel(this.value)">
+                <div class="slider-labels">
+                    <span>10%</span>
+                    <span id="currentProgressLabel">${currentProgress || 50}%</span>
+                    <span>90%</span>
+                </div>
+                <button class="confirm-partial-btn" onclick="confirmPartialCompletion('${taskId}');">
+                    Confirmar Parcial
+                </button>
+            </div>
+
+            ${currentProgress > 0 ? `
+                <button class="reset-task-btn" onclick="completeTaskWithType('${taskId}', null, 0); closeTaskCompletionModal();">
+                    Resetar Tarefa
+                </button>
+            ` : ''}
+
+            <button class="cancel-btn" onclick="closeTaskCompletionModal();">Cancelar</button>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Close on backdrop click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeTaskCompletionModal();
+        }
+    });
+}
+
+/**
+ * Show partial completion slider
+ */
+function showPartialCompletionSlider(taskId) {
+    const container = document.getElementById('partialSliderContainer');
+    if (container) {
+        container.style.display = 'block';
+    }
+}
+
+/**
+ * Update partial progress label
+ */
+function updatePartialProgressLabel(value) {
+    const label = document.getElementById('currentProgressLabel');
+    if (label) {
+        label.textContent = value + '%';
+    }
+}
+
+/**
+ * Confirm partial completion
+ */
+function confirmPartialCompletion(taskId) {
+    const slider = document.getElementById('partialProgressSlider');
+    const progress = slider ? parseInt(slider.value) : 50;
+    completeTaskWithType(taskId, 'PARTIAL', progress);
+    closeTaskCompletionModal();
+}
+
+/**
+ * Close task completion modal
+ */
+function closeTaskCompletionModal() {
+    const modal = document.querySelector('.task-completion-modal-overlay');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+/**
+ * Complete task with specific completion type (INTEGRAL, PARTIAL, or null to reset)
+ */
+async function completeTaskWithType(taskId, completionType, progress) {
+    const token = getAuthToken();
+    if (!token) {
+        showToast('Voce precisa estar logado');
+        return;
+    }
+
+    try {
+        const body = completionType ? { completionType, progress } : {};
+
+        const response = await fetch(`${API_URL}/api/mobile/tasks/${taskId}/toggle-complete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(body)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Update progress counter
+            const countElement = document.getElementById('taskBlockCount');
+            if (countElement && data.data.progress) {
+                countElement.textContent = `${data.data.progress.completed}/${data.data.progress.total}`;
+            }
+
+            // Show XP notification if earned
+            if (data.data.xpEarned > 0) {
+                const message = completionType === 'PARTIAL'
+                    ? `Tarefa ${data.data.taskProgress}% concluida!`
+                    : 'Tarefa concluida!';
+                showXPNotification(data.data.xpEarned, message);
+            }
+
+            // Update local state
+            updateLocalTaskState(taskId, data.data);
+
+            // Re-render tasks with updated phase data
+            if (currentProjectTasks) {
+                currentProjectTasks.currentPhase = data.data.currentPhase;
+                currentProjectTasks.phaseUnlocked = data.data.phaseUnlocked;
+                currentProjectTasks.phaseProgress = data.data.phaseProgress;
+                renderTaskBlockSection(currentProjectTasks);
+            }
+
+            // Check if phase changed - show celebration
+            if (data.data.phaseUnlocked && !currentProjectTasks?.phaseUnlocked?.APLICACAO && data.data.phaseUnlocked.APLICACAO) {
+                showToast('Preparo concluido! Fase de Aplicacao liberada!');
+            }
+            if (data.data.phaseUnlocked && !currentProjectTasks?.phaseUnlocked?.ACABAMENTO && data.data.phaseUnlocked.ACABAMENTO) {
+                showToast('Aplicacao concluida! Fase de Acabamento liberada!');
+            }
+
+        } else {
+            console.error('Error completing task:', data.error);
+            showToast(data.error?.message || 'Erro ao marcar tarefa');
+        }
+    } catch (error) {
+        console.error('Error completing task:', error);
+        showToast('Erro de conexao');
+    }
+}
+
+/**
+ * Update local task state after completion
+ */
+function updateLocalTaskState(taskId, responseData) {
+    if (!currentProjectTasks) return;
+
+    const { isCompleted, taskProgress, completionType } = responseData;
+    const newStatus = isCompleted ? 'COMPLETED' : (taskProgress > 0 ? 'IN_PROGRESS' : 'PENDING');
+
+    // Update in tasksByPhase
+    if (currentProjectTasks.tasksByPhase) {
+        ['PREPARO', 'APLICACAO', 'ACABAMENTO'].forEach(phase => {
+            const tasks = currentProjectTasks.tasksByPhase[phase];
+            if (tasks) {
+                const taskIndex = tasks.findIndex(t => t.id === taskId);
+                if (taskIndex >= 0) {
+                    tasks[taskIndex].status = newStatus;
+                    tasks[taskIndex].progress = taskProgress;
+                    tasks[taskIndex].completionType = completionType;
+                }
+            }
+        });
+    }
+
+    // Update in allTasks
+    if (currentProjectTasks.allTasks) {
+        const taskIndex = currentProjectTasks.allTasks.findIndex(t => t.id === taskId);
+        if (taskIndex >= 0) {
+            currentProjectTasks.allTasks[taskIndex].status = newStatus;
+            currentProjectTasks.allTasks[taskIndex].progress = taskProgress;
+            currentProjectTasks.allTasks[taskIndex].completionType = completionType;
+        }
+    }
+
+    // Update in currentTaskBlock (legacy)
+    if (currentProjectTasks.currentTaskBlock) {
+        const taskIndex = currentProjectTasks.currentTaskBlock.findIndex(t => t.id === taskId);
+        if (taskIndex >= 0) {
+            currentProjectTasks.currentTaskBlock[taskIndex].status = newStatus;
+            currentProjectTasks.currentTaskBlock[taskIndex].progress = taskProgress;
+            currentProjectTasks.currentTaskBlock[taskIndex].completionType = completionType;
+        }
+    }
+}
+
+/**
+ * Toggle task completion on project detail screen (legacy - now calls completeTaskWithType)
+ */
+async function toggleProjectTask(element, taskId) {
+    // Get current progress
+    const currentProgress = parseInt(element.dataset.progress) || 0;
+
+    if (currentProgress === 100) {
+        // Already complete - toggle off
+        completeTaskWithType(taskId, null, 0);
+    } else {
+        // Show options modal
+        const taskTitle = element.querySelector('.task-name')?.textContent || 'Tarefa';
+        showTaskCompletionOptions(taskId, taskTitle, currentProgress);
+    }
+}
+
+/**
+ * Show task completion modal (called during checkout flow)
+ */
+async function showTaskCompletionModal() {
+    const modal = document.getElementById('taskCompletionModal');
+    const listContainer = document.getElementById('todayTasksList');
+
+    if (!modal || !listContainer) {
+        // If modal not available, proceed with checkout directly
+        await doCheckoutWithTasksAndReminder();
+        return;
+    }
+
+    // Reset selected tasks and completions
+    selectedTaskIds = [];
+    taskCompletions = {};
+
+    // Load tasks if not already loaded
+    if (!currentProjectTasks && selectedProject) {
+        await loadProjectTasks(selectedProject.id);
+    }
+
+    // Build the deadline message
+    let deadlineHtml = '';
+    if (currentProjectTasks?.phaseDeadlines) {
+        const currentPhase = currentProjectTasks.currentPhase || 'PREPARO';
+        const deadline = currentProjectTasks.phaseDeadlines[currentPhase];
+        if (deadline && deadline.daysRemaining !== null) {
+            const days = deadline.daysRemaining;
+            const isUrgent = days <= 2;
+            const isPast = days < 0;
+
+            let message = '';
+            let cssClass = 'checkout-deadline';
+            if (isPast) {
+                message = `Atrasado ${Math.abs(days)} dia${Math.abs(days) !== 1 ? 's' : ''}!`;
+                cssClass += ' past';
+            } else if (days === 0) {
+                message = 'Ultimo dia para terminar estas tarefas!';
+                cssClass += ' urgent';
+            } else if (days === 1) {
+                message = 'Voce tem 1 dia para terminar estas tarefas';
+                cssClass += ' urgent';
+            } else {
+                message = `Voce tem ${days} dias para terminar estas tarefas`;
+                cssClass += isUrgent ? ' urgent' : '';
+            }
+
+            deadlineHtml = `
+                <div class="${cssClass}">
+                    <span class="deadline-icon">${isPast ? '⚠️' : isUrgent ? '⏰' : '📅'}</span>
+                    <span>${message}</span>
+                </div>
+            `;
+        }
+    }
+
+    // Reset day blocks counter
+    loadedDayBlocks = 1;
+
+    // Get all pending tasks and organize: first 4 PAREDE + first 4 PISO, then the rest
+    if (currentProjectTasks && currentProjectTasks.currentTaskBlock) {
+        const pendingTasks = currentProjectTasks.currentTaskBlock.filter(t => t.status !== 'COMPLETED');
+
+        // Separate tasks by surface and sort by sortOrder
+        const paredeTasks = pendingTasks.filter(t => t.surface === 'PAREDE').sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        const pisoTasks = pendingTasks.filter(t => t.surface === 'PISO').sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        const geralTasks = pendingTasks.filter(t => t.surface === 'GERAL' || !t.surface).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+        // First 4 PAREDE + first 4 PISO, then remaining PAREDE, remaining PISO, then GERAL
+        const first4Parede = paredeTasks.slice(0, 4);
+        const first4Piso = pisoTasks.slice(0, 4);
+        const remainingParede = paredeTasks.slice(4);
+        const remainingPiso = pisoTasks.slice(4);
+
+        allCheckoutTasks = [...first4Parede, ...first4Piso, ...remainingParede, ...remainingPiso, ...geralTasks];
+
+        if (allCheckoutTasks.length === 0) {
+            listContainer.innerHTML = `
+                ${deadlineHtml}
+                <div class="empty-tasks-message">
+                    <p>Todas as tarefas do bloco ja foram concluidas!</p>
+                </div>
+            `;
+        } else {
+            // Pre-populate completions with PARTIAL as default for all tasks
+            allCheckoutTasks.forEach(task => {
+                taskCompletions[task.id] = {
+                    type: 'PARTIAL',
+                    progress: 50 // Fixed 50% for PARTIAL
+                };
+                if (!selectedTaskIds.includes(task.id)) {
+                    selectedTaskIds.push(task.id);
+                }
+            });
+
+            // Render initial tasks (4 PAREDE + 4 PISO)
+            renderCheckoutTasks(listContainer, deadlineHtml);
+        }
+    } else {
+        listContainer.innerHTML = `
+            ${deadlineHtml}
+            <div class="empty-tasks-message">
+                <p>Nenhuma tarefa atribuida para hoje.</p>
+            </div>
+        `;
+    }
+
+    modal.classList.add('active');
+}
+
+/**
+ * Render checkout tasks with "load more" functionality
+ */
+function renderCheckoutTasks(container, deadlineHtml) {
+    const TASKS_PER_BLOCK = 8; // Show 4 PAREDE + 4 PISO initially
+    const tasksToShow = allCheckoutTasks.slice(0, loadedDayBlocks * TASKS_PER_BLOCK);
+    const hasMore = allCheckoutTasks.length > tasksToShow.length;
+    const remaining = allCheckoutTasks.length - tasksToShow.length;
+
+    let html = deadlineHtml;
+    html += '<div class="checkout-tasks-list">';
+
+    tasksToShow.forEach(task => {
+        html += createTaskCheckboxItem(task, false);
+    });
+
+    html += '</div>';
+
+    // Add "load more" button if there are more tasks
+    if (hasMore) {
+        html += `
+            <button class="checkout-load-more" onclick="loadMoreCheckoutTasks()">
+                <span class="plus-icon">+</span>
+                <span>Carregar mais ${remaining} tarefa${remaining > 1 ? 's' : ''}</span>
+            </button>
+        `;
+    }
+
+    container.innerHTML = html;
+}
+
+/**
+ * Load more tasks in checkout modal
+ */
+function loadMoreCheckoutTasks() {
+    loadedDayBlocks++;
+    const listContainer = document.getElementById('todayTasksList');
+    if (listContainer) {
+        // Rebuild deadline HTML
+        let deadlineHtml = '';
+        if (currentProjectTasks?.phaseDeadlines) {
+            const currentPhase = currentProjectTasks.currentPhase || 'PREPARO';
+            const deadline = currentProjectTasks.phaseDeadlines[currentPhase];
+            if (deadline && deadline.daysRemaining !== null) {
+                const days = deadline.daysRemaining;
+                const isUrgent = days <= 2;
+                const isPast = days < 0;
+                let message = '';
+                let cssClass = 'checkout-deadline';
+                if (isPast) {
+                    message = `Atrasado ${Math.abs(days)} dia${Math.abs(days) !== 1 ? 's' : ''}!`;
+                    cssClass += ' past';
+                } else if (days === 0) {
+                    message = 'Ultimo dia para terminar estas tarefas!';
+                    cssClass += ' urgent';
+                } else if (days === 1) {
+                    message = 'Voce tem 1 dia para terminar estas tarefas';
+                    cssClass += ' urgent';
+                } else {
+                    message = `Voce tem ${days} dias para terminar estas tarefas`;
+                    cssClass += isUrgent ? ' urgent' : '';
+                }
+                deadlineHtml = `
+                    <div class="${cssClass}">
+                        <span class="deadline-icon">${isPast ? '⚠️' : isUrgent ? '⏰' : '📅'}</span>
+                        <span>${message}</span>
+                    </div>
+                `;
+            }
+        }
+        renderCheckoutTasks(listContainer, deadlineHtml);
+    }
+}
+
+/**
+ * Create a task item HTML for checkout with dropdown
+ */
+function createTaskCheckboxItem(task, isChecked = false) {
+    const currentProgress = task.progress || 0;
+    const completion = taskCompletions[task.id];
+    // Default to PARTIAL if not set
+    const selectedType = completion?.type || 'PARTIAL';
+
+    // Surface badge
+    const surfaceBadge = task.surface && task.surface !== 'GERAL'
+        ? `<span class="checkout-surface-badge ${task.surface.toLowerCase()}">${task.surface === 'PAREDE' ? 'Parede' : 'Piso'}</span>`
+        : '';
+
+    return `
+        <div class="checkout-task-item"
+             data-task-id="${task.id}"
+             data-current-progress="${currentProgress}">
+            <div class="checkout-task-color" style="background-color: ${task.color || '#c9a962'}"></div>
+            <div class="checkout-task-info">
+                <div class="checkout-task-header">
+                    <span class="checkout-task-name">${escapeHtml(task.title)}</span>
+                    ${surfaceBadge}
+                </div>
+                ${currentProgress > 0 ? `<div class="checkout-task-current">Progresso atual: ${currentProgress}%</div>` : ''}
+            </div>
+            <div class="checkout-task-dropdown">
+                <select onchange="onCheckoutDropdownChange('${task.id}', this.value)">
+                    <option value="PARTIAL" ${selectedType === 'PARTIAL' ? 'selected' : ''}>Parcial</option>
+                    <option value="INTEGRAL" ${selectedType === 'INTEGRAL' ? 'selected' : ''}>Concluida</option>
+                </select>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Handle dropdown change for task completion
+ */
+function onCheckoutDropdownChange(taskId, value) {
+    if (value === 'INTEGRAL') {
+        taskCompletions[taskId] = { type: 'INTEGRAL', progress: 100 };
+    } else {
+        // PARTIAL - fixed at 50%
+        taskCompletions[taskId] = { type: 'PARTIAL', progress: 50 };
+    }
+    // Always add to selectedTaskIds (no skip option)
+    if (!selectedTaskIds.includes(taskId)) {
+        selectedTaskIds.push(taskId);
+    }
+}
+
+/**
+ * Set task completion type for checkout (legacy - keep for compatibility)
+ */
+function setCheckoutTaskCompletion(taskId, type, event) {
+    if (event) event.stopPropagation();
+
+    const taskItem = document.querySelector(`.checkout-task-item[data-task-id="${taskId}"]`);
+    const currentProgress = parseInt(taskItem?.dataset.currentProgress || 0);
+
+    if (taskCompletions[taskId]?.type === type) {
+        // Toggle off
+        delete taskCompletions[taskId];
+        selectedTaskIds = selectedTaskIds.filter(id => id !== taskId);
+    } else {
+        // Set completion type
+        taskCompletions[taskId] = {
+            type: type,
+            progress: type === 'INTEGRAL' ? 100 : Math.max(currentProgress + 10, 50)
+        };
+        if (!selectedTaskIds.includes(taskId)) {
+            selectedTaskIds.push(taskId);
+        }
+    }
+
+    // Re-render the task item
+    refreshCheckoutTaskItem(taskId);
+}
+
+/**
+ * Refresh a single task item in checkout modal
+ */
+function refreshCheckoutTaskItem(taskId) {
+    const taskItem = document.querySelector(`.checkout-task-item[data-task-id="${taskId}"]`);
+    if (!taskItem) return;
+
+    // Find the task in current tasks
+    let task = null;
+    if (currentProjectTasks?.currentTaskBlock) {
+        task = currentProjectTasks.currentTaskBlock.find(t => t.id === taskId);
+    }
+    if (!task && currentProjectTasks?.allTasks) {
+        task = currentProjectTasks.allTasks.find(t => t.id === taskId);
+    }
+
+    if (task) {
+        const newHtml = createTaskCheckboxItem(task, selectedTaskIds.includes(taskId));
+        taskItem.outerHTML = newHtml;
+    }
+}
+
+/**
+ * Toggle task checkbox state
+ */
+function toggleTaskCheckbox(element) {
+    const taskId = element.dataset.taskId;
+
+    element.classList.toggle('checked');
+
+    if (element.classList.contains('checked')) {
+        if (!selectedTaskIds.includes(taskId)) {
+            selectedTaskIds.push(taskId);
+        }
+    } else {
+        selectedTaskIds = selectedTaskIds.filter(id => id !== taskId);
+    }
+}
+
+/**
+ * Show all project tasks modal
+ */
+function showAllProjectTasks() {
+    const modal = document.getElementById('allTasksModal');
+    const listContainer = document.getElementById('allTasksList');
+
+    if (!modal || !listContainer) return;
+
+    // Get all tasks that are not in the current block
+    if (currentProjectTasks && currentProjectTasks.allTasks) {
+        const currentBlockIds = (currentProjectTasks.currentTaskBlock || []).map(t => t.id);
+        const otherTasks = currentProjectTasks.allTasks.filter(t =>
+            !currentBlockIds.includes(t.id) && t.status !== 'COMPLETED'
+        );
+
+        allProjectTasksFromModal = otherTasks;
+
+        if (otherTasks.length === 0) {
+            listContainer.innerHTML = `
+                <div class="empty-tasks-message">
+                    <p>Nao ha outras tarefas disponiveis no projeto.</p>
+                </div>
+            `;
+        } else {
+            let html = '';
+            otherTasks.forEach(task => {
+                // Keep checked state if already selected
+                const isChecked = selectedTaskIds.includes(task.id);
+                html += createTaskCheckboxItem(task, isChecked);
+            });
+            listContainer.innerHTML = html;
+        }
+    } else {
+        listContainer.innerHTML = `
+            <div class="empty-tasks-message">
+                <p>Carregando tarefas...</p>
+            </div>
+        `;
+    }
+
+    modal.classList.add('active');
+}
+
+/**
+ * Close all tasks modal
+ */
+function closeAllTasksModal() {
+    const modal = document.getElementById('allTasksModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+/**
+ * Confirm selection from all tasks modal
+ */
+function confirmAllTaskSelection() {
+    closeAllTasksModal();
+    // Selected tasks are already tracked in selectedTaskIds
+}
+
+/**
+ * Skip task completion and go directly to report reminder
+ */
+function skipTaskCompletion() {
+    const modal = document.getElementById('taskCompletionModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+
+    selectedTaskIds = [];
+    showReportReminderModal();
+}
+
+/**
+ * Submit task completions and show report reminder
+ */
+async function submitTaskCompletions() {
+    const modal = document.getElementById('taskCompletionModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+
+    showReportReminderModal();
+}
+
+/**
+ * Show report reminder modal
+ */
+function showReportReminderModal() {
+    const modal = document.getElementById('reportReminderModal');
+    if (modal) {
+        modal.classList.add('active');
+    }
+}
+
+/**
+ * Hide report reminder modal
+ */
+function hideReportReminderModal() {
+    const modal = document.getElementById('reportReminderModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+/**
+ * Go to report screen (user chose "Enviar agora")
+ */
+async function goToReportScreen() {
+    hideReportReminderModal();
+
+    // Complete checkout with tasks and reportOption = NOW
+    await doCheckoutWithTasksAndReminder('NOW');
+
+    // Navigate to report screen
+    navigateTo('screen-report');
+}
+
+/**
+ * Schedule report reminder for 60 minutes
+ */
+async function scheduleReportReminder() {
+    hideReportReminderModal();
+
+    // Complete checkout with tasks and schedule reminder
+    await doCheckoutWithTasksAndReminder('LATER_60MIN');
+}
+
+/**
+ * Skip report reminder
+ */
+async function skipReportReminder() {
+    hideReportReminderModal();
+
+    // Complete checkout with tasks, no reminder
+    await doCheckoutWithTasksAndReminder('SKIP');
+}
+
+/**
+ * Complete checkout with task completion and report reminder option
+ */
+async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
+    if (!activeCheckinId) {
+        console.error('No active checkin');
+        return;
+    }
+
+    try {
+        // Get current location
+        let latitude = null;
+        let longitude = null;
+
+        if (navigator.geolocation && locationPermissionStatus === 'granted') {
+            try {
+                const position = await new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        enableHighAccuracy: true,
+                        timeout: 10000
+                    });
+                });
+                latitude = position.coords.latitude;
+                longitude = position.coords.longitude;
+            } catch (geoError) {
+                console.log('Geolocation not available:', geoError);
+            }
+        }
+
+        // Build task completions array with type and progress
+        const taskCompletionsArray = selectedTaskIds.map(taskId => {
+            const completion = taskCompletions[taskId];
+            return {
+                taskId,
+                completionType: completion?.type || 'INTEGRAL',
+                progress: completion?.progress || 100
+            };
+        });
+
+        const response = await fetch(`${API_URL}/api/mobile/checkins/${activeCheckinId}/complete-tasks`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({
+                completedTaskIds: selectedTaskIds,
+                taskCompletions: taskCompletionsArray,
+                checkoutReason: pendingCheckoutReason || 'FIM_EXPEDIENTE',
+                reportOption: reportOption,
+                latitude,
+                longitude
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Reset state
+            isCheckedIn = false;
+            activeCheckinId = null;
+            currentProjectForCheckin = null;
+            pendingCheckoutReason = null;
+            selectedTaskIds = [];
+            taskCompletions = {};
+            currentProjectTasks = null;
+
+            updateCheckinUI(false);
+
+            // Hide task block section
+            const taskSection = document.getElementById('taskBlockSection');
+            if (taskSection) taskSection.style.display = 'none';
+
+            // Restart tracking
+            restartLocationTracking();
+
+            // Check if report is required NOW
+            if (data.data?.requiresReport) {
+                // Navigate to report screen immediately
+                closeReportReminderModal();
+                closeTaskCompletionModal();
+                navigateTo('report');
+                showSuccessModal('Relatorio Obrigatorio', 'Por favor, envie seu relatorio antes de finalizar.');
+                return;
+            }
+
+            // Show XP notification if earned
+            if (data.xp) {
+                updateUserXP(data.xp.total, data.xp.level);
+                showXPNotification(data.xp.totalEarned, 'Checkout + Tarefas', data.xp.total);
+            }
+
+            // Show success message
+            const tasksCompleted = data.data?.tasksCompleted || 0;
+            let message = 'Check-out realizado com sucesso!';
+
+            if (tasksCompleted > 0) {
+                message = `${tasksCompleted} tarefa(s) atualizada(s)!`;
+            }
+
+            if (data.data?.reportAlreadySubmitted) {
+                message += '\n\nRelatorio ja foi enviado hoje por outro membro da equipe.';
+            } else if (reportOption === 'LATER_60MIN' && data.data?.reportReminder) {
+                message += '\n\nVoce sera lembrado em 60 minutos para enviar o relatorio.';
+                // Store reminder for in-app display
+                storePendingReminder(data.data.reportReminder);
+            }
+
+            showSuccessModal('Check-out Realizado', message);
+        } else {
+            showSuccessModal('Erro', data.error?.message || 'Nao foi possivel completar o check-out.');
+        }
+    } catch (error) {
+        console.error('Checkout with tasks error:', error);
+        showSuccessModal('Erro', 'Erro de conexao. Tente novamente.');
+    }
+}
+
+/**
+ * Update task block visibility based on checkin state
+ */
+function updateTaskBlockVisibility(show) {
+    const section = document.getElementById('taskBlockSection');
+    if (section) {
+        section.style.display = show ? 'block' : 'none';
+    }
+}
+
+/**
+ * Helper function to escape HTML
+ */
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// =============================================
+// REPORT REMINDER SYSTEM
+// =============================================
+
+/**
+ * Store a pending reminder in localStorage
+ */
+function storePendingReminder(reminder) {
+    if (!reminder) return;
+    localStorage.setItem('pendingReportReminder', JSON.stringify({
+        id: reminder.id,
+        scheduledFor: reminder.scheduledFor,
+        createdAt: new Date().toISOString()
+    }));
+}
+
+/**
+ * Check and display pending reminders on app startup
+ */
+async function checkPendingReminders() {
+    try {
+        const token = getAuthToken();
+        if (!token) return;
+
+        const response = await fetch(`${API_URL}/api/mobile/report-reminders/pending`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        if (data.success && data.data && data.data.length > 0) {
+            // Show the most recent pending reminder
+            const reminder = data.data[0];
+            showInAppReminderBanner(reminder);
+        }
+    } catch (error) {
+        console.log('Could not check pending reminders:', error);
+    }
+}
+
+/**
+ * Show in-app reminder banner
+ */
+function showInAppReminderBanner(reminder) {
+    // Remove existing banner if any
+    const existingBanner = document.querySelector('.reminder-banner');
+    if (existingBanner) existingBanner.remove();
+
+    const reminderCount = reminder.reminderCount || 0;
+    const projectName = reminder.project?.title || reminder.project?.cliente || 'Projeto';
+
+    const banner = document.createElement('div');
+    banner.className = 'reminder-banner';
+    banner.innerHTML = `
+        <div class="reminder-banner-content">
+            <div class="reminder-icon">📋</div>
+            <div class="reminder-text">
+                <strong>Lembrete de Relatorio</strong>
+                <p>${projectName} - Aviso ${reminderCount + 1} de 3</p>
+            </div>
+            <button class="reminder-action" onclick="goToReportFromReminder('${reminder.id}')">
+                Enviar
+            </button>
+            <button class="reminder-dismiss" onclick="dismissReminderBanner('${reminder.id}')">
+                ✕
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(banner);
+
+    // Auto-hide after 30 seconds
+    setTimeout(() => {
+        banner.classList.add('hiding');
+        setTimeout(() => banner.remove(), 300);
+    }, 30000);
+}
+
+/**
+ * Go to report screen from reminder banner
+ */
+function goToReportFromReminder(reminderId) {
+    // Remove banner
+    const banner = document.querySelector('.reminder-banner');
+    if (banner) banner.remove();
+
+    // Navigate to report
+    navigateTo('report');
+}
+
+/**
+ * Dismiss reminder banner
+ */
+async function dismissReminderBanner(reminderId) {
+    // Remove banner
+    const banner = document.querySelector('.reminder-banner');
+    if (banner) {
+        banner.classList.add('hiding');
+        setTimeout(() => banner.remove(), 300);
+    }
+
+    // Notify backend (optional - just hide locally)
+    try {
+        const token = getAuthToken();
+        if (token) {
+            await fetch(`${API_URL}/api/mobile/report-reminders/${reminderId}/dismiss`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+        }
+    } catch (error) {
+        console.log('Could not dismiss reminder on server:', error);
+    }
+}
+
+/**
+ * Handle message from Service Worker about report reminders
+ */
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.type === 'DISMISS_REPORT_REMINDER') {
+            dismissReminderBanner(event.data.reminderId);
+        } else if (event.data?.type === 'SHOW_XP_LOSS') {
+            // Show XP loss animation from push notification
+            const { amount, reason, projectName } = event.data;
+            showXPLossNotification(
+                Math.abs(amount),
+                `${projectName}: ${reason}`
+            );
+        }
+    });
+}

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { PrismaClient, TaskType, TaskStatus } from '@prisma/client';
+import { PrismaClient, TaskType, TaskStatus, TaskPhase, TaskSurface } from '@prisma/client';
 import { body, param, query, validationResult } from 'express-validator';
 import { adminAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
@@ -334,6 +334,9 @@ router.post(
           inputPeople,
           groupWithNext,
           consumesResources,
+          // Phase and surface from task-scheduler
+          phase: (task.phase || 'PREPARO') as TaskPhase,
+          surface: (task.surface || 'GERAL') as TaskSurface,
         };
       });
 
@@ -614,6 +617,77 @@ router.put(
           estimatedHours: t.estimatedHours ? Number(t.estimatedHours) : null,
           taskTypeLabel: TASK_TYPE_LABELS[t.taskType],
         })),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================
+// POST /api/admin/projects/:projectId/tasks/publish - Publish tasks to app
+// IMPORTANT: This route must be defined BEFORE /:projectId/tasks/:id
+// =============================================
+router.post(
+  '/:projectId/tasks/publish',
+  adminAuth,
+  [param('projectId').isUUID()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { projectId } = req.params;
+
+      // Verify project exists
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { id: true, title: true, cliente: true },
+      });
+
+      if (!project) {
+        throw new AppError('Projeto nao encontrado', 404, 'PROJECT_NOT_FOUND');
+      }
+
+      // Get all tasks for this project
+      const tasks = await prisma.projectTask.findMany({
+        where: { projectId },
+        orderBy: { sortOrder: 'asc' },
+      });
+
+      if (tasks.length === 0) {
+        throw new AppError('Nenhuma tarefa para publicar', 400, 'NO_TASKS');
+      }
+
+      const now = new Date();
+
+      // Publish all tasks (mark them as published)
+      await prisma.projectTask.updateMany({
+        where: { projectId },
+        data: {
+          publishedToApp: true,
+          publishedAt: now,
+        },
+      });
+
+      // Create audit log
+      await prisma.auditLog.create({
+        data: {
+          adminUserId: req.user!.sub,
+          action: 'PUBLISH_TASKS',
+          entityType: 'Project',
+          entityId: projectId,
+          description: `Published ${tasks.length} tasks to app agenda`,
+        },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          publishedCount: tasks.length,
+          publishedAt: now,
+          projectId,
+          projectName: project.title || project.cliente,
+        },
+        message: `${tasks.length} tarefas publicadas para a agenda do app`,
       });
     } catch (error) {
       next(error);

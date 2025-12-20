@@ -203,7 +203,7 @@ router.post(
           data: {
             userId: request.userId,
             projectId: request.projectId,
-            projectRole: 'APLICADOR',
+            projectRole: 'APLICADOR_I',
           },
         }),
       ]);

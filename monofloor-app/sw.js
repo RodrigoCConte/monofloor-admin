@@ -39,12 +39,19 @@ self.addEventListener('push', (event) => {
         }
     }
 
+    // Use different vibration pattern for XP penalty
+    let vibrate = [200, 100, 200];
+    if (data.data?.type === 'xp:penalty') {
+        // More intense vibration for XP loss
+        vibrate = [100, 50, 100, 50, 200, 50, 300];
+    }
+
     const options = {
         body: data.body,
         icon: data.icon || '/icons/icon-192.png',
         badge: data.badge || '/icons/badge-72.png',
         tag: data.tag || 'monofloor-notification',
-        vibrate: [200, 100, 200],
+        vibrate: vibrate,
         requireInteraction: data.requireInteraction || false,
         data: data.data || {},
         actions: data.actions || []
@@ -64,6 +71,9 @@ self.addEventListener('notificationclick', (event) => {
     const data = event.notification.data || {};
     let targetUrl = '/';
 
+    // Handle notification actions
+    const action = event.action;
+
     // Handle different notification types
     if (data.type === 'role:evolution') {
         targetUrl = '/#profile';
@@ -71,6 +81,40 @@ self.addEventListener('notificationclick', (event) => {
         targetUrl = '/#project-detail';
     } else if (data.type === 'campaign:new' || data.type === 'campaign') {
         targetUrl = '/#projects';
+    } else if (data.type === 'xp:penalty') {
+        // XP penalty notification - show loss animation and go to profile
+        targetUrl = '/#profile';
+        // Send message to client to show XP loss animation
+        event.waitUntil(
+            clients.matchAll({ type: 'window', includeUncontrolled: true })
+                .then((clientList) => {
+                    for (const client of clientList) {
+                        if (client.url.includes(self.location.origin)) {
+                            client.postMessage({
+                                type: 'SHOW_XP_LOSS',
+                                amount: data.amount,
+                                reason: data.reason,
+                                projectName: data.projectName
+                            });
+                        }
+                    }
+                })
+        );
+    } else if (data.type === 'report:reminder') {
+        // Handle report reminder notification actions
+        if (action === 'send') {
+            // User clicked "Enviar Agora" - go to report screen
+            targetUrl = '/#report';
+        } else if (action === 'dismiss') {
+            // User clicked "Depois" or "Ignorar" - dismiss the reminder
+            if (data.reminderId) {
+                dismissReportReminder(data.reminderId);
+            }
+            return; // Don't open app, just dismiss
+        } else {
+            // Default click - go to report screen
+            targetUrl = '/#report';
+        }
     } else if (data.url) {
         targetUrl = data.url;
     }
@@ -157,3 +201,30 @@ self.addEventListener('message', (event) => {
         self.skipWaiting();
     }
 });
+
+/**
+ * Dismiss a report reminder via API
+ * Called when user clicks "Depois" or "Ignorar" on notification
+ */
+async function dismissReportReminder(reminderId) {
+    try {
+        // Get the API URL from cached config or use default
+        const API_URL = 'https://devoted-wholeness-production.up.railway.app';
+
+        // We need to get the token from the client
+        const allClients = await clients.matchAll({ type: 'window' });
+
+        if (allClients.length > 0) {
+            // Send message to client to dismiss reminder
+            allClients[0].postMessage({
+                type: 'DISMISS_REPORT_REMINDER',
+                reminderId: reminderId
+            });
+        } else {
+            // No client available, try direct API call (won't work without token)
+            console.log('[SW] No client available to dismiss reminder', reminderId);
+        }
+    } catch (error) {
+        console.error('[SW] Error dismissing report reminder:', error);
+    }
+}

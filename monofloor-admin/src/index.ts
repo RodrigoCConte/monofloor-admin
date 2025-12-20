@@ -6,6 +6,9 @@ import { PrismaClient } from '@prisma/client';
 import { setSocketServer } from './services/socket.service';
 import { startLunchScheduler } from './services/lunch-scheduler.service';
 import { videoJobWorker, cleanupOldJobs } from './services/video-job-worker.service';
+import { processScheduledReminders } from './services/report-reminder.service';
+import { processScheduledLunchAlerts, cleanupOldLunchAlerts } from './services/lunch-alert.service';
+import { processAllDailyWorktime } from './services/worktime.service';
 
 const prisma = new PrismaClient();
 
@@ -80,6 +83,67 @@ async function main() {
       // Cleanup old jobs every 30 minutes
       setInterval(cleanupOldJobs, 30 * 60 * 1000);
       console.log('🗑️ Cleanup scheduler started (every 30 min)');
+
+      // Process report reminders every minute
+      setInterval(async () => {
+        try {
+          await processScheduledReminders();
+        } catch (error) {
+          console.error('❌ Error processing report reminders:', error);
+        }
+      }, 60 * 1000);
+      console.log('📋 Report reminder scheduler started (every 1 min)');
+
+      // Process lunch break alerts every minute
+      setInterval(async () => {
+        try {
+          await processScheduledLunchAlerts();
+        } catch (error) {
+          console.error('❌ Error processing lunch alerts:', error);
+        }
+      }, 60 * 1000);
+      console.log('🍽️ Lunch alert scheduler started (every 1 min)');
+
+      // Cleanup old lunch alerts every hour
+      setInterval(async () => {
+        try {
+          await cleanupOldLunchAlerts();
+        } catch (error) {
+          console.error('❌ Error cleaning up lunch alerts:', error);
+        }
+      }, 60 * 60 * 1000);
+
+      // Schedule daily worktime calculation at 23:59
+      const scheduleDailyWorktimeProcessing = () => {
+        const now = new Date();
+        const nextRun = new Date(now);
+        nextRun.setHours(23, 59, 0, 0);
+
+        // If it's already past 23:59 today, schedule for tomorrow
+        if (now >= nextRun) {
+          nextRun.setDate(nextRun.getDate() + 1);
+        }
+
+        const msUntilRun = nextRun.getTime() - now.getTime();
+
+        setTimeout(async () => {
+          console.log('⏰ Running daily worktime calculation...');
+          try {
+            const today = new Date();
+            await processAllDailyWorktime(today);
+            console.log('✅ Daily worktime calculation completed');
+          } catch (error) {
+            console.error('❌ Error in daily worktime calculation:', error);
+          }
+
+          // Schedule next run
+          scheduleDailyWorktimeProcessing();
+        }, msUntilRun);
+
+        console.log(`⏰ Daily worktime calculation scheduled for ${nextRun.toISOString()}`);
+      };
+
+      scheduleDailyWorktimeProcessing();
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);

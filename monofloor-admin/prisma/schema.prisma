@@ -100,6 +100,8 @@ model User {
   feedPostLikes         FeedPostLike[]
   feedPostComments      FeedPostComment[]
   notificationViews     NotificationView[]
+  taskCompletions       TaskCompletion[]
+  reportReminders       ReportReminder[]
 
   @@map("users")
 }
@@ -112,17 +114,14 @@ enum UserStatus {
 }
 
 enum UserRole {
-  // Hierarquia de Aplicação (do maior para menor)
-  LIDER              // Líder da equipe de aplicação
-  APLICADOR          // Aplicador principal
-  APLICADOR_AUX      // Aplicador auxiliar
-
-  // Hierarquia de Preparação
-  LIDER_PREPARACAO   // Líder de preparação
-  PREPARADOR         // Preparador
-
-  // Base
+  // Hierarquia (do menor para maior)
   AUXILIAR           // Auxiliar geral
+  PREPARADOR         // Preparador
+  LIDER_PREPARACAO   // Líder da preparação
+  APLICADOR_I        // Aplicador I
+  APLICADOR_II       // Aplicador II
+  APLICADOR_III      // Aplicador III
+  LIDER              // Líder da equipe
 }
 
 // =============================================
@@ -187,6 +186,9 @@ model Project {
   allowSunday       Boolean   @default(false) @map("allow_sunday")
   allowNightWork    Boolean   @default(false) @map("allow_night_work")
 
+  // Travel Mode (projeto fora da área - adicional de 40%)
+  isTravelMode      Boolean   @default(false) @map("is_travel_mode")
+
   // Deadline and scheduling
   deadlineDate      DateTime? @map("deadline_date")    // Data prazo do projeto
   estimatedDays     Int?      @map("estimated_days")   // Dias estimados de trabalho
@@ -212,6 +214,8 @@ model Project {
   helpRequests          HelpRequest[]
   feedPosts             FeedPost[]
   tasks                 ProjectTask[]
+  reportReminders       ReportReminder[]
+  xpTransactions        XpTransaction[]
 
   @@map("projects")
 }
@@ -246,22 +250,21 @@ model ProjectAssignment {
   isActive      Boolean   @default(true) @map("is_active")
 
   // Role within this project
-  projectRole   ProjectRole @default(APLICADOR) @map("project_role")
+  projectRole   ProjectRole @default(APLICADOR_I) @map("project_role")
 
   @@unique([userId, projectId])
   @@map("project_assignments")
 }
 
 enum ProjectRole {
-  // Equipe de Aplicação
-  LIDER              // Líder da equipe
-  APLICADOR          // Aplicador principal
-  APLICADOR_AUX      // Aplicador auxiliar
-
-  // Equipe de Preparação
-  LIDER_PREPARACAO   // Líder de preparação
+  // Hierarquia (do menor para maior)
+  AUXILIAR           // Auxiliar geral
   PREPARADOR         // Preparador
-  AUXILIAR           // Auxiliar
+  LIDER_PREPARACAO   // Líder da preparação
+  APLICADOR_I        // Aplicador I
+  APLICADOR_II       // Aplicador II
+  APLICADOR_III      // Aplicador III
+  LIDER              // Líder da equipe
 }
 
 // =============================================
@@ -313,8 +316,30 @@ model Checkin {
   // Checkout reason
   checkoutReason  CheckoutReason? @map("checkout_reason")
 
-  // Calculated hours
+  // Distance from project pin (meters)
+  checkinDistance   Float?    @map("checkin_distance")   // Distância no check-in
+  checkoutDistance  Float?    @map("checkout_distance")  // Distância no checkout
+  isDistantCheckin  Boolean   @default(false) @map("is_distant_checkin")   // >80m no check-in
+  isDistantCheckout Boolean   @default(false) @map("is_distant_checkout")  // >80m no checkout
+
+  // Calculated hours (legacy)
   hoursWorked     Decimal?  @map("hours_worked") @db.Decimal(10, 2)
+
+  // Detailed hours breakdown
+  hoursNormal     Decimal?  @map("hours_normal") @db.Decimal(10, 2)      // Horas normais (até 8h)
+  hoursOvertime   Decimal?  @map("hours_overtime") @db.Decimal(10, 2)    // Horas extras (+20%)
+  hoursTravel     Decimal?  @map("hours_travel") @db.Decimal(10, 2)      // Horas deslocamento (outro projeto)
+  hoursSupplies   Decimal?  @map("hours_supplies") @db.Decimal(10, 2)    // Horas comprando insumos
+
+  // Lunch break tracking
+  lunchBreakMinutes   Int?      @map("lunch_break_minutes")   // Minutos de almoço registrados
+  lunchDeduction      Int?      @map("lunch_deduction")       // Minutos deduzidos automaticamente
+  lunchPenaltyApplied Boolean   @default(false) @map("lunch_penalty_applied")  // Se penalidade foi aplicada
+
+  // Auto-checkout (quando sai da área do projeto)
+  isAutoCheckout              Boolean   @default(false) @map("is_auto_checkout")  // Checkout automático
+  autoCheckoutJustification   String?   @map("auto_checkout_justification")       // Explicação do usuário
+  autoCheckoutJustifiedAt     DateTime? @map("auto_checkout_justified_at")        // Quando justificou
 
   // Validation
   isValid         Boolean   @default(true) @map("is_valid")
@@ -324,7 +349,9 @@ model Checkin {
   createdAt       DateTime  @default(now()) @map("created_at")
 
   // Relations
-  reports         Report[]
+  reports           Report[]
+  taskCompletions   TaskCompletion[]
+  reportReminders   ReportReminder[]
 
   @@index([userId, checkinAt])
   @@index([projectId, checkinAt])
@@ -336,6 +363,7 @@ enum CheckoutReason {
   OUTRO_PROJETO
   COMPRA_INSUMOS
   ALMOCO_INTERVALO
+  AUTO_DISTANTE      // Auto-checkout por sair da área do projeto (>100m)
 }
 
 // =============================================
@@ -1071,6 +1099,11 @@ model ProjectTask {
   // Progress
   status          TaskStatus    @default(PENDING)
   progress        Int           @default(0)  // 0-100%
+  completionType  TaskCompletionType? @map("completion_type")  // INTEGRAL ou PARTIAL
+
+  // Phase/Block classification
+  phase           TaskPhase     @default(PREPARO)  // PREPARO, APLICACAO, ACABAMENTO
+  surface         TaskSurface   @default(GERAL)    // PISO, PAREDE, GERAL
 
   // Dependencies (tarefa que deve ser concluída antes)
   dependsOnId     String?       @map("depends_on_id")
@@ -1083,12 +1116,20 @@ model ProjectTask {
   // Color for Gantt
   color           String?       // Ex: "#c9a962", "#22c55e"
 
+  // App publishing
+  publishedToApp  Boolean       @default(false) @map("published_to_app")
+  publishedAt     DateTime?     @map("published_at")
+
   // Timestamps
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
+  // Relations
+  completions     TaskCompletion[]
+
   @@index([projectId, sortOrder])
   @@index([projectId, status])
+  @@index([projectId, publishedToApp])
   @@map("project_tasks")
 }
 
@@ -1124,6 +1165,26 @@ enum TaskStatus {
   COMPLETED      // Concluída
   BLOCKED        // Bloqueada (dependência não concluída)
   CANCELLED      // Cancelada
+}
+
+// Fase/Bloco da tarefa
+enum TaskPhase {
+  PREPARO        // Etapa de preparação
+  APLICACAO      // Etapa de aplicação do produto
+  ACABAMENTO     // Etapa de acabamento/finalização
+}
+
+// Superfície da tarefa
+enum TaskSurface {
+  PISO           // Tarefa de piso
+  PAREDE         // Tarefa de parede/teto
+  GERAL          // Tarefa geral (ambas superfícies)
+}
+
+// Tipo de conclusão da tarefa
+enum TaskCompletionType {
+  INTEGRAL       // Tarefa 100% concluída
+  PARTIAL        // Tarefa parcialmente concluída (ex: 50%)
 }
 
 // =============================================
@@ -1184,6 +1245,7 @@ model XpTransaction {
   // Referências opcionais
   checkinId   String?     @map("checkin_id")
   projectId   String?     @map("project_id")
+  project     Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
   campaignId  String?     @map("campaign_id")
 
   // Timestamps
@@ -1192,6 +1254,7 @@ model XpTransaction {
   @@index([userId])
   @@index([type])
   @@index([createdAt])
+  @@index([projectId])
   @@map("xp_transactions")
 }
 
@@ -1204,4 +1267,133 @@ enum XpTransactionType {
   BONUS             // Bonus manual do admin
   VIDEO_WATCHED     // Vídeo assistido
   PENALTY           // Penalidade (XP negativo)
+  TASK_COMPLETED    // Tarefa concluída
+}
+
+// =============================================
+// TASK COMPLETIONS (Registro de tarefas concluídas)
+// =============================================
+model TaskCompletion {
+  id              String       @id @default(uuid())
+  projectTaskId   String       @map("project_task_id")
+  projectTask     ProjectTask  @relation(fields: [projectTaskId], references: [id], onDelete: Cascade)
+  userId          String       @map("user_id")
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checkinId       String       @map("checkin_id")
+  checkin         Checkin      @relation(fields: [checkinId], references: [id], onDelete: Cascade)
+
+  completedAt     DateTime     @default(now()) @map("completed_at")
+
+  @@unique([projectTaskId, checkinId])
+  @@index([projectTaskId])
+  @@index([userId, completedAt])
+  @@map("task_completions")
+}
+
+// =============================================
+// REPORT REMINDERS (Lembretes de relatório)
+// =============================================
+model ReportReminder {
+  id              String         @id @default(uuid())
+  userId          String         @map("user_id")
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId       String         @map("project_id")
+  project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  checkinId       String         @map("checkin_id")
+  checkin         Checkin        @relation(fields: [checkinId], references: [id], onDelete: Cascade)
+
+  // Scheduling
+  scheduledFor    DateTime       @map("scheduled_for")
+  reminderCount   Int            @default(0) @map("reminder_count")  // 0, 1, 2, 3 (max)
+
+  // Status
+  status          ReminderStatus @default(PENDING)
+  sentAt          DateTime?      @map("sent_at")
+
+  // Report tracking
+  reportSubmitted Boolean        @default(false) @map("report_submitted")
+
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  @@index([userId, status])
+  @@index([scheduledFor, status])
+  @@map("report_reminders")
+}
+
+enum ReminderStatus {
+  PENDING      // Aguardando envio
+  SENT         // Notificação enviada
+  COMPLETED    // Usuário enviou relatório
+  EXPIRED      // Expirado (max 3 tentativas)
+}
+
+// =============================================
+// DAILY WORK SUMMARY (Resumo diário de trabalho)
+// =============================================
+model DailyWorkSummary {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  workDate        DateTime  @map("work_date") @db.Date
+
+  // Hours breakdown
+  hoursNormal     Decimal   @default(0) @map("hours_normal") @db.Decimal(10, 2)     // Horas normais (até 8h)
+  hoursOvertime   Decimal   @default(0) @map("hours_overtime") @db.Decimal(10, 2)   // Horas extras (+20%)
+  hoursTravelMode Decimal   @default(0) @map("hours_travel_mode") @db.Decimal(10, 2) // Horas em modo viagem (+40%)
+  hoursTravel     Decimal   @default(0) @map("hours_travel") @db.Decimal(10, 2)     // Horas deslocamento
+  hoursSupplies   Decimal   @default(0) @map("hours_supplies") @db.Decimal(10, 2)   // Horas comprando insumos
+
+  // Total hours
+  totalHoursWorked Decimal  @default(0) @map("total_hours_worked") @db.Decimal(10, 2)
+
+  // Lunch break
+  lunchBreakMinutes Int     @default(0) @map("lunch_break_minutes")   // Minutos de almoço registrados
+  lunchDeduction    Int     @default(0) @map("lunch_deduction")       // Minutos deduzidos
+  lunchPenaltyXP    Int     @default(0) @map("lunch_penalty_xp")      // XP deduzido (-500)
+
+  // Payment calculation (based on user role at the time)
+  userRole        String    @map("user_role")                         // Role snapshot
+  dailyRate       Decimal   @map("daily_rate") @db.Decimal(10, 2)     // Valor diária
+  hourlyRate      Decimal   @map("hourly_rate") @db.Decimal(10, 2)    // Valor hora
+  overtimeRate    Decimal   @map("overtime_rate") @db.Decimal(10, 2)  // Valor hora extra
+  travelRate      Decimal?  @map("travel_rate") @db.Decimal(10, 2)    // Valor hora viagem
+
+  // Total payment
+  totalPayment    Decimal   @default(0) @map("total_payment") @db.Decimal(10, 2)
+
+  // Anomalies
+  hasDistantCheckins  Boolean @default(false) @map("has_distant_checkins")  // Teve check-ins >80m
+  distantCheckinCount Int     @default(0) @map("distant_checkin_count")
+
+  // Processing
+  processedAt     DateTime? @map("processed_at")
+
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@unique([userId, workDate])
+  @@index([userId, workDate])
+  @@index([workDate])
+  @@map("daily_work_summaries")
+}
+
+// =============================================
+// LUNCH BREAK ALERTS (Alertas de almoço prolongado)
+// =============================================
+model LunchBreakAlert {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  checkinId       String    @map("checkin_id")
+
+  // Alert tracking
+  alertNumber     Int       @map("alert_number")      // 1, 2, ou 3
+  alertTime       String    @map("alert_time")        // "1h10", "1h20", "1h30"
+  scheduledFor    DateTime  @map("scheduled_for")
+  sentAt          DateTime? @map("sent_at")
+
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, scheduledFor])
+  @@index([checkinId])
+  @@map("lunch_break_alerts")
 }

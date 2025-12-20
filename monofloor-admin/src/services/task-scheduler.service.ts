@@ -6,11 +6,19 @@
 // Project scope types
 export type ProjectScope = 'PISO' | 'PAREDE_TETO' | 'COMBINADO';
 
+// Task phase/block types
+export type TaskPhase = 'PREPARO' | 'APLICACAO' | 'ACABAMENTO';
+
+// Surface types
+export type TaskSurface = 'PISO' | 'PAREDE' | 'GERAL';
+
 // Task template definition
 export interface TaskTemplate {
   title: string;
   color: string;
   isCura?: boolean; // Cura tasks have 0 work hours but take time
+  phase: TaskPhase; // Block: PREPARO, APLICACAO, or ACABAMENTO
+  surface: TaskSurface; // Which surface: PISO, PAREDE, or GERAL (both)
 }
 
 // =============================================
@@ -68,64 +76,83 @@ const COLORS = {
 // TASK SEQUENCES BY PROJECT SCOPE
 // =============================================
 
-// APENAS PISO - 14 steps
+// APENAS PISO - 13 steps
+// PREPARO: Até antes do Stelion (7 etapas)
+// APLICACAO: Stelion + Cura (4 etapas)
+// ACABAMENTO: Verniz (2 etapas)
 const PISO_SEQUENCE: TaskTemplate[] = [
-  { title: 'Protecao/Fitamento', color: COLORS.PROTECAO },
-  { title: 'Limpeza', color: COLORS.LIMPEZA },
-  { title: 'Primer Texturizado', color: COLORS.PRIMER },
-  { title: 'Leona', color: COLORS.LEONA },
-  { title: 'Lixamento', color: COLORS.LIXAMENTO },
-  { title: 'Leona', color: COLORS.LEONA },
-  { title: 'Lixamento', color: COLORS.LIXAMENTO },
-  { title: 'Stelion', color: COLORS.STELION },
-  { title: 'Cura Stelion', color: COLORS.CURA, isCura: true },
-  { title: 'Stelion', color: COLORS.STELION },
-  { title: 'Cura Stelion', color: COLORS.CURA, isCura: true },
-  { title: 'Verniz', color: COLORS.VERNIZ },
-  { title: 'Verniz', color: COLORS.VERNIZ },
+  // === BLOCO PREPARO (PISO) ===
+  { title: 'Proteção/Fitamento', color: COLORS.PROTECAO, phase: 'PREPARO', surface: 'PISO' },
+  { title: 'Limpeza', color: COLORS.LIMPEZA, phase: 'PREPARO', surface: 'PISO' },
+  { title: 'Primer Texturizado', color: COLORS.PRIMER, phase: 'PREPARO', surface: 'PISO' },
+  { title: 'Leona', color: COLORS.LEONA, phase: 'PREPARO', surface: 'PISO' },
+  { title: 'Lixamento', color: COLORS.LIXAMENTO, phase: 'PREPARO', surface: 'PISO' },
+  { title: 'Leona', color: COLORS.LEONA, phase: 'PREPARO', surface: 'PISO' },
+  { title: 'Lixamento', color: COLORS.LIXAMENTO, phase: 'PREPARO', surface: 'PISO' },
+  // === BLOCO APLICAÇÃO (PISO) ===
+  { title: 'Stelion', color: COLORS.STELION, phase: 'APLICACAO', surface: 'PISO' },
+  { title: 'Cura Stelion', color: COLORS.CURA, isCura: true, phase: 'APLICACAO', surface: 'PISO' },
+  { title: 'Stelion', color: COLORS.STELION, phase: 'APLICACAO', surface: 'PISO' },
+  { title: 'Cura Stelion', color: COLORS.CURA, isCura: true, phase: 'APLICACAO', surface: 'PISO' },
+  // === BLOCO ACABAMENTO (PISO) ===
+  { title: 'Verniz', color: COLORS.VERNIZ, phase: 'ACABAMENTO', surface: 'PISO' },
+  { title: 'Verniz', color: COLORS.VERNIZ, phase: 'ACABAMENTO', surface: 'PISO' },
 ];
 
 // APENAS PAREDE/TETO - 13 steps
+// PREPARO: Até o último Lixamento girafa (7 etapas)
+// APLICACAO: LILIT + Calafetes até Verificação (3 etapas)
+// ACABAMENTO: Selador + Verniz (3 etapas)
 const PAREDE_TETO_SEQUENCE: TaskTemplate[] = [
-  { title: 'Protecao/Fitamento', color: COLORS.PROTECAO },
-  { title: 'Limpeza', color: COLORS.LIMPEZA },
-  { title: 'Primer Base Agua', color: COLORS.PRIMER },
-  { title: 'LILIT', color: COLORS.LILIT },
-  { title: 'Lixamento (girafa)', color: COLORS.LIXAMENTO },
-  { title: 'LILIT', color: COLORS.LILIT },
-  { title: 'Lixamento (girafa)', color: COLORS.LIXAMENTO },
-  { title: 'LILIT + Calafetes 100%', color: COLORS.LILIT },
-  { title: 'Lixamento Fino', color: COLORS.LIXAMENTO },
-  { title: 'Verificacao Calafetes', color: COLORS.VERIFICACAO },
-  { title: 'Selador', color: COLORS.SELADOR },
-  { title: 'Verniz', color: COLORS.VERNIZ },
-  { title: 'Verniz', color: COLORS.VERNIZ },
+  // === BLOCO PREPARO (PAREDE) ===
+  { title: 'Proteção/Fitamento', color: COLORS.PROTECAO, phase: 'PREPARO', surface: 'PAREDE' },
+  { title: 'Limpeza', color: COLORS.LIMPEZA, phase: 'PREPARO', surface: 'PAREDE' },
+  { title: 'Primer Base Água', color: COLORS.PRIMER, phase: 'PREPARO', surface: 'PAREDE' },
+  { title: 'LILIT', color: COLORS.LILIT, phase: 'PREPARO', surface: 'PAREDE' },
+  { title: 'Lixamento (girafa)', color: COLORS.LIXAMENTO, phase: 'PREPARO', surface: 'PAREDE' },
+  { title: 'LILIT', color: COLORS.LILIT, phase: 'PREPARO', surface: 'PAREDE' },
+  { title: 'Lixamento (girafa)', color: COLORS.LIXAMENTO, phase: 'PREPARO', surface: 'PAREDE' },
+  // === BLOCO APLICAÇÃO (PAREDE) ===
+  { title: 'LILIT + Calafetes 100%', color: COLORS.LILIT, phase: 'APLICACAO', surface: 'PAREDE' },
+  { title: 'Lixamento Fino', color: COLORS.LIXAMENTO, phase: 'APLICACAO', surface: 'PAREDE' },
+  { title: 'Verificação Calafetes', color: COLORS.VERIFICACAO, phase: 'APLICACAO', surface: 'PAREDE' },
+  // === BLOCO ACABAMENTO (PAREDE) ===
+  { title: 'Selador', color: COLORS.SELADOR, phase: 'ACABAMENTO', surface: 'PAREDE' },
+  { title: 'Verniz', color: COLORS.VERNIZ, phase: 'ACABAMENTO', surface: 'PAREDE' },
+  { title: 'Verniz', color: COLORS.VERNIZ, phase: 'ACABAMENTO', surface: 'PAREDE' },
 ];
 
 // PISO + PAREDE/TETO (COMBINADO) - 22 steps
+// Sequência: Preparo Geral → Preparo Parede → Preparo Piso → Aplicação Piso → Acabamento Geral
 const COMBINADO_SEQUENCE: TaskTemplate[] = [
-  { title: 'Protecao/Fitamento', color: COLORS.PROTECAO },
-  { title: 'Limpeza', color: COLORS.LIMPEZA },
-  { title: 'Primer Regular', color: COLORS.PRIMER },
-  { title: 'LILIT', color: COLORS.LILIT },
-  { title: 'Lixamento', color: COLORS.LIXAMENTO },
-  { title: 'LILIT', color: COLORS.LILIT },
-  { title: 'Lixamento', color: COLORS.LIXAMENTO },
-  { title: 'LILIT', color: COLORS.LILIT },
-  { title: 'Lixamento', color: COLORS.LIXAMENTO },
-  { title: 'Primer Texturizado', color: COLORS.PRIMER },
-  { title: 'Leona', color: COLORS.LEONA },
-  { title: 'Lixamento', color: COLORS.LIXAMENTO },
-  { title: 'Leona', color: COLORS.LEONA },
-  { title: 'Lixamento', color: COLORS.LIXAMENTO },
-  { title: 'Stelion', color: COLORS.STELION },
-  { title: 'Cura Stelion', color: COLORS.CURA, isCura: true },
-  { title: 'Lixamento', color: COLORS.LIXAMENTO },
-  { title: 'Stelion', color: COLORS.STELION },
-  { title: 'Cura Stelion', color: COLORS.CURA, isCura: true },
-  { title: 'Lixamento', color: COLORS.LIXAMENTO },
-  { title: 'Verniz', color: COLORS.VERNIZ },
-  { title: 'Verniz', color: COLORS.VERNIZ },
+  // === BLOCO PREPARO GERAL ===
+  { title: 'Proteção/Fitamento', color: COLORS.PROTECAO, phase: 'PREPARO', surface: 'GERAL' },
+  { title: 'Limpeza', color: COLORS.LIMPEZA, phase: 'PREPARO', surface: 'GERAL' },
+  // === BLOCO PREPARO PAREDE (LILIT) ===
+  { title: 'Primer Base Água', color: COLORS.PRIMER, phase: 'PREPARO', surface: 'PAREDE' },
+  { title: 'LILIT', color: COLORS.LILIT, phase: 'PREPARO', surface: 'PAREDE' },
+  { title: 'Lixamento (girafa)', color: COLORS.LIXAMENTO, phase: 'PREPARO', surface: 'PAREDE' },
+  { title: 'LILIT', color: COLORS.LILIT, phase: 'PREPARO', surface: 'PAREDE' },
+  { title: 'Lixamento (girafa)', color: COLORS.LIXAMENTO, phase: 'PREPARO', surface: 'PAREDE' },
+  // === BLOCO APLICAÇÃO PAREDE ===
+  { title: 'LILIT + Calafetes 100%', color: COLORS.LILIT, phase: 'APLICACAO', surface: 'PAREDE' },
+  { title: 'Lixamento Fino (parede)', color: COLORS.LIXAMENTO, phase: 'APLICACAO', surface: 'PAREDE' },
+  { title: 'Verificação Calafetes', color: COLORS.VERIFICACAO, phase: 'APLICACAO', surface: 'PAREDE' },
+  // === BLOCO PREPARO PISO (LEONA) ===
+  { title: 'Primer Texturizado', color: COLORS.PRIMER, phase: 'PREPARO', surface: 'PISO' },
+  { title: 'Leona', color: COLORS.LEONA, phase: 'PREPARO', surface: 'PISO' },
+  { title: 'Lixamento (piso)', color: COLORS.LIXAMENTO, phase: 'PREPARO', surface: 'PISO' },
+  { title: 'Leona', color: COLORS.LEONA, phase: 'PREPARO', surface: 'PISO' },
+  { title: 'Lixamento (piso)', color: COLORS.LIXAMENTO, phase: 'PREPARO', surface: 'PISO' },
+  // === BLOCO APLICAÇÃO PISO (STELION) ===
+  { title: 'Stelion', color: COLORS.STELION, phase: 'APLICACAO', surface: 'PISO' },
+  { title: 'Cura Stelion', color: COLORS.CURA, isCura: true, phase: 'APLICACAO', surface: 'PISO' },
+  { title: 'Stelion', color: COLORS.STELION, phase: 'APLICACAO', surface: 'PISO' },
+  { title: 'Cura Stelion', color: COLORS.CURA, isCura: true, phase: 'APLICACAO', surface: 'PISO' },
+  // === BLOCO ACABAMENTO GERAL ===
+  { title: 'Selador', color: COLORS.SELADOR, phase: 'ACABAMENTO', surface: 'GERAL' },
+  { title: 'Verniz', color: COLORS.VERNIZ, phase: 'ACABAMENTO', surface: 'GERAL' },
+  { title: 'Verniz', color: COLORS.VERNIZ, phase: 'ACABAMENTO', surface: 'GERAL' },
 ];
 
 /**
@@ -175,6 +202,8 @@ export interface GeneratedTask {
   endDate: Date;
   sortOrder: number;
   isCura: boolean;
+  phase: TaskPhase;
+  surface: TaskSurface;
 }
 
 /**
@@ -223,6 +252,8 @@ export function distributeTasks(
         endDate: workDays[Math.max(startDayIndex, endDayIndex)],
         sortOrder: index + 1,
         isCura: template.isCura || false,
+        phase: template.phase,
+        surface: template.surface,
       });
     });
   } else {
@@ -239,6 +270,8 @@ export function distributeTasks(
         endDate: workDays[dayIndex],
         sortOrder: index + 1,
         isCura: template.isCura || false,
+        phase: template.phase,
+        surface: template.surface,
       });
     });
   }

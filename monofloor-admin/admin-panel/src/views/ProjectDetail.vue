@@ -43,6 +43,7 @@ const formData = ref({
   allowSaturday: false,
   allowSunday: false,
   allowNightWork: false,
+  isTravelMode: false,
 });
 
 // Inline edit state for individual fields
@@ -69,7 +70,7 @@ const showAddMemberModal = ref(false);
 const availableApplicators = ref<any[]>([]);
 const loadingApplicators = ref(false);
 const selectedApplicator = ref('');
-const selectedRole = ref('APLICADOR');
+const selectedRole = ref('APLICADOR_I');
 const addingMember = ref(false);
 const removingMember = ref<string | null>(null);
 
@@ -1058,9 +1059,29 @@ const distributeTeamSize = async () => {
   }
 };
 
-// Send schedule to app agenda (placeholder - to be configured)
+// Send schedule to app agenda - publishes tasks to mobile app
+const publishingTasks = ref(false);
 const sendToAppAgenda = async () => {
-  alert('Funcionalidade "Enviar para Agenda" será configurada em breve.\n\nEsta ação enviará o cronograma completo para a agenda dos aplicadores no app mobile.');
+  if (!confirm('Publicar cronograma para a agenda dos aplicadores no app mobile?\n\nAs tarefas ficarão visíveis para todos os aplicadores atribuídos ao projeto.')) {
+    return;
+  }
+
+  publishingTasks.value = true;
+  try {
+    const response = await projectsApi.publishTasks(route.params.id as string);
+    if (response.data.success) {
+      const { publishedCount, projectName } = response.data.data;
+      alert(`✅ ${publishedCount} tarefas publicadas com sucesso!\n\nO cronograma agora está disponível na agenda do app mobile para o projeto "${projectName}".`);
+      // Reload tasks to update published status
+      await loadTasks();
+    }
+  } catch (error: any) {
+    console.error('Error publishing tasks:', error);
+    const message = error.response?.data?.error?.message || 'Erro ao publicar tarefas';
+    alert('Erro: ' + message);
+  } finally {
+    publishingTasks.value = false;
+  }
 };
 
 // Drag and drop placeholders (disabled for now - dates controlled by deadline)
@@ -1111,6 +1132,7 @@ const loadProject = async () => {
       allowSaturday: project.value.allowSaturday || false,
       allowSunday: project.value.allowSunday || false,
       allowNightWork: project.value.allowNightWork || false,
+      isTravelMode: project.value.isTravelMode || false,
     };
 
     // Load checkins for days in progress calculation
@@ -1209,6 +1231,7 @@ const cancelEdit = () => {
       allowSaturday: project.value.allowSaturday || false,
       allowSunday: project.value.allowSunday || false,
       allowNightWork: project.value.allowNightWork || false,
+      isTravelMode: project.value.isTravelMode || false,
     };
   }
 };
@@ -1305,7 +1328,7 @@ const saveFieldInline = async (fieldName: string, event?: Event) => {
 };
 
 // Toggle boolean field and save
-const toggleAndSave = async (fieldName: 'allowSaturday' | 'allowSunday' | 'allowNightWork', event: Event) => {
+const toggleAndSave = async (fieldName: 'allowSaturday' | 'allowSunday' | 'allowNightWork' | 'isTravelMode', event: Event) => {
   event.preventDefault();
   event.stopPropagation();
 
@@ -1329,6 +1352,7 @@ const cancelFieldEdit = () => {
     formData.value.allowSaturday = project.value.allowSaturday || false;
     formData.value.allowSunday = project.value.allowSunday || false;
     formData.value.allowNightWork = project.value.allowNightWork || false;
+    formData.value.isTravelMode = project.value.isTravelMode || false;
   }
 };
 
@@ -1442,7 +1466,7 @@ const loadAvailableApplicators = async () => {
 const openAddMemberModal = async () => {
   showAddMemberModal.value = true;
   selectedApplicator.value = '';
-  selectedRole.value = 'APLICADOR';
+  selectedRole.value = 'APLICADOR_I';
   await loadAvailableApplicators();
 };
 
@@ -1853,7 +1877,12 @@ const getStatusLabel = (status: string) => {
 const getRoleLabel = (role: string) => {
   switch (role) {
     case 'LIDER': return 'Lider';
-    case 'APLICADOR': return 'Aplicador';
+    case 'APLICADOR_III': return 'Aplicador III';
+    case 'APLICADOR_II': return 'Aplicador II';
+    case 'APLICADOR_I': return 'Aplicador I';
+    case 'LIDER_PREPARACAO': return 'Lider da Preparacao';
+    case 'PREPARADOR': return 'Preparador';
+    case 'AUXILIAR': return 'Auxiliar';
     default: return role;
   }
 };
@@ -2089,6 +2118,14 @@ onMounted(async () => {
                   <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
                 </svg>
                 Noturno
+              </span>
+              <span v-if="project.isTravelMode" class="travel-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
+                  <path d="M2 12h20"/>
+                </svg>
+                Viagem +20%
               </span>
               <span v-if="project.cliente" class="meta-item">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2566,6 +2603,21 @@ onMounted(async () => {
                       {{ formData.allowNightWork ? 'Sim' : 'Nao' }}
                     </button>
                   </div>
+
+                  <!-- Modo Viagem (+20%, +40% se extra) -->
+                  <div class="schedule-field">
+                    <div class="schedule-field-header">
+                      <label>Modo Viagem (+20%)</label>
+                    </div>
+                    <button
+                      type="button"
+                      class="toggle-btn travel-toggle"
+                      :class="{ active: formData.isTravelMode }"
+                      @click="toggleAndSave('isTravelMode', $event)"
+                    >
+                      {{ formData.isTravelMode ? 'Sim' : 'Nao' }}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -2857,17 +2909,24 @@ onMounted(async () => {
                 <button
                   v-if="tasks.length > 0"
                   @click="sendToAppAgenda"
+                  :disabled="publishingTasks"
                   class="btn btn-accent"
                   title="Enviar cronograma para agenda dos aplicadores no app"
                 >
-                  <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                    <line x1="16" y1="2" x2="16" y2="6"/>
-                    <line x1="8" y1="2" x2="8" y2="6"/>
-                    <line x1="3" y1="10" x2="21" y2="10"/>
-                    <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>
-                  </svg>
-                  Enviar para Agenda
+                  <template v-if="publishingTasks">
+                    <div class="loading-spinner-small"></div>
+                    Publicando...
+                  </template>
+                  <template v-else>
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                      <line x1="16" y1="2" x2="16" y2="6"/>
+                      <line x1="8" y1="2" x2="8" y2="6"/>
+                      <line x1="3" y1="10" x2="21" y2="10"/>
+                      <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>
+                    </svg>
+                    Enviar para Agenda
+                  </template>
                 </button>
                 <button
                   v-if="tasks.length > 0"
@@ -3577,7 +3636,12 @@ onMounted(async () => {
             <div class="field">
               <label>Cargo</label>
               <select v-model="selectedRole" class="input">
-                <option value="APLICADOR">Aplicador</option>
+                <option value="AUXILIAR">Auxiliar</option>
+                <option value="PREPARADOR">Preparador</option>
+                <option value="LIDER_PREPARACAO">Lider da Preparacao</option>
+                <option value="APLICADOR_I">Aplicador I</option>
+                <option value="APLICADOR_II">Aplicador II</option>
+                <option value="APLICADOR_III">Aplicador III</option>
                 <option value="LIDER">Lider</option>
               </select>
             </div>
@@ -3983,6 +4047,29 @@ onMounted(async () => {
 .night-badge svg {
   width: 14px;
   height: 14px;
+}
+
+.travel-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.travel-badge svg {
+  width: 14px;
+  height: 14px;
+}
+
+.travel-toggle.active {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border-color: #f59e0b;
 }
 
 .meta-item {

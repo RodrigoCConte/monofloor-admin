@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@googlemaps/markerclusterer": "^2.6.2",
     "@vueuse/core": "^14.1.0",
     "axios": "^1.13.2",
     "html2canvas": "^1.4.1",
