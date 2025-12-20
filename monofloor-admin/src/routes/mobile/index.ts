@@ -1246,31 +1246,32 @@ router.get(
           projectMap.set(projectId, entry);
         }
 
-        entry.hours += Number(checkin.hoursWorked) || 0;
-        entry.hoursNormal += Number(checkin.hoursNormal) || 0;
-        entry.hoursOvertime += Number(checkin.hoursOvertime) || 0;
-        entry.hoursTravel += Number(checkin.hoursTravel) || 0;
-        entry.hoursSupplies += Number(checkin.hoursSupplies) || 0;
+        const hours = Number(checkin.hoursWorked) || 0;
+        entry.hours += hours;
         entry.checkins += 1;
 
-        // Calculate earnings based on hours and role at checkout time
-        // For simplicity, use current role rates (detailed calculation is in DailyWorkSummary)
+        // Calculate earnings based on hours and checkout reason
         const rates = getRoleRates(user.role);
-        if (rates) {
-          const normalHours = Number(checkin.hoursNormal) || 0;
-          const overtimeHours = Number(checkin.hoursOvertime) || 0;
-          const travelHours = Number(checkin.hoursTravel) || 0;
-          const suppliesHours = Number(checkin.hoursSupplies) || 0;
+        if (rates && hours > 0) {
+          // Check checkout reason for travel/supplies
+          const reason = (checkin as any).checkoutReason;
 
-          // If project is travel mode, apply travel rates
-          if (checkin.project.isTravelMode) {
-            entry.earnings += normalHours * rates.travelRate;
-            entry.earnings += overtimeHours * rates.travelOvertimeRate;
+          if (reason === 'OUTRO_PROJETO') {
+            entry.hoursTravel += hours;
+            entry.earnings += hours * rates.hourlyRate;
+          } else if (reason === 'COMPRA_INSUMOS') {
+            entry.hoursSupplies += hours;
+            entry.earnings += hours * rates.hourlyRate;
           } else {
-            entry.earnings += normalHours * rates.hourlyRate;
-            entry.earnings += overtimeHours * rates.overtimeRate;
+            // Normal work - apply travel mode rate if applicable
+            if (checkin.project.isTravelMode) {
+              entry.hoursNormal += hours;
+              entry.earnings += hours * rates.travelRate;
+            } else {
+              entry.hoursNormal += hours;
+              entry.earnings += hours * rates.hourlyRate;
+            }
           }
-          entry.earnings += (travelHours + suppliesHours) * rates.hourlyRate;
         }
       }
 
