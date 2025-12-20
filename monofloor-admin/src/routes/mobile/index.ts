@@ -1223,8 +1223,9 @@ router.get(
         xpPenalty: number;
       }>();
 
-      // First pass: count hours per project
-      let totalCheckinHours = 0;
+      // Calculate per-project earnings with proper rates
+      const rates = getRoleRates(user.role);
+
       for (const checkin of checkins) {
         if (!checkin.project) continue;
 
@@ -1250,28 +1251,41 @@ router.get(
         const hours = Number(checkin.hoursWorked) || 0;
         entry.hours += hours;
         entry.checkins += 1;
-        totalCheckinHours += hours;
 
-        // Track hour types for display
+        // Calculate earnings based on checkout reason and project type
         const reason = (checkin as any).checkoutReason;
-        if (reason === 'OUTRO_PROJETO') {
-          entry.hoursTravel += hours;
-        } else if (reason === 'COMPRA_INSUMOS') {
-          entry.hoursSupplies += hours;
-        } else {
-          entry.hoursNormal += hours;
+
+        if (rates && hours > 0) {
+          if (reason === 'OUTRO_PROJETO') {
+            // Deslocamento para outro projeto - taxa normal
+            entry.hoursTravel += hours;
+            entry.earnings += hours * rates.hourlyRate;
+          } else if (reason === 'COMPRA_INSUMOS') {
+            // Compra de insumos - taxa normal
+            entry.hoursSupplies += hours;
+            entry.earnings += hours * rates.hourlyRate;
+          } else {
+            // Trabalho normal - verificar se projeto é travel mode
+            entry.hoursNormal += hours;
+            if (checkin.project.isTravelMode) {
+              // Travel mode: +20%
+              entry.earnings += hours * rates.travelRate;
+            } else {
+              // Taxa normal
+              entry.earnings += hours * rates.hourlyRate;
+            }
+          }
         }
       }
 
-      // Second pass: distribute totalEarnings proportionally to hours
-      // This ensures sum of per-project = total from DailyWorkSummary
-      const actualTotalEarnings = totalEarnings + todayEarnings;
+      // Calculate overtime bonus (difference between total from DailyWorkSummary and base calculation)
+      // Overtime is calculated per DAY, so we add it as a separate bonus
+      let baseProjectEarnings = 0;
       for (const entry of projectMap.values()) {
-        if (totalCheckinHours > 0 && entry.hours > 0) {
-          // Proportional distribution: (project hours / total hours) * total earnings
-          entry.earnings = (entry.hours / totalCheckinHours) * actualTotalEarnings;
-        }
+        baseProjectEarnings += entry.earnings;
       }
+      const actualTotalEarnings = totalEarnings + todayEarnings;
+      const overtimeBonus = Math.max(0, actualTotalEarnings - baseProjectEarnings);
 
       // Add XP data to projects
       for (const tx of xpTransactions) {
@@ -1342,6 +1356,7 @@ router.get(
             hoursTravelMode: Math.round(totalHoursTravelMode * 100) / 100,
             hoursTravel: Math.round(totalHoursTravel * 100) / 100,
             hoursSupplies: Math.round(totalHoursSupplies * 100) / 100,
+            overtimeBonus: Math.round(overtimeBonus * 100) / 100,
             todayEarnings: Math.round(todayEarnings * 100) / 100,
             todayHours: Math.round(todayHours * 100) / 100,
           },
