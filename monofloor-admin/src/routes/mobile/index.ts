@@ -1223,7 +1223,8 @@ router.get(
         xpPenalty: number;
       }>();
 
-      // Process daily summaries by project (from checkins)
+      // First pass: count hours per project
+      let totalCheckinHours = 0;
       for (const checkin of checkins) {
         if (!checkin.project) continue;
 
@@ -1249,29 +1250,26 @@ router.get(
         const hours = Number(checkin.hoursWorked) || 0;
         entry.hours += hours;
         entry.checkins += 1;
+        totalCheckinHours += hours;
 
-        // Calculate earnings based on hours and checkout reason
-        const rates = getRoleRates(user.role);
-        if (rates && hours > 0) {
-          // Check checkout reason for travel/supplies
-          const reason = (checkin as any).checkoutReason;
+        // Track hour types for display
+        const reason = (checkin as any).checkoutReason;
+        if (reason === 'OUTRO_PROJETO') {
+          entry.hoursTravel += hours;
+        } else if (reason === 'COMPRA_INSUMOS') {
+          entry.hoursSupplies += hours;
+        } else {
+          entry.hoursNormal += hours;
+        }
+      }
 
-          if (reason === 'OUTRO_PROJETO') {
-            entry.hoursTravel += hours;
-            entry.earnings += hours * rates.hourlyRate;
-          } else if (reason === 'COMPRA_INSUMOS') {
-            entry.hoursSupplies += hours;
-            entry.earnings += hours * rates.hourlyRate;
-          } else {
-            // Normal work - apply travel mode rate if applicable
-            if (checkin.project.isTravelMode) {
-              entry.hoursNormal += hours;
-              entry.earnings += hours * rates.travelRate;
-            } else {
-              entry.hoursNormal += hours;
-              entry.earnings += hours * rates.hourlyRate;
-            }
-          }
+      // Second pass: distribute totalEarnings proportionally to hours
+      // This ensures sum of per-project = total from DailyWorkSummary
+      const actualTotalEarnings = totalEarnings + todayEarnings;
+      for (const entry of projectMap.values()) {
+        if (totalCheckinHours > 0 && entry.hours > 0) {
+          // Proportional distribution: (project hours / total hours) * total earnings
+          entry.earnings = (entry.hours / totalCheckinHours) * actualTotalEarnings;
         }
       }
 
