@@ -39,11 +39,14 @@ self.addEventListener('push', (event) => {
         }
     }
 
-    // Use different vibration pattern for XP penalty
+    // Use different vibration pattern based on notification type
     let vibrate = [200, 100, 200];
     if (data.data?.type === 'xp:penalty') {
         // More intense vibration for XP loss
         vibrate = [100, 50, 100, 50, 200, 50, 300];
+    } else if (data.data?.type === 'xp:bonus') {
+        // Celebratory vibration for XP gain
+        vibrate = [100, 100, 200, 100, 300];
     }
 
     const options = {
@@ -95,6 +98,24 @@ self.addEventListener('notificationclick', (event) => {
                                 amount: data.amount,
                                 reason: data.reason,
                                 projectName: data.projectName
+                            });
+                        }
+                    }
+                })
+        );
+    } else if (data.type === 'xp:bonus') {
+        // XP bonus notification - show gain animation and go to profile
+        targetUrl = '/#profile';
+        // Send message to client to show XP gain animation
+        event.waitUntil(
+            clients.matchAll({ type: 'window', includeUncontrolled: true })
+                .then((clientList) => {
+                    for (const client of clientList) {
+                        if (client.url.includes(self.location.origin)) {
+                            client.postMessage({
+                                type: 'SHOW_XP_GAIN',
+                                amount: data.amount,
+                                reason: data.reason
                             });
                         }
                     }

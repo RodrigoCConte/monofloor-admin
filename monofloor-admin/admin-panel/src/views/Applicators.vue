@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
-import { applicatorsApi } from '../api';
+import { applicatorsApi, projectsApi } from '../api';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -21,6 +21,18 @@ const getPhotoUrl = (photoUrl: string | null | undefined): string | null => {
 const getInitials = (name: string | null | undefined): string => {
   if (!name) return '?';
   return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+};
+
+// Format currency
+const formatCurrency = (value: number | null | undefined): string => {
+  if (value === null || value === undefined) return '0,00';
+  return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+// Format hours
+const formatHours = (value: number | null | undefined): string => {
+  if (value === null || value === undefined) return '0';
+  return value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 };
 
 const applicators = ref<any[]>([]);
@@ -180,12 +192,146 @@ const showProfileModal = ref(false);
 const profileApplicator = ref<any>(null);
 const loadingProfile = ref(false);
 
+// Projects data for profile modal
+const applicatorProjects = ref<any[]>([]);
+const loadingProjects = ref(false);
+const availableProjects = ref<any[]>([]);
+const showAddProjectModal = ref(false);
+const selectedProjectToAdd = ref('');
+const selectedProjectRole = ref('APLICADOR_I');
+const addingProject = ref(false);
+
+// Earnings data
+const applicatorEarnings = ref<any>(null);
+const loadingEarnings = ref(false);
+const earningsMonth = ref(new Date().getMonth() + 1);
+const earningsYear = ref(new Date().getFullYear());
+
+// XP adjustment modal
+const showXpModal = ref(false);
+const xpType = ref<'PRAISE' | 'PENALTY'>('PRAISE');
+const xpAmount = ref(100);
+const xpReason = ref('');
+const adjustingXp = ref(false);
+
+const loadApplicatorProjects = async (userId: string) => {
+  loadingProjects.value = true;
+  try {
+    const response = await applicatorsApi.getProjects(userId);
+    applicatorProjects.value = response.data.data || [];
+  } catch (error) {
+    console.error('Error loading applicator projects:', error);
+    applicatorProjects.value = [];
+  } finally {
+    loadingProjects.value = false;
+  }
+};
+
+const loadApplicatorEarnings = async (userId: string) => {
+  loadingEarnings.value = true;
+  try {
+    const response = await applicatorsApi.getEarnings(userId, earningsMonth.value, earningsYear.value);
+    applicatorEarnings.value = response.data.data;
+  } catch (error) {
+    console.error('Error loading applicator earnings:', error);
+    applicatorEarnings.value = null;
+  } finally {
+    loadingEarnings.value = false;
+  }
+};
+
+const loadAvailableProjects = async () => {
+  try {
+    const response = await projectsApi.getAll({ status: 'EM_EXECUCAO', limit: 100 });
+    const allProjects = response.data.data || [];
+    // Filter out already assigned projects
+    const assignedIds = new Set(applicatorProjects.value.map((p: any) => p.project.id));
+    availableProjects.value = allProjects.filter((p: any) => !assignedIds.has(p.id));
+  } catch (error) {
+    console.error('Error loading available projects:', error);
+  }
+};
+
+const openAddProjectModal = async () => {
+  await loadAvailableProjects();
+  selectedProjectToAdd.value = '';
+  selectedProjectRole.value = profileApplicator.value?.role || 'APLICADOR_I';
+  showAddProjectModal.value = true;
+};
+
+const addProjectToApplicator = async () => {
+  if (!selectedProjectToAdd.value || !profileApplicator.value) return;
+  addingProject.value = true;
+  try {
+    await applicatorsApi.addProject(profileApplicator.value.id, selectedProjectToAdd.value, selectedProjectRole.value);
+    await loadApplicatorProjects(profileApplicator.value.id);
+    showAddProjectModal.value = false;
+  } catch (error: any) {
+    console.error('Error adding project:', error);
+    alert(error.response?.data?.error?.message || 'Erro ao adicionar projeto');
+  } finally {
+    addingProject.value = false;
+  }
+};
+
+const removeProjectFromApplicator = async (projectId: string) => {
+  if (!profileApplicator.value) return;
+  if (!confirm('Tem certeza que deseja remover este projeto?')) return;
+  try {
+    await applicatorsApi.removeProject(profileApplicator.value.id, projectId);
+    await loadApplicatorProjects(profileApplicator.value.id);
+  } catch (error) {
+    console.error('Error removing project:', error);
+    alert('Erro ao remover projeto');
+  }
+};
+
+const openXpModal = (type: 'PRAISE' | 'PENALTY') => {
+  xpType.value = type;
+  xpAmount.value = type === 'PRAISE' ? 100 : 50;
+  xpReason.value = '';
+  showXpModal.value = true;
+};
+
+const submitXpAdjustment = async () => {
+  if (!profileApplicator.value || !xpReason.value.trim()) {
+    alert('Por favor, informe o motivo');
+    return;
+  }
+  adjustingXp.value = true;
+  try {
+    const response = await applicatorsApi.adjustXp(
+      profileApplicator.value.id,
+      xpAmount.value,
+      xpReason.value.trim(),
+      xpType.value
+    );
+    // Update local XP
+    profileApplicator.value.xpTotal = response.data.data.xpTotal;
+    showXpModal.value = false;
+    alert(`XP ${xpType.value === 'PRAISE' ? 'adicionado' : 'removido'} com sucesso!`);
+  } catch (error) {
+    console.error('Error adjusting XP:', error);
+    alert('Erro ao ajustar XP');
+  } finally {
+    adjustingXp.value = false;
+  }
+};
+
 const openProfileModal = async (applicator: any) => {
   loadingProfile.value = true;
   showProfileModal.value = true;
+  applicatorProjects.value = [];
+  applicatorEarnings.value = null;
+
   try {
     const response = await applicatorsApi.getById(applicator.id);
     profileApplicator.value = response.data.data;
+    // Load projects and earnings in parallel
+    await Promise.all([
+      loadApplicatorProjects(applicator.id),
+      loadApplicatorEarnings(applicator.id),
+    ]);
   } catch (error) {
     console.error('Error loading applicator profile:', error);
     profileApplicator.value = applicator;
@@ -369,7 +515,7 @@ onMounted(loadApplicators);
             </tr>
           </thead>
           <tbody>
-            <tr v-for="app in applicators" :key="app.id">
+            <tr v-for="app in applicators" :key="app.id" class="clickable-row" @click="openProfileModal(app)">
               <td>
                 <div class="applicator-info">
                   <div class="applicator-avatar">
@@ -382,7 +528,7 @@ onMounted(loadApplicators);
                   </div>
                 </div>
               </td>
-              <td>
+              <td @click.stop>
                 <div class="role-cell">
                   <span
                     class="role-badge clickable"
@@ -432,18 +578,8 @@ onMounted(loadApplicators);
                   <span>{{ app.xpTotal || 0 }}</span>
                 </div>
               </td>
-              <td>
+              <td @click.stop>
                 <div class="actions">
-                  <button
-                    @click="openProfileModal(app)"
-                    class="btn btn-profile"
-                    title="Ver Perfil e Badges"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="8" r="5"/>
-                      <path d="M12 13l4 9-4-2.5L8 22l4-9"/>
-                    </svg>
-                  </button>
                   <button
                     v-if="app.status === 'PENDING_APPROVAL'"
                     @click="approveApplicator(app.id)"
@@ -645,6 +781,114 @@ onMounted(loadApplicators);
               </div>
             </div>
 
+            <!-- XP Adjustment Buttons -->
+            <div class="xp-actions-section">
+              <button class="btn-praise" @click="openXpModal('PRAISE')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                </svg>
+                Elogio (+XP)
+              </button>
+              <button class="btn-penalty" @click="openXpModal('PENALTY')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>
+                </svg>
+                Penalidade (-XP)
+              </button>
+            </div>
+
+            <!-- Earnings Section -->
+            <div class="earnings-section-modal">
+              <div class="section-header">
+                <h5>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="1" x2="12" y2="23"/>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                  </svg>
+                  Valores a Receber
+                </h5>
+                <div class="earnings-period-selector">
+                  <select v-model="earningsMonth" @change="loadApplicatorEarnings(profileApplicator.id)" class="period-select">
+                    <option v-for="m in 12" :key="m" :value="m">{{ m.toString().padStart(2, '0') }}</option>
+                  </select>
+                  <span>/</span>
+                  <select v-model="earningsYear" @change="loadApplicatorEarnings(profileApplicator.id)" class="period-select">
+                    <option v-for="y in [2024, 2025, 2026]" :key="y" :value="y">{{ y }}</option>
+                  </select>
+                </div>
+              </div>
+              <div v-if="loadingEarnings" class="loading-inline">Carregando...</div>
+              <div v-else-if="applicatorEarnings" class="earnings-content">
+                <div class="earnings-main">
+                  <span class="earnings-value">R$ {{ formatCurrency(applicatorEarnings.totals?.earnings) }}</span>
+                  <span class="earnings-label">no periodo</span>
+                </div>
+                <div class="earnings-details">
+                  <div class="earning-detail">
+                    <span class="detail-label">Horas normais</span>
+                    <span class="detail-value">{{ formatHours(applicatorEarnings.totals?.hoursNormal) }}h</span>
+                  </div>
+                  <div class="earning-detail">
+                    <span class="detail-label">Horas extras</span>
+                    <span class="detail-value">{{ formatHours(applicatorEarnings.totals?.hoursOvertime) }}h</span>
+                  </div>
+                  <div class="earning-detail">
+                    <span class="detail-label">Dias trabalhados</span>
+                    <span class="detail-value">{{ applicatorEarnings.daysWorked || 0 }}</span>
+                  </div>
+                </div>
+                <div v-if="applicatorEarnings.rates" class="rates-info">
+                  <span class="rates-label">Valor/hora: R$ {{ formatCurrency(applicatorEarnings.rates?.hourlyRate) }}</span>
+                  <span class="rates-divider">|</span>
+                  <span class="rates-label">Hora extra: R$ {{ formatCurrency(applicatorEarnings.rates?.overtimeRate) }}</span>
+                </div>
+              </div>
+              <div v-else class="no-earnings">
+                <p>Sem dados de pagamento para este periodo</p>
+              </div>
+            </div>
+
+            <!-- Projects Section -->
+            <div class="projects-section-modal">
+              <div class="section-header">
+                <h5>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  Projetos Designados ({{ applicatorProjects.length }})
+                </h5>
+                <button class="btn-add-project" @click="openAddProjectModal">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  Adicionar
+                </button>
+              </div>
+              <div v-if="loadingProjects" class="loading-inline">Carregando projetos...</div>
+              <div v-else-if="applicatorProjects.length > 0" class="projects-list-modal">
+                <div
+                  v-for="assignment in applicatorProjects"
+                  :key="assignment.assignmentId"
+                  class="project-item-modal"
+                >
+                  <div class="project-info-modal">
+                    <span class="project-title-modal">{{ assignment.project.cliente || assignment.project.title }}</span>
+                    <span class="project-role-modal">{{ getRoleLabel(assignment.projectRole) }}</span>
+                  </div>
+                  <button class="btn-remove-project" @click.stop="removeProjectFromApplicator(assignment.project.id)" title="Remover do projeto">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div v-else class="no-projects">
+                <p>Nenhum projeto designado</p>
+              </div>
+            </div>
+
             <!-- Badges Section -->
             <div class="badges-section-modal">
               <h5>
@@ -693,6 +937,100 @@ onMounted(loadApplicators);
         </div>
         <div class="modal-footer">
           <button class="btn-cancel" @click="closeProfileModal">Fechar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Adicionar Projeto -->
+    <div v-if="showAddProjectModal" class="modal-overlay" @click.self="showAddProjectModal = false">
+      <div class="modal-content add-project-modal">
+        <div class="modal-header">
+          <h3>Adicionar Projeto</h3>
+          <button class="close-btn" @click="showAddProjectModal = false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-info">
+            Adicionar projeto para <strong>{{ profileApplicator?.name }}</strong>
+          </p>
+          <div class="form-group">
+            <label>Projeto</label>
+            <select v-model="selectedProjectToAdd" class="form-select">
+              <option value="">Selecione um projeto...</option>
+              <option v-for="project in availableProjects" :key="project.id" :value="project.id">
+                {{ project.cliente || project.title }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Funcao no Projeto</label>
+            <select v-model="selectedProjectRole" class="form-select">
+              <option v-for="role in availableRoles" :key="role.value" :value="role.value">
+                {{ role.label }}
+              </option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="showAddProjectModal = false">Cancelar</button>
+          <button class="btn-save" @click="addProjectToApplicator" :disabled="!selectedProjectToAdd || addingProject">
+            {{ addingProject ? 'Adicionando...' : 'Adicionar' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Ajuste de XP -->
+    <div v-if="showXpModal" class="modal-overlay" @click.self="showXpModal = false">
+      <div class="modal-content xp-modal">
+        <div class="modal-header">
+          <h3>{{ xpType === 'PRAISE' ? 'Aplicar Elogio' : 'Aplicar Penalidade' }}</h3>
+          <button class="close-btn" @click="showXpModal = false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="xp-preview" :class="xpType.toLowerCase()">
+            <div class="xp-icon-large">
+              <svg v-if="xpType === 'PRAISE'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>
+              </svg>
+            </div>
+            <span class="xp-amount-preview">{{ xpType === 'PRAISE' ? '+' : '-' }}{{ xpAmount }} XP</span>
+          </div>
+          <div class="form-group">
+            <label>Quantidade de XP</label>
+            <input type="number" v-model.number="xpAmount" min="1" max="10000" class="form-input" />
+          </div>
+          <div class="xp-presets">
+            <button v-for="preset in (xpType === 'PRAISE' ? [50, 100, 200, 500] : [25, 50, 100, 200])" :key="preset" @click="xpAmount = preset" class="preset-btn" :class="{ active: xpAmount === preset }">
+              {{ preset }} XP
+            </button>
+          </div>
+          <div class="form-group">
+            <label>Motivo (obrigatorio)</label>
+            <textarea v-model="xpReason" placeholder="Descreva o motivo do elogio ou penalidade..." class="form-textarea" rows="3"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="showXpModal = false">Cancelar</button>
+          <button
+            :class="xpType === 'PRAISE' ? 'btn-praise-confirm' : 'btn-penalty-confirm'"
+            @click="submitXpAdjustment"
+            :disabled="!xpReason.trim() || adjustingXp"
+          >
+            {{ adjustingXp ? 'Aplicando...' : (xpType === 'PRAISE' ? 'Aplicar Elogio' : 'Aplicar Penalidade') }}
+          </button>
         </div>
       </div>
     </div>
@@ -949,6 +1287,18 @@ onMounted(loadApplicators);
 
 .table tbody tr:hover {
   background: var(--bg-card-hover);
+}
+
+.table tbody tr.clickable-row {
+  cursor: pointer;
+}
+
+.table tbody tr.clickable-row:hover {
+  background: rgba(201, 169, 98, 0.08);
+}
+
+.table tbody tr.clickable-row:active {
+  background: rgba(201, 169, 98, 0.15);
 }
 
 .table tbody tr:last-child td {
@@ -1748,5 +2098,501 @@ onMounted(loadApplicators);
 .btn-profile svg {
   width: 16px;
   height: 16px;
+}
+
+/* XP Actions Section */
+.xp-actions-section {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.btn-praise,
+.btn-penalty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btn-praise {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--accent-green);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.btn-praise:hover {
+  background: rgba(34, 197, 94, 0.25);
+  transform: translateY(-2px);
+}
+
+.btn-penalty {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--accent-red);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.btn-penalty:hover {
+  background: rgba(239, 68, 68, 0.25);
+  transform: translateY(-2px);
+}
+
+.btn-praise svg,
+.btn-penalty svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Earnings Section */
+.earnings-section-modal {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.earnings-section-modal h5 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.earnings-section-modal h5 svg {
+  width: 18px;
+  height: 18px;
+  color: var(--accent-green);
+}
+
+.earnings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.earnings-main {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.earnings-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent-green);
+}
+
+.earnings-period {
+  font-size: 14px;
+  color: var(--text-tertiary);
+}
+
+.earnings-details {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.earning-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.detail-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.detail-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.loading-inline {
+  color: var(--text-secondary);
+  font-size: 14px;
+  padding: 12px;
+  text-align: center;
+}
+
+.no-earnings {
+  color: var(--text-tertiary);
+  font-size: 14px;
+  text-align: center;
+}
+
+.no-earnings p {
+  margin: 0;
+}
+
+.earnings-section-modal .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.earnings-section-modal .section-header h5 {
+  margin: 0;
+}
+
+.earnings-period-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.period-select {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.period-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.earnings-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.rates-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+  margin-top: 8px;
+}
+
+.rates-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.rates-divider {
+  color: var(--border-color);
+}
+
+/* Projects Section */
+.projects-section-modal {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.section-header h5 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.section-header h5 svg {
+  width: 18px;
+  height: 18px;
+  color: var(--accent-primary);
+}
+
+.btn-add-project {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--accent-primary);
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-add-project:hover {
+  background: #dbb872;
+  transform: translateY(-1px);
+}
+
+.btn-add-project svg {
+  width: 14px;
+  height: 14px;
+}
+
+.projects-list-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.project-item-modal {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.project-info-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-title-modal {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.project-role-modal {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.btn-remove-project {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, 0.1);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-remove-project:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.btn-remove-project svg {
+  width: 14px;
+  height: 14px;
+  color: var(--accent-red);
+}
+
+.no-projects {
+  color: var(--text-tertiary);
+  font-size: 14px;
+  text-align: center;
+  padding: 12px;
+}
+
+.no-projects p {
+  margin: 0;
+}
+
+/* Add Project Modal */
+.add-project-modal {
+  max-width: 420px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.form-select,
+.form-input,
+.form-textarea {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  transition: all 0.2s;
+}
+
+.form-select:focus,
+.form-input:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.form-select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* XP Modal */
+.xp-modal {
+  max-width: 420px;
+}
+
+.xp-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.xp-preview.praise {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.xp-preview.penalty {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.xp-icon-large {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.xp-icon-large svg {
+  width: 48px;
+  height: 48px;
+}
+
+.xp-preview.praise .xp-icon-large svg {
+  color: var(--accent-green);
+}
+
+.xp-preview.penalty .xp-icon-large svg {
+  color: var(--accent-red);
+}
+
+.xp-amount-preview {
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.xp-preview.praise .xp-amount-preview {
+  color: var(--accent-green);
+}
+
+.xp-preview.penalty .xp-amount-preview {
+  color: var(--accent-red);
+}
+
+.xp-presets {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.preset-btn {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preset-btn:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.preset-btn.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #000;
+}
+
+.btn-praise-confirm {
+  padding: 10px 20px;
+  border-radius: var(--border-radius);
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--accent-green);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-praise-confirm:hover:not(:disabled) {
+  background: #16a34a;
+  transform: translateY(-1px);
+}
+
+.btn-penalty-confirm {
+  padding: 10px 20px;
+  border-radius: var(--border-radius);
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--accent-red);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-penalty-confirm:hover:not(:disabled) {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
+.btn-praise-confirm:disabled,
+.btn-penalty-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

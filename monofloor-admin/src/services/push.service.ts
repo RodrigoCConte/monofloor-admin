@@ -326,7 +326,7 @@ export async function sendReportReminderPush(
 
 /**
  * Send XP penalty push notification
- * Sent when a user loses XP due to not submitting a report
+ * Sent when a user loses XP due to not submitting a report or admin penalty
  */
 export async function sendXPPenaltyPush(
   userId: string,
@@ -351,6 +351,50 @@ export async function sendXPPenaltyPush(
   };
 
   return await sendPushToUser(userId, payload);
+}
+
+/**
+ * Send XP bonus/praise push notification
+ * Sent when a user receives XP bonus from admin praise
+ */
+export async function sendXPBonusPush(
+  userId: string,
+  xpAmount: number,
+  reason: string
+): Promise<{ sent: number; failed: number }> {
+  const payload: PushPayload = {
+    title: 'Parabens! XP Recebido!',
+    body: `+${xpAmount} XP - ${reason}`,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/badge-72.png',
+    tag: 'xp-bonus',
+    requireInteraction: false,
+    data: {
+      type: 'xp:bonus',
+      amount: xpAmount,
+      reason,
+      url: '/#profile',
+    },
+  };
+
+  return await sendPushToUser(userId, payload);
+}
+
+/**
+ * Send XP adjustment push notification (admin action)
+ * Handles both praise and penalty notifications
+ */
+export async function sendXPAdjustmentPush(
+  userId: string,
+  xpAmount: number,
+  reason: string,
+  type: 'PRAISE' | 'PENALTY'
+): Promise<{ sent: number; failed: number }> {
+  if (type === 'PRAISE') {
+    return sendXPBonusPush(userId, Math.abs(xpAmount), reason);
+  } else {
+    return sendXPPenaltyPush(userId, Math.abs(xpAmount), 'Administrador', reason);
+  }
 }
 
 /**

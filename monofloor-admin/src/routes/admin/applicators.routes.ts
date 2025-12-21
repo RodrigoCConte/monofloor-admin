@@ -707,4 +707,212 @@ router.delete(
   }
 );
 
+// POST /api/admin/applicators/:id/xp - Adjust XP (praise or penalty)
+router.post(
+  '/:id/xp',
+  adminAuth,
+  [
+    param('id').isUUID(),
+    body('amount').isInt({ min: -10000, max: 10000 }),
+    body('reason').trim().isLength({ min: 1, max: 500 }),
+    body('type').isIn(['PRAISE', 'PENALTY']),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { amount, reason, type } = req.body;
+      const userId = req.params.id;
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user) {
+        throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+      }
+
+      // Ensure amount sign matches type
+      const finalAmount = type === 'PENALTY' ? -Math.abs(amount) : Math.abs(amount);
+
+      // Update user XP
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          xpTotal: { increment: finalAmount },
+        },
+      });
+
+      // Create XP transaction
+      await prisma.xpTransaction.create({
+        data: {
+          userId,
+          amount: finalAmount,
+          type: type === 'PRAISE' ? 'BONUS' : 'PENALTY',
+          reason: `[Admin] ${reason}`,
+        },
+      });
+
+      // Create audit log
+      await prisma.auditLog.create({
+        data: {
+          adminUserId: req.user!.sub,
+          userId,
+          action: type === 'PRAISE' ? 'PRAISE_USER' : 'PENALIZE_USER',
+          entityType: 'User',
+          entityId: userId,
+          description: `${type === 'PRAISE' ? 'Praise' : 'Penalty'}: ${reason} (${finalAmount > 0 ? '+' : ''}${finalAmount} XP)`,
+          newValues: { amount: finalAmount, reason },
+        },
+      });
+
+      // Send push notification
+      try {
+        const { sendXPAdjustmentPush } = await import('../../services/push.service');
+        sendXPAdjustmentPush(userId, Math.abs(finalAmount), reason, type).catch((err) => {
+          console.error('[Push] Error sending XP adjustment push:', err);
+        });
+      } catch (pushError) {
+        console.error('[Push] Error importing push service:', pushError);
+      }
+
+      res.json({
+        success: true,
+        data: {
+          id: updatedUser.id,
+          xpTotal: updatedUser.xpTotal,
+          adjustment: finalAmount,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/admin/applicators/:id/earnings - Get applicator earnings for a month
+router.get(
+  '/:id/earnings',
+  adminAuth,
+  [
+    param('id').isUUID(),
+    query('month').optional().isInt({ min: 1, max: 12 }),
+    query('year').optional().isInt({ min: 2020, max: 2100 }),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const userId = req.params.id;
+      const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0, 23, 59, 59);
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, name: true, role: true },
+      });
+
+      if (!user) {
+        throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+      }
+
+      // Get daily work summaries
+      const dailySummaries = await prisma.dailyWorkSummary.findMany({
+        where: {
+          userId,
+          workDate: { gte: startDate, lte: endDate },
+        },
+        orderBy: { workDate: 'desc' },
+      });
+
+      // Get checkins for calculation
+      const checkins = await prisma.checkin.findMany({
+        where: {
+          userId,
+          checkinAt: { gte: startDate, lte: endDate },
+          checkoutAt: { not: null },
+        },
+        include: {
+          project: {
+            select: { id: true, title: true, cliente: true, isTravelMode: true },
+          },
+        },
+        orderBy: { checkinAt: 'desc' },
+      });
+
+      // Import role rates for calculation
+      const { getRoleRates, calculatePayment } = await import('../../config/payroll.config');
+
+      // Calculate totals from daily summaries
+      let totalEarnings = 0;
+      let totalHoursNormal = 0;
+      let totalHoursOvertime = 0;
+      let totalHoursTravelMode = 0;
+
+      for (const summary of dailySummaries) {
+        totalEarnings += Number(summary.totalPayment || 0);
+        totalHoursNormal += Number(summary.hoursNormal || 0);
+        totalHoursOvertime += Number(summary.hoursOvertime || 0);
+        totalHoursTravelMode += Number(summary.hoursTravelMode || 0);
+      }
+
+      // If no summaries, calculate from checkins
+      if (dailySummaries.length === 0 && checkins.length > 0) {
+        const rates = getRoleRates(user.role);
+        for (const checkin of checkins) {
+          const hours = Number(checkin.hoursWorked || 0);
+          const normalHours = Math.min(hours, 8);
+          const overtime = Math.max(0, hours - 8);
+          const isTravelMode = checkin.project?.isTravelMode || false;
+
+          totalHoursNormal += normalHours;
+          totalHoursOvertime += overtime;
+          if (isTravelMode) {
+            totalHoursTravelMode += hours;
+          }
+
+          if (rates) {
+            if (isTravelMode) {
+              totalEarnings += normalHours * rates.travelRate;
+              totalEarnings += overtime * rates.travelOvertimeRate;
+            } else {
+              totalEarnings += normalHours * rates.hourlyRate;
+              totalEarnings += overtime * rates.overtimeRate;
+            }
+          }
+        }
+      }
+
+      const rates = getRoleRates(user.role);
+
+      res.json({
+        success: true,
+        data: {
+          month,
+          year,
+          role: user.role,
+          rates: rates ? {
+            hourlyRate: rates.hourlyRate,
+            overtimeRate: rates.overtimeRate,
+            travelRate: rates.travelRate,
+            dailyRate: rates.dailyRate,
+          } : null,
+          totals: {
+            earnings: Math.round(totalEarnings * 100) / 100,
+            hoursNormal: Math.round(totalHoursNormal * 100) / 100,
+            hoursOvertime: Math.round(totalHoursOvertime * 100) / 100,
+            hoursTravelMode: Math.round(totalHoursTravelMode * 100) / 100,
+            totalHours: Math.round((totalHoursNormal + totalHoursOvertime) * 100) / 100,
+          },
+          daysWorked: dailySummaries.length || new Set(checkins.map(c => c.checkinAt.toISOString().split('T')[0])).size,
+          checkinCount: checkins.length,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 export { router as applicatorsRoutes };

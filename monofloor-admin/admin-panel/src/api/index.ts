@@ -59,6 +59,18 @@ export const applicatorsApi = {
   assignProject: (id: string, projectId: string, projectRole: string) =>
     api.post(`/api/admin/applicators/${id}/assign-project`, { projectId, projectRole }),
   delete: (id: string) => api.delete(`/api/admin/applicators/${id}`),
+  // Projects management
+  getProjects: (id: string) => api.get(`/api/admin/applicators/${id}/projects`),
+  addProject: (id: string, projectId: string, projectRole?: string) =>
+    api.post(`/api/admin/applicators/${id}/projects`, { projectId, projectRole: projectRole || 'APLICADOR_I' }),
+  removeProject: (id: string, projectId: string) =>
+    api.delete(`/api/admin/applicators/${id}/projects/${projectId}`),
+  // XP adjustment
+  adjustXp: (id: string, amount: number, reason: string, type: 'PRAISE' | 'PENALTY') =>
+    api.post(`/api/admin/applicators/${id}/xp`, { amount, reason, type }),
+  // Earnings
+  getEarnings: (id: string, month?: number, year?: number) =>
+    api.get(`/api/admin/applicators/${id}/earnings`, { params: { month, year } }),
 };
 
 // Projects API

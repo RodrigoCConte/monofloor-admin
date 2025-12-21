@@ -5826,6 +5826,17 @@ function updateProjectDetailScreen(project) {
 
         if (h2) h2.textContent = project.cliente || project.title || 'Projeto';
         if (address) address.textContent = project.endereco || project.address || 'Endereço não informado';
+
+        // Atualizar informações de horário de trabalho
+        const scheduleInfo = document.getElementById('projectScheduleInfo');
+        if (scheduleInfo) {
+            const workStart = project.workStartTime || '08:00';
+            const saturday = project.allowSaturday ? 'SIM' : 'NÃO';
+            const sunday = project.allowSunday ? 'SIM' : 'NÃO';
+
+            scheduleInfo.textContent = `Horário de entrada: ${workStart} / Sábado: ${saturday} / Domingo: ${sunday}`;
+            scheduleInfo.style.display = 'block';
+        }
     }
 
     // Atualizar info do projeto (card antigo se existir)
@@ -9385,6 +9396,13 @@ if ('serviceWorker' in navigator) {
             showXPLossNotification(
                 Math.abs(amount),
                 `${projectName}: ${reason}`
+            );
+        } else if (event.data?.type === 'SHOW_XP_GAIN') {
+            // Show XP gain animation from push notification (admin praise)
+            const { amount, reason } = event.data;
+            showXPNotification(
+                Math.abs(amount),
+                `Elogio: ${reason}`
             );
         } else if (event.data?.type === 'ABSENCE_INQUIRY') {
             // Show absence inquiry modal from push notification

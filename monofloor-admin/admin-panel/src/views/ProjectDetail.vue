@@ -66,12 +66,13 @@ const newResponsiblePhone = ref('');
 // Team management
 const team = ref<any[]>([]);
 const loadingTeam = ref(false);
-const showAddMemberModal = ref(false);
+const showTeamModal = ref(false);
 const availableApplicators = ref<any[]>([]);
 const loadingApplicators = ref(false);
-const selectedApplicator = ref('');
-const selectedRole = ref('APLICADOR_I');
-const addingMember = ref(false);
+const teamSearchQuery = ref('');
+const selectedApplicatorsToAdd = ref<string[]>([]);
+const selectedRoleForAdd = ref('APLICADOR_I');
+const addingMembers = ref(false);
 const removingMember = ref<string | null>(null);
 
 // Check-ins and Reports
@@ -1463,31 +1464,64 @@ const loadAvailableApplicators = async () => {
   }
 };
 
-const openAddMemberModal = async () => {
-  showAddMemberModal.value = true;
-  selectedApplicator.value = '';
-  selectedRole.value = 'APLICADOR_I';
+const openTeamModal = async () => {
+  showTeamModal.value = true;
+  teamSearchQuery.value = '';
+  selectedApplicatorsToAdd.value = [];
+  selectedRoleForAdd.value = 'APLICADOR_I';
+  // Load team if not loaded
+  if (team.value.length === 0) {
+    await loadTeam();
+  }
   await loadAvailableApplicators();
 };
 
-const addTeamMember = async () => {
-  if (!selectedApplicator.value) return;
+const toggleApplicatorSelection = (userId: string) => {
+  const index = selectedApplicatorsToAdd.value.indexOf(userId);
+  if (index === -1) {
+    selectedApplicatorsToAdd.value.push(userId);
+  } else {
+    selectedApplicatorsToAdd.value.splice(index, 1);
+  }
+};
 
-  addingMember.value = true;
+const selectAllFiltered = () => {
+  const filteredIds = filteredApplicators.value.map((a: any) => a.id);
+  // Add all filtered that are not already selected
+  filteredIds.forEach((id: string) => {
+    if (!selectedApplicatorsToAdd.value.includes(id)) {
+      selectedApplicatorsToAdd.value.push(id);
+    }
+  });
+};
+
+const clearSelection = () => {
+  selectedApplicatorsToAdd.value = [];
+};
+
+const addTeamMembers = async () => {
+  if (selectedApplicatorsToAdd.value.length === 0) return;
+
+  addingMembers.value = true;
   try {
-    await projectsApi.addTeamMember(
-      route.params.id as string,
-      selectedApplicator.value,
-      selectedRole.value
-    );
+    // Add each selected applicator
+    for (const userId of selectedApplicatorsToAdd.value) {
+      await projectsApi.addTeamMember(
+        route.params.id as string,
+        userId,
+        selectedRoleForAdd.value
+      );
+    }
     await loadTeam();
-    showAddMemberModal.value = false;
+    await loadAvailableApplicators(); // Refresh available list
+    selectedApplicatorsToAdd.value = [];
+    teamSearchQuery.value = '';
   } catch (error: any) {
     const errData = error.response?.data?.error;
     const errMsg = typeof errData === 'object' ? errData?.message : errData;
     alert('Erro ao adicionar: ' + (errMsg || error.message || 'Erro desconhecido'));
   } finally {
-    addingMember.value = false;
+    addingMembers.value = false;
   }
 };
 
@@ -1498,6 +1532,10 @@ const removeTeamMember = async (userId: string) => {
   try {
     await projectsApi.removeTeamMember(route.params.id as string, userId);
     await loadTeam();
+    // Refresh available applicators list if modal is open
+    if (showTeamModal.value) {
+      await loadAvailableApplicators();
+    }
   } catch (error: any) {
     const errData = error.response?.data?.error;
     const errMsg = typeof errData === 'object' ? errData?.message : errData;
@@ -1887,6 +1925,14 @@ const getRoleLabel = (role: string) => {
   }
 };
 
+const API_URL = import.meta.env.VITE_API_URL || 'https://devoted-wholeness-production.up.railway.app';
+
+const getPhotoUrl = (photoUrl: string | null | undefined) => {
+  if (!photoUrl) return null;
+  if (photoUrl.startsWith('http')) return photoUrl;
+  return `${API_URL}${photoUrl}`;
+};
+
 const formatDate = (date: string) => {
   return new Date(date).toLocaleDateString('pt-BR', {
     day: '2-digit',
@@ -1929,6 +1975,19 @@ const daysToDeadline = computed(() => {
   const diffTime = deadline.getTime() - today.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   return diffDays;
+});
+
+// Filter available applicators by search query
+const filteredApplicators = computed(() => {
+  if (!teamSearchQuery.value.trim()) {
+    return availableApplicators.value;
+  }
+  const query = teamSearchQuery.value.toLowerCase().trim();
+  return availableApplicators.value.filter((app: any) =>
+    app.name?.toLowerCase().includes(query) ||
+    app.username?.toLowerCase().includes(query) ||
+    app.email?.toLowerCase().includes(query)
+  );
 });
 
 // Load data when tab changes
@@ -2707,12 +2766,14 @@ onMounted(async () => {
                   </svg>
                   Solicitar Liberacao na Portaria
                 </button>
-                <button @click="openAddMemberModal" class="btn btn-primary">
+                <button @click="openTeamModal" class="btn btn-primary">
                   <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="12" y1="5" x2="12" y2="19"/>
-                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <line x1="19" y1="8" x2="19" y2="14"/>
+                    <line x1="22" y1="11" x2="16" y2="11"/>
                   </svg>
-                  Adicionar Aplicador
+                  Gerenciar Equipe
                 </button>
               </div>
             </div>
@@ -3606,57 +3667,183 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- Add Member Modal -->
-    <div v-if="showAddMemberModal" class="modal-overlay" @click="showAddMemberModal = false">
-      <div class="modal" @click.stop>
+    <!-- Team Management Modal -->
+    <div v-if="showTeamModal" class="modal-overlay" @click="showTeamModal = false">
+      <div class="modal modal-xl" @click.stop>
         <div class="modal-header">
-          <h3>Adicionar Aplicador</h3>
-          <button class="modal-close" @click="showAddMemberModal = false">
+          <h3>Gerenciar Equipe</h3>
+          <button class="modal-close" @click="showTeamModal = false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/>
               <line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
         </div>
-        <div class="modal-body">
-          <div v-if="loadingApplicators" class="loading-inline">
-            <div class="loading-spinner-small"></div>
-            <span>Carregando aplicadores...</span>
+        <div class="modal-body team-modal-body">
+          <!-- Two columns layout -->
+          <div class="team-modal-grid">
+            <!-- Left: Available Applicators -->
+            <div class="team-modal-column">
+              <div class="column-header">
+                <h4>Aplicadores Disponiveis</h4>
+                <span class="count-badge">{{ availableApplicators.length }}</span>
+              </div>
+
+              <!-- Search bar -->
+              <div class="search-bar">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input
+                  type="text"
+                  v-model="teamSearchQuery"
+                  placeholder="Buscar por nome, usuario ou email..."
+                  class="search-input"
+                />
+                <button
+                  v-if="teamSearchQuery"
+                  class="clear-search"
+                  @click="teamSearchQuery = ''"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+
+              <!-- Role selector -->
+              <div class="role-selector">
+                <label>Cargo ao adicionar:</label>
+                <select v-model="selectedRoleForAdd" class="input input-sm">
+                  <option value="AUXILIAR">Auxiliar</option>
+                  <option value="PREPARADOR">Preparador</option>
+                  <option value="LIDER_PREPARACAO">Lider da Preparacao</option>
+                  <option value="APLICADOR_I">Aplicador I</option>
+                  <option value="APLICADOR_II">Aplicador II</option>
+                  <option value="APLICADOR_III">Aplicador III</option>
+                  <option value="LIDER">Lider</option>
+                </select>
+              </div>
+
+              <!-- Selection actions -->
+              <div class="selection-actions" v-if="filteredApplicators.length > 0">
+                <button class="btn-link" @click="selectAllFiltered">
+                  Selecionar todos ({{ filteredApplicators.length }})
+                </button>
+                <button
+                  v-if="selectedApplicatorsToAdd.length > 0"
+                  class="btn-link danger"
+                  @click="clearSelection"
+                >
+                  Limpar selecao
+                </button>
+              </div>
+
+              <div v-if="loadingApplicators" class="loading-inline">
+                <div class="loading-spinner-small"></div>
+                <span>Carregando...</span>
+              </div>
+
+              <div v-else-if="filteredApplicators.length === 0" class="empty-state-small">
+                <p v-if="teamSearchQuery">Nenhum resultado para "{{ teamSearchQuery }}"</p>
+                <p v-else>Todos os aplicadores ja estao na equipe</p>
+              </div>
+
+              <div v-else class="applicator-list">
+                <div
+                  v-for="app in filteredApplicators"
+                  :key="app.id"
+                  class="applicator-item"
+                  :class="{ selected: selectedApplicatorsToAdd.includes(app.id) }"
+                  @click="toggleApplicatorSelection(app.id)"
+                >
+                  <div class="applicator-checkbox">
+                    <svg v-if="selectedApplicatorsToAdd.includes(app.id)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </div>
+                  <div class="applicator-avatar">
+                    <img v-if="app.photoUrl" :src="getPhotoUrl(app.photoUrl)" :alt="app.name" />
+                    <span v-else>{{ app.name?.charAt(0) || '?' }}</span>
+                  </div>
+                  <div class="applicator-details">
+                    <span class="applicator-name">{{ app.name }}</span>
+                    <span class="applicator-username">@{{ app.username }}</span>
+                  </div>
+                  <span class="role-badge small" :class="app.role?.toLowerCase()">
+                    {{ getRoleLabel(app.role) }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Add button -->
+              <div v-if="selectedApplicatorsToAdd.length > 0" class="add-action">
+                <button
+                  class="btn btn-primary btn-block"
+                  @click="addTeamMembers"
+                  :disabled="addingMembers"
+                >
+                  <div v-if="addingMembers" class="btn-spinner"></div>
+                  {{ addingMembers ? 'Adicionando...' : `Adicionar ${selectedApplicatorsToAdd.length} selecionado(s)` }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Right: Current Team -->
+            <div class="team-modal-column">
+              <div class="column-header">
+                <h4>Equipe Atual</h4>
+                <span class="count-badge success">{{ team.length }}</span>
+              </div>
+
+              <div v-if="loadingTeam" class="loading-inline">
+                <div class="loading-spinner-small"></div>
+                <span>Carregando equipe...</span>
+              </div>
+
+              <div v-else-if="team.length === 0" class="empty-state-small">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                </svg>
+                <p>Nenhum membro na equipe</p>
+              </div>
+
+              <div v-else class="team-member-list">
+                <div
+                  v-for="member in team"
+                  :key="member.id"
+                  class="team-member-item"
+                >
+                  <div class="member-avatar">
+                    <img v-if="member.photoUrl" :src="getPhotoUrl(member.photoUrl)" :alt="member.name" />
+                    <span v-else>{{ member.name?.charAt(0) || '?' }}</span>
+                  </div>
+                  <div class="member-details">
+                    <span class="member-name">{{ member.name }}</span>
+                    <span class="member-role">{{ getRoleLabel(member.projectRole) }}</span>
+                  </div>
+                  <button
+                    class="remove-member-btn"
+                    @click="removeTeamMember(member.id)"
+                    :disabled="removingMember === member.id"
+                    title="Remover da equipe"
+                  >
+                    <div v-if="removingMember === member.id" class="btn-spinner-small"></div>
+                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-          <template v-else>
-            <div class="field">
-              <label>Aplicador</label>
-              <select v-model="selectedApplicator" class="input">
-                <option value="">Selecione um aplicador</option>
-                <option v-for="app in availableApplicators" :key="app.id" :value="app.id">
-                  {{ app.name }} (@{{ app.username }})
-                </option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Cargo</label>
-              <select v-model="selectedRole" class="input">
-                <option value="AUXILIAR">Auxiliar</option>
-                <option value="PREPARADOR">Preparador</option>
-                <option value="LIDER_PREPARACAO">Lider da Preparacao</option>
-                <option value="APLICADOR_I">Aplicador I</option>
-                <option value="APLICADOR_II">Aplicador II</option>
-                <option value="APLICADOR_III">Aplicador III</option>
-                <option value="LIDER">Lider</option>
-              </select>
-            </div>
-          </template>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showAddMemberModal = false">Cancelar</button>
-          <button
-            class="btn btn-primary"
-            @click="addTeamMember"
-            :disabled="!selectedApplicator || addingMember"
-          >
-            <div v-if="addingMember" class="btn-spinner"></div>
-            {{ addingMember ? 'Adicionando...' : 'Adicionar' }}
-          </button>
+          <button class="btn btn-secondary" @click="showTeamModal = false">Fechar</button>
         </div>
       </div>
     </div>
@@ -5370,6 +5557,393 @@ onMounted(async () => {
 /* Invite Modal */
 .modal-lg {
   max-width: 560px;
+}
+
+/* Team Management Modal */
+.modal-xl {
+  max-width: 900px;
+  width: 90%;
+}
+
+.team-modal-body {
+  padding: 0 !important;
+}
+
+.team-modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 500px;
+}
+
+.team-modal-column {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.team-modal-column:first-child {
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+
+.team-modal-column:last-child {
+  background: var(--bg-card);
+}
+
+.column-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.column-header h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.count-badge {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.count-badge.success {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+/* Search Bar */
+.search-bar {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px 36px 10px 40px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.clear-search {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  display: flex;
+}
+
+.clear-search:hover {
+  color: var(--text-secondary);
+}
+
+.clear-search svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Role Selector */
+.role-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+}
+
+.role-selector label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.role-selector select {
+  flex: 1;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* Selection Actions */
+.selection-actions {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent-primary);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.btn-link:hover {
+  text-decoration: underline;
+}
+
+.btn-link.danger {
+  color: #ef4444;
+}
+
+/* Applicator List */
+.applicator-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+}
+
+.applicator-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.applicator-item:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--text-tertiary);
+}
+
+.applicator-item.selected {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: #8b5cf6;
+}
+
+.applicator-checkbox {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-color);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.applicator-item.selected .applicator-checkbox {
+  background: #8b5cf6;
+  border-color: #8b5cf6;
+}
+
+.applicator-checkbox svg {
+  width: 12px;
+  height: 12px;
+  color: white;
+}
+
+.applicator-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.applicator-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.applicator-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.applicator-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.applicator-username {
+  display: block;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.role-badge.small {
+  font-size: 10px;
+  padding: 3px 8px;
+}
+
+/* Add Action */
+.add-action {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* Team Member List */
+.team-member-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 420px;
+}
+
+.team-member-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+}
+
+.member-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.member-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.member-details {
+  flex: 1;
+}
+
+.member-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.member-role {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.remove-member-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.remove-member-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.remove-member-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.remove-member-btn svg {
+  width: 14px;
+  height: 14px;
+  color: #ef4444;
+}
+
+.empty-state-small {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.empty-state-small svg {
+  width: 40px;
+  height: 40px;
+}
+
+.empty-state-small p {
+  margin: 0;
+  font-size: 14px;
 }
 
 .modal-hint {
