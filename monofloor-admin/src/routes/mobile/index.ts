@@ -4815,4 +4815,670 @@ router.get('/absences/pending-inquiry', mobileAuth, async (req, res, next) => {
   }
 });
 
+// =============================================
+// ACADEMY - Educational Videos & Quizzes
+// =============================================
+
+// GET /api/mobile/academy/videos - List available videos with user progress
+router.get(
+  '/academy/videos',
+  mobileAuth,
+  async (req, res, next) => {
+    try {
+      const userId = req.user!.sub;
+
+      // Get all active videos
+      const videos = await prisma.educationalVideo.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: 'asc' },
+        include: {
+          quiz: {
+            select: {
+              id: true,
+              xpReward: true,
+              passingScore: true,
+              maxAttempts: true,
+            },
+          },
+        },
+      });
+
+      // Get user progress for all videos
+      const progressRecords = await prisma.videoProgress.findMany({
+        where: { userId },
+      });
+      const progressMap = new Map(progressRecords.map(p => [p.videoId, p]));
+
+      // Get user quiz attempts
+      const quizAttempts = await prisma.quizAttempt.findMany({
+        where: { userId },
+        orderBy: { completedAt: 'desc' },
+      });
+      const attemptsByQuiz = new Map<string, any[]>();
+      quizAttempts.forEach(a => {
+        const arr = attemptsByQuiz.get(a.quizId) || [];
+        arr.push(a);
+        attemptsByQuiz.set(a.quizId, arr);
+      });
+
+      // Calculate completed video count for unlocking advanced videos
+      const completedCount = progressRecords.filter(p => p.completed).length;
+
+      // Build response with user-specific data
+      const videosWithProgress = videos.map(video => {
+        const progress = progressMap.get(video.id);
+        const quizAttemptsList = video.quiz ? (attemptsByQuiz.get(video.quiz.id) || []) : [];
+        const passedQuiz = quizAttemptsList.some(a => a.passed);
+
+        // Check if video is locked (advanced videos require 3+ completed)
+        const isLocked = video.level === 'AVANCADO' && completedCount < 3;
+
+        return {
+          id: video.id,
+          title: video.title,
+          description: video.description,
+          thumbnailUrl: video.thumbnailUrl,
+          durationSeconds: video.durationSeconds,
+          category: video.category,
+          level: video.level,
+          xpForWatching: video.xpForWatching,
+          isRequired: video.isRequired,
+          isLocked,
+          // User progress
+          progress: progress ? {
+            progressPercent: progress.progressPercent,
+            completed: progress.completed,
+            xpEarnedWatch: progress.xpEarnedWatch,
+          } : null,
+          // Quiz info
+          quiz: video.quiz ? {
+            id: video.quiz.id,
+            xpReward: video.quiz.xpReward,
+            passingScore: video.quiz.passingScore,
+            maxAttempts: video.quiz.maxAttempts,
+            attemptCount: quizAttemptsList.length,
+            passed: passedQuiz,
+            canAttempt: !passedQuiz && (video.quiz.maxAttempts === 0 || quizAttemptsList.length < video.quiz.maxAttempts),
+          } : null,
+        };
+      });
+
+      res.json({
+        success: true,
+        data: {
+          videos: videosWithProgress,
+          stats: {
+            totalVideos: videos.length,
+            completedVideos: completedCount,
+          },
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/mobile/academy/videos/:id - Get video details
+router.get(
+  '/academy/videos/:id',
+  mobileAuth,
+  [param('id').isUUID()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const userId = req.user!.sub;
+
+      const video = await prisma.educationalVideo.findFirst({
+        where: { id: req.params.id, isActive: true },
+        include: {
+          quiz: {
+            select: {
+              id: true,
+              xpReward: true,
+              passingScore: true,
+              maxAttempts: true,
+            },
+          },
+        },
+      });
+
+      if (!video) {
+        throw new AppError('Video nao encontrado', 404, 'NOT_FOUND');
+      }
+
+      // Get user progress
+      const progress = await prisma.videoProgress.findUnique({
+        where: { userId_videoId: { userId, videoId: video.id } },
+      });
+
+      // Get quiz attempts if quiz exists
+      let quizData = null;
+      if (video.quiz) {
+        const attempts = await prisma.quizAttempt.findMany({
+          where: { userId, quizId: video.quiz.id },
+          orderBy: { completedAt: 'desc' },
+        });
+        const passedQuiz = attempts.some(a => a.passed);
+
+        quizData = {
+          id: video.quiz.id,
+          xpReward: video.quiz.xpReward,
+          passingScore: video.quiz.passingScore,
+          maxAttempts: video.quiz.maxAttempts,
+          attemptCount: attempts.length,
+          passed: passedQuiz,
+          canAttempt: !passedQuiz && (video.quiz.maxAttempts === 0 || attempts.length < video.quiz.maxAttempts),
+          // Quiz is available only after 90% video progress
+          isAvailable: progress ? progress.progressPercent >= 90 : false,
+        };
+      }
+
+      // Increment view count (only once per session - we'll use progress existence as indicator)
+      if (!progress) {
+        await prisma.educationalVideo.update({
+          where: { id: video.id },
+          data: { viewsCount: { increment: 1 } },
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          id: video.id,
+          title: video.title,
+          description: video.description,
+          videoUrl: video.videoUrl,
+          thumbnailUrl: video.thumbnailUrl,
+          durationSeconds: video.durationSeconds,
+          category: video.category,
+          level: video.level,
+          xpForWatching: video.xpForWatching,
+          isRequired: video.isRequired,
+          progress: progress ? {
+            progressPercent: progress.progressPercent,
+            watchedSeconds: progress.watchedSeconds,
+            completed: progress.completed,
+            xpEarnedWatch: progress.xpEarnedWatch,
+          } : null,
+          quiz: quizData,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST /api/mobile/academy/videos/:id/progress - Update video progress
+router.post(
+  '/academy/videos/:id/progress',
+  mobileAuth,
+  [
+    param('id').isUUID(),
+    body('watchedSeconds').isInt({ min: 0 }),
+    body('progressPercent').isInt({ min: 0, max: 100 }),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const userId = req.user!.sub;
+      const videoId = req.params.id;
+      const { watchedSeconds, progressPercent } = req.body;
+
+      // Check video exists and is active
+      const video = await prisma.educationalVideo.findFirst({
+        where: { id: videoId, isActive: true },
+      });
+
+      if (!video) {
+        throw new AppError('Video nao encontrado', 404, 'NOT_FOUND');
+      }
+
+      // Get or create progress
+      const existing = await prisma.videoProgress.findUnique({
+        where: { userId_videoId: { userId, videoId } },
+      });
+
+      const progress = await prisma.videoProgress.upsert({
+        where: { userId_videoId: { userId, videoId } },
+        update: {
+          watchedSeconds: Math.max(existing?.watchedSeconds || 0, watchedSeconds),
+          progressPercent: Math.max(existing?.progressPercent || 0, progressPercent),
+          lastWatchedAt: new Date(),
+        },
+        create: {
+          userId,
+          videoId,
+          watchedSeconds,
+          progressPercent,
+        },
+      });
+
+      res.json({
+        success: true,
+        data: progress,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST /api/mobile/academy/videos/:id/complete - Mark video as completed
+router.post(
+  '/academy/videos/:id/complete',
+  mobileAuth,
+  [param('id').isUUID()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const userId = req.user!.sub;
+      const videoId = req.params.id;
+
+      // Check video exists and is active
+      const video = await prisma.educationalVideo.findFirst({
+        where: { id: videoId, isActive: true },
+      });
+
+      if (!video) {
+        throw new AppError('Video nao encontrado', 404, 'NOT_FOUND');
+      }
+
+      // Get existing progress
+      const existing = await prisma.videoProgress.findUnique({
+        where: { userId_videoId: { userId, videoId } },
+      });
+
+      // Check if already completed
+      if (existing?.completed) {
+        return res.json({
+          success: true,
+          data: {
+            progress: existing,
+            xpAwarded: 0,
+            message: 'Video ja foi concluido anteriormente',
+          },
+        });
+      }
+
+      // Award XP for watching
+      let xpAwarded = 0;
+      if (video.xpForWatching > 0) {
+        xpAwarded = video.xpForWatching;
+
+        // Update user XP
+        await prisma.user.update({
+          where: { id: userId },
+          data: { xpTotal: { increment: xpAwarded } },
+        });
+
+        // Create XP transaction
+        await prisma.xpTransaction.create({
+          data: {
+            userId,
+            amount: xpAwarded,
+            type: 'VIDEO_WATCHED',
+            reason: `Assistiu video "${video.title}"`,
+          },
+        });
+      }
+
+      // Update progress
+      const progress = await prisma.videoProgress.upsert({
+        where: { userId_videoId: { userId, videoId } },
+        update: {
+          completed: true,
+          completedAt: new Date(),
+          progressPercent: 100,
+          watchedSeconds: video.durationSeconds,
+          xpEarnedWatch: xpAwarded,
+        },
+        create: {
+          userId,
+          videoId,
+          completed: true,
+          completedAt: new Date(),
+          progressPercent: 100,
+          watchedSeconds: video.durationSeconds,
+          xpEarnedWatch: xpAwarded,
+        },
+      });
+
+      // Update video completion count
+      await prisma.educationalVideo.update({
+        where: { id: videoId },
+        data: { completionsCount: { increment: 1 } },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          progress,
+          xpAwarded,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/mobile/academy/videos/:id/quiz - Get quiz questions (without correct answers)
+router.get(
+  '/academy/videos/:id/quiz',
+  mobileAuth,
+  [param('id').isUUID()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const userId = req.user!.sub;
+      const videoId = req.params.id;
+
+      // Check video progress - quiz only available after 90%
+      const progress = await prisma.videoProgress.findUnique({
+        where: { userId_videoId: { userId, videoId } },
+      });
+
+      if (!progress || progress.progressPercent < 90) {
+        throw new AppError(
+          'Voce precisa assistir pelo menos 90% do video antes de fazer o quiz',
+          400,
+          'VIDEO_NOT_COMPLETED'
+        );
+      }
+
+      // Get video with quiz
+      const video = await prisma.educationalVideo.findFirst({
+        where: { id: videoId, isActive: true },
+        include: {
+          quiz: {
+            include: {
+              questions: {
+                orderBy: { sortOrder: 'asc' },
+                include: {
+                  answers: {
+                    orderBy: { sortOrder: 'asc' },
+                    select: {
+                      id: true,
+                      answerText: true,
+                      sortOrder: true,
+                      // Note: NOT including isCorrect
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!video || !video.quiz) {
+        throw new AppError('Quiz nao encontrado', 404, 'NOT_FOUND');
+      }
+
+      // Check if user can attempt
+      const attempts = await prisma.quizAttempt.count({
+        where: { userId, quizId: video.quiz.id },
+      });
+
+      const passed = await prisma.quizAttempt.findFirst({
+        where: { userId, quizId: video.quiz.id, passed: true },
+      });
+
+      if (passed) {
+        throw new AppError('Voce ja passou neste quiz', 400, 'ALREADY_PASSED');
+      }
+
+      if (video.quiz.maxAttempts > 0 && attempts >= video.quiz.maxAttempts) {
+        throw new AppError(
+          `Voce ja esgotou suas ${video.quiz.maxAttempts} tentativas`,
+          400,
+          'MAX_ATTEMPTS_REACHED'
+        );
+      }
+
+      res.json({
+        success: true,
+        data: {
+          id: video.quiz.id,
+          title: video.quiz.title || `Quiz: ${video.title}`,
+          passingScore: video.quiz.passingScore,
+          xpReward: video.quiz.xpReward,
+          attemptNumber: attempts + 1,
+          maxAttempts: video.quiz.maxAttempts,
+          questions: video.quiz.questions.map(q => ({
+            id: q.id,
+            questionText: q.questionText,
+            questionType: q.questionType,
+            imageUrl: q.imageUrl,
+            answers: q.answers,
+          })),
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST /api/mobile/academy/videos/:id/quiz/submit - Submit quiz answers
+router.post(
+  '/academy/videos/:id/quiz/submit',
+  mobileAuth,
+  [
+    param('id').isUUID(),
+    body('answers').isArray({ min: 1 }),
+    body('answers.*.questionId').isUUID(),
+    body('answers.*.selectedAnswerIds').isArray({ min: 1 }),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const userId = req.user!.sub;
+      const videoId = req.params.id;
+      const { answers } = req.body;
+
+      // Get video with quiz and correct answers
+      const video = await prisma.educationalVideo.findFirst({
+        where: { id: videoId, isActive: true },
+        include: {
+          quiz: {
+            include: {
+              questions: {
+                orderBy: { sortOrder: 'asc' },
+                include: {
+                  answers: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!video || !video.quiz) {
+        throw new AppError('Quiz nao encontrado', 404, 'NOT_FOUND');
+      }
+
+      // Check if user can attempt
+      const existingAttempts = await prisma.quizAttempt.count({
+        where: { userId, quizId: video.quiz.id },
+      });
+
+      const alreadyPassed = await prisma.quizAttempt.findFirst({
+        where: { userId, quizId: video.quiz.id, passed: true },
+      });
+
+      if (alreadyPassed) {
+        throw new AppError('Voce ja passou neste quiz', 400, 'ALREADY_PASSED');
+      }
+
+      if (video.quiz.maxAttempts > 0 && existingAttempts >= video.quiz.maxAttempts) {
+        throw new AppError(
+          `Voce ja esgotou suas ${video.quiz.maxAttempts} tentativas`,
+          400,
+          'MAX_ATTEMPTS_REACHED'
+        );
+      }
+
+      // Calculate score
+      const totalQuestions = video.quiz.questions.length;
+      let correctCount = 0;
+      const detailedAnswers: any[] = [];
+
+      for (const question of video.quiz.questions) {
+        const userAnswer = answers.find((a: any) => a.questionId === question.id);
+        const correctAnswerIds = question.answers
+          .filter(a => a.isCorrect)
+          .map(a => a.id);
+
+        const selectedIds = userAnswer?.selectedAnswerIds || [];
+
+        // For single choice: check if the selected answer is the correct one
+        // For multiple choice: check if ALL correct answers are selected and ONLY correct answers
+        const isCorrect =
+          correctAnswerIds.length === selectedIds.length &&
+          correctAnswerIds.every((id: string) => selectedIds.includes(id));
+
+        if (isCorrect) {
+          correctCount++;
+        }
+
+        detailedAnswers.push({
+          questionId: question.id,
+          selectedAnswerIds: selectedIds,
+          correctAnswerIds,
+          isCorrect,
+          explanation: question.explanation,
+        });
+      }
+
+      const score = Math.round((correctCount / totalQuestions) * 100);
+      const passed = score >= video.quiz.passingScore;
+
+      // Award XP if passed (only first time)
+      let xpAwarded = 0;
+      if (passed) {
+        xpAwarded = video.quiz.xpReward;
+
+        // Update user XP
+        await prisma.user.update({
+          where: { id: userId },
+          data: { xpTotal: { increment: xpAwarded } },
+        });
+
+        // Create XP transaction
+        await prisma.xpTransaction.create({
+          data: {
+            userId,
+            amount: xpAwarded,
+            type: 'QUIZ_PASSED',
+            reason: `Passou no quiz "${video.quiz.title || video.title}" com ${score}%`,
+          },
+        });
+      }
+
+      // Create attempt record
+      const attempt = await prisma.quizAttempt.create({
+        data: {
+          userId,
+          quizId: video.quiz.id,
+          score,
+          passed,
+          correctCount,
+          totalQuestions,
+          answers: detailedAnswers,
+          xpEarned: xpAwarded,
+          completedAt: new Date(),
+        },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          attemptId: attempt.id,
+          score,
+          passed,
+          correctCount,
+          totalQuestions,
+          passingScore: video.quiz.passingScore,
+          xpAwarded,
+          answers: detailedAnswers,
+          attemptsRemaining: video.quiz.maxAttempts > 0
+            ? video.quiz.maxAttempts - existingAttempts - 1
+            : null,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/mobile/academy/stats - Get user academy stats
+router.get(
+  '/academy/stats',
+  mobileAuth,
+  async (req, res, next) => {
+    try {
+      const userId = req.user!.sub;
+
+      // Get total videos
+      const totalVideos = await prisma.educationalVideo.count({
+        where: { isActive: true },
+      });
+
+      // Get user progress
+      const progressRecords = await prisma.videoProgress.findMany({
+        where: { userId },
+      });
+
+      const completedVideos = progressRecords.filter(p => p.completed).length;
+      const totalXpFromVideos = progressRecords.reduce((sum, p) => sum + p.xpEarnedWatch, 0);
+
+      // Get quiz stats
+      const quizAttempts = await prisma.quizAttempt.findMany({
+        where: { userId },
+      });
+
+      const passedQuizzes = new Set(
+        quizAttempts.filter(a => a.passed).map(a => a.quizId)
+      ).size;
+      const totalXpFromQuizzes = quizAttempts.reduce((sum, a) => sum + a.xpEarned, 0);
+
+      // Get required videos status
+      const requiredVideos = await prisma.educationalVideo.findMany({
+        where: { isActive: true, isRequired: true },
+        select: { id: true, title: true },
+      });
+
+      const requiredCompleted = requiredVideos.filter(v =>
+        progressRecords.some(p => p.videoId === v.id && p.completed)
+      ).length;
+
+      res.json({
+        success: true,
+        data: {
+          totalVideos,
+          completedVideos,
+          progressPercent: totalVideos > 0 ? Math.round((completedVideos / totalVideos) * 100) : 0,
+          totalXpFromVideos,
+          passedQuizzes,
+          totalXpFromQuizzes,
+          totalXpEarned: totalXpFromVideos + totalXpFromQuizzes,
+          requiredVideos: {
+            total: requiredVideos.length,
+            completed: requiredCompleted,
+            pending: requiredVideos.filter(v =>
+              !progressRecords.some(p => p.videoId === v.id && p.completed)
+            ),
+          },
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 export { router as mobileRoutes };

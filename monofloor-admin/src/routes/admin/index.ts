@@ -11,6 +11,7 @@ import { helpRequestsRoutes } from './help-requests.routes';
 import { campaignsRoutes } from './campaigns.routes';
 import { badgesRoutes } from './badges.routes';
 import { notificationsRoutes } from './notifications.routes';
+import { academyRoutes } from './academy.routes';
 
 const router = Router();
 
@@ -26,5 +27,6 @@ router.use('/help-requests', helpRequestsRoutes);
 router.use('/campaigns', campaignsRoutes);
 router.use('/badges', badgesRoutes);
 router.use('/notifications', notificationsRoutes);
+router.use('/academy', academyRoutes);
 
 export { router as adminRoutes };

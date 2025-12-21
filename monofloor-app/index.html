@@ -1031,15 +1031,63 @@
         <div id="screen-learn" class="screen">
             <div class="header">
                 <div class="header-left">
-                    <h1 class="header-title">+XP</h1>
+                    <h1 class="header-title">Academia</h1>
                 </div>
                 <div class="header-right"></div>
             </div>
 
             <div class="content">
-                <!-- Ranking List -->
-                <div id="xp-ranking-list" class="xp-ranking-list">
-                    <!-- Populated by loadXPRanking() -->
+                <!-- Academy Tabs -->
+                <div class="academy-tabs">
+                    <button class="academy-tab active" onclick="switchAcademyTab('videos')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                            <polygon points="5,3 19,12 5,21"/>
+                        </svg>
+                        Trilha
+                    </button>
+                    <button class="academy-tab" onclick="switchAcademyTab('ranking')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                        </svg>
+                        Ranking
+                    </button>
+                </div>
+
+                <!-- Videos Section -->
+                <div id="academy-videos-section" class="academy-section">
+                    <!-- User Academy Stats -->
+                    <div class="academy-user-stats">
+                        <div class="academy-level-badge">
+                            <span class="level-number" id="academyUserLevel">1</span>
+                        </div>
+                        <div class="academy-progress-info">
+                            <div class="academy-xp-row">
+                                <span class="academy-xp-current" id="academyCurrentXP">0</span>
+                                <span class="academy-xp-next">/ <span id="academyNextLevelXP">1000</span> XP</span>
+                            </div>
+                            <div class="academy-progress-bar">
+                                <div class="academy-progress-fill" id="academyProgressFill" style="width: 0%"></div>
+                            </div>
+                            <span class="academy-level-hint">Proximo nivel em <span id="academyXPNeeded">1000</span> XP</span>
+                        </div>
+                    </div>
+
+                    <!-- Videos List -->
+                    <div class="academy-videos-header">
+                        <h3>Trilha de Aprendizado</h3>
+                        <span class="academy-videos-count" id="academyVideosCount">0 videos</span>
+                    </div>
+                    <div id="academy-videos-list" class="academy-videos-list">
+                        <!-- Videos populated by loadAcademyVideos() -->
+                        <div class="academy-loading">Carregando videos...</div>
+                    </div>
+                </div>
+
+                <!-- Ranking Section (Hidden by default) -->
+                <div id="academy-ranking-section" class="academy-section" style="display: none;">
+                    <div id="xp-ranking-list" class="xp-ranking-list">
+                        <!-- Populated by loadXPRanking() -->
+                    </div>
                 </div>
             </div>
 
@@ -1079,6 +1127,178 @@
                     <span>Perfil</span>
                 </div>
             </nav>
+        </div>
+
+        <!-- Tela de Video Player -->
+        <div id="screen-video-player" class="screen">
+            <div class="header-back">
+                <button class="back-btn" onclick="closeVideoPlayer()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                </button>
+                <h1 id="videoPlayerTitle">Video</h1>
+                <div style="width: 40px;"></div>
+            </div>
+
+            <div class="content video-player-content">
+                <!-- Video Container -->
+                <div class="video-container">
+                    <video id="academyVideoPlayer" class="academy-video" controls playsinline>
+                        <source src="" type="video/mp4">
+                    </video>
+                    <div class="video-overlay-loading" id="videoLoadingOverlay">
+                        <div class="video-spinner"></div>
+                    </div>
+                </div>
+
+                <!-- Video Info -->
+                <div class="video-info-section">
+                    <h2 id="videoInfoTitle" class="video-info-title">Titulo do Video</h2>
+                    <p id="videoInfoDescription" class="video-info-description">Descricao do video...</p>
+
+                    <div class="video-meta-row">
+                        <span class="video-meta-item">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12,6 12,12 16,14"/>
+                            </svg>
+                            <span id="videoInfoDuration">0:00</span>
+                        </span>
+                        <span class="video-meta-item">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                            </svg>
+                            +<span id="videoInfoXP">0</span> XP
+                        </span>
+                        <span class="video-meta-badge" id="videoInfoCategory">Tecnica</span>
+                    </div>
+
+                    <!-- Watch Progress -->
+                    <div class="video-watch-progress">
+                        <div class="watch-progress-label">
+                            <span>Progresso</span>
+                            <span id="videoProgressPercent">0%</span>
+                        </div>
+                        <div class="watch-progress-bar">
+                            <div class="watch-progress-fill" id="videoProgressFill" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Quiz Button -->
+                    <div id="videoQuizSection" class="video-quiz-section" style="display: none;">
+                        <div class="quiz-unlock-info" id="quizUnlockInfo">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                <path d="M7 11V7a5 5 0 0110 0v4"/>
+                            </svg>
+                            <span>Assista 90% do video para desbloquear o quiz</span>
+                        </div>
+                        <button id="videoQuizBtn" class="video-quiz-btn" onclick="startVideoQuiz()" disabled>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <path d="M9 11l3 3L22 4"/>
+                                <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                            </svg>
+                            <span>Iniciar Quiz</span>
+                            <span class="quiz-xp-badge" id="quizXPBadge">+100 XP</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela de Quiz -->
+        <div id="screen-quiz" class="screen">
+            <div class="header-back">
+                <button class="back-btn" onclick="closeQuiz()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                </button>
+                <h1 id="quizHeaderTitle">Quiz</h1>
+                <div class="quiz-progress-indicator">
+                    <span id="quizCurrentQuestion">1</span>/<span id="quizTotalQuestions">5</span>
+                </div>
+            </div>
+
+            <div class="content quiz-content">
+                <!-- Question Card -->
+                <div class="quiz-question-card">
+                    <p id="quizQuestionText" class="quiz-question-text">Qual e a resposta correta?</p>
+                    <img id="quizQuestionImage" class="quiz-question-image" style="display: none;" src="" alt="">
+                </div>
+
+                <!-- Answer Options -->
+                <div id="quizAnswerOptions" class="quiz-answer-options">
+                    <!-- Answers populated dynamically -->
+                </div>
+
+                <!-- Explanation (shown after answer) -->
+                <div id="quizExplanation" class="quiz-explanation" style="display: none;">
+                    <div class="explanation-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 16v-4M12 8h.01"/>
+                        </svg>
+                        <span>Explicacao</span>
+                    </div>
+                    <p id="quizExplanationText"></p>
+                </div>
+
+                <!-- Progress Dots -->
+                <div id="quizProgressDots" class="quiz-progress-dots">
+                    <!-- Dots populated dynamically -->
+                </div>
+
+                <!-- Navigation Button -->
+                <button id="quizNextBtn" class="quiz-next-btn" onclick="nextQuizQuestion()" style="display: none;">
+                    <span id="quizNextBtnText">Proxima</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Quiz Result Modal -->
+        <div id="quizResultOverlay" class="quiz-result-overlay">
+            <div class="quiz-result-modal">
+                <div class="quiz-result-icon" id="quizResultIcon">
+                    <!-- Icon set dynamically -->
+                </div>
+                <h2 id="quizResultTitle">Resultado</h2>
+                <p id="quizResultSubtitle" class="quiz-result-subtitle">Voce acertou X de Y perguntas</p>
+
+                <div class="quiz-result-score">
+                    <div class="score-circle" id="quizScoreCircle">
+                        <span id="quizScorePercent">0%</span>
+                    </div>
+                    <div class="score-details">
+                        <div class="score-row">
+                            <span>Acertos</span>
+                            <span id="quizCorrectCount">0</span>
+                        </div>
+                        <div class="score-row">
+                            <span>Nota minima</span>
+                            <span id="quizPassingScore">70%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="quizResultXP" class="quiz-result-xp" style="display: none;">
+                    <span class="xp-amount" id="quizXPEarned">+100</span>
+                    <span class="xp-label">XP ganho!</span>
+                </div>
+
+                <div class="quiz-result-actions">
+                    <button class="quiz-result-btn secondary" onclick="retryQuiz()" id="quizRetryBtn">
+                        Tentar Novamente
+                    </button>
+                    <button class="quiz-result-btn primary" onclick="closeQuizResult()">
+                        Continuar
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- Tela de Perfil -->

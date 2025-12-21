@@ -57,6 +57,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/academy',
+    name: 'Academy',
+    component: () => import('../views/Academy.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/badges',
     redirect: '/campaigns',
   },

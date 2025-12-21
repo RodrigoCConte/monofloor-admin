@@ -282,3 +282,51 @@ export const notificationsApi = {
     });
   },
 };
+
+// Academy API (Educational Videos & Quizzes)
+export const academyApi = {
+  // Videos
+  getVideos: (params?: { category?: string; level?: string; isActive?: boolean; limit?: number; offset?: number }) =>
+    api.get('/api/admin/academy/videos', { params }),
+  getVideo: (id: string) => api.get(`/api/admin/academy/videos/${id}`),
+  createVideo: (data: {
+    title: string;
+    description?: string;
+    videoUrl: string;
+    thumbnailUrl?: string;
+    durationSeconds: number;
+    category?: string;
+    level?: string;
+    xpForWatching?: number;
+    isRequired?: boolean;
+  }) => api.post('/api/admin/academy/videos', data),
+  updateVideo: (id: string, data: any) => api.put(`/api/admin/academy/videos/${id}`, data),
+  deleteVideo: (id: string) => api.delete(`/api/admin/academy/videos/${id}`),
+  publishVideo: (id: string) => api.post(`/api/admin/academy/videos/${id}/publish`),
+  getVideoStats: (id: string) => api.get(`/api/admin/academy/videos/${id}/stats`),
+  uploadVideo: (file: File) => {
+    const formData = new FormData();
+    formData.append('video', file);
+    return api.post('/api/admin/academy/videos/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  // Quiz
+  getQuiz: (videoId: string) => api.get(`/api/admin/academy/videos/${videoId}/quiz`),
+  saveQuiz: (videoId: string, data: {
+    title?: string;
+    passingScore?: number;
+    maxAttempts?: number;
+    xpReward?: number;
+    questions: Array<{
+      questionText: string;
+      questionType?: string;
+      explanation?: string;
+      answers: Array<{
+        answerText: string;
+        isCorrect: boolean;
+      }>;
+    }>;
+  }) => api.post(`/api/admin/academy/videos/${videoId}/quiz`, data),
+  deleteQuiz: (videoId: string) => api.delete(`/api/admin/academy/videos/${videoId}/quiz`),
+};

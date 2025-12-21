@@ -7989,7 +7989,7 @@ function navigateTo(screenId) {
     } else if (screenId === 'screen-badges') {
         loadBadgesScreen();
     } else if (screenId === 'screen-learn') {
-        loadXPRanking();
+        loadAcademyVideos(); // Load videos by default (first tab)
     }
 }
 
@@ -12634,4 +12634,642 @@ window.debugMovement = {
     getTimeline: getTodayTimeline,
     syncTimeline: syncTimelineEvents,
     showLeavingModal: showLeavingProjectModal
+};
+
+// =============================================
+// ACADEMY - EDUCATIONAL VIDEOS & QUIZZES
+// =============================================
+
+// Academy state
+let academyVideos = [];
+let currentVideo = null;
+let currentQuiz = null;
+let currentQuestionIndex = 0;
+let quizAnswers = [];
+let videoProgressInterval = null;
+
+// Switch between academy tabs
+function switchAcademyTab(tab) {
+    const videosTab = document.querySelector('.academy-tab:first-child');
+    const rankingTab = document.querySelector('.academy-tab:last-child');
+    const videosSection = document.getElementById('academy-videos-section');
+    const rankingSection = document.getElementById('academy-ranking-section');
+
+    if (tab === 'videos') {
+        videosTab.classList.add('active');
+        rankingTab.classList.remove('active');
+        videosSection.style.display = 'block';
+        rankingSection.style.display = 'none';
+        loadAcademyVideos();
+    } else {
+        videosTab.classList.remove('active');
+        rankingTab.classList.add('active');
+        videosSection.style.display = 'none';
+        rankingSection.style.display = 'block';
+        loadXPRanking();
+    }
+}
+
+// Load academy videos from API
+async function loadAcademyVideos() {
+    const container = document.getElementById('academy-videos-list');
+    if (!container) return;
+
+    container.innerHTML = '<div class="academy-loading">Carregando videos...</div>';
+
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            container.innerHTML = '<div class="academy-loading">Faca login para ver os videos</div>';
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/api/mobile/academy/videos`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) throw new Error('Erro ao carregar videos');
+
+        const data = await response.json();
+        academyVideos = data.videos || [];
+
+        // Update user stats
+        updateAcademyUserStats(data.stats);
+
+        // Render videos
+        renderAcademyVideos(academyVideos);
+
+        // Update videos count
+        const countEl = document.getElementById('academyVideosCount');
+        if (countEl) {
+            countEl.textContent = `${academyVideos.length} videos`;
+        }
+
+    } catch (error) {
+        console.error('[Academy] Error loading videos:', error);
+        container.innerHTML = '<div class="academy-loading">Erro ao carregar videos. Tente novamente.</div>';
+    }
+}
+
+// Update user academy stats
+function updateAcademyUserStats(stats) {
+    if (!stats) return;
+
+    const levelEl = document.getElementById('academyUserLevel');
+    const currentXPEl = document.getElementById('academyCurrentXP');
+    const nextLevelXPEl = document.getElementById('academyNextLevelXP');
+    const xpNeededEl = document.getElementById('academyXPNeeded');
+    const progressFill = document.getElementById('academyProgressFill');
+
+    const level = stats.level || 1;
+    const currentXP = stats.xpTotal || 0;
+    const nextLevelXP = stats.nextLevelXP || 1000;
+    const progressPercent = stats.progressPercent || 0;
+
+    if (levelEl) levelEl.textContent = level;
+    if (currentXPEl) currentXPEl.textContent = currentXP.toLocaleString();
+    if (nextLevelXPEl) nextLevelXPEl.textContent = nextLevelXP.toLocaleString();
+    if (xpNeededEl) xpNeededEl.textContent = (nextLevelXP - currentXP).toLocaleString();
+    if (progressFill) progressFill.style.width = `${progressPercent}%`;
+}
+
+// Render academy videos list
+function renderAcademyVideos(videos) {
+    const container = document.getElementById('academy-videos-list');
+    if (!container) return;
+
+    if (!videos || videos.length === 0) {
+        container.innerHTML = '<div class="academy-loading">Nenhum video disponivel no momento</div>';
+        return;
+    }
+
+    container.innerHTML = videos.map(video => {
+        const progress = video.progress || {};
+        const progressPercent = progress.progressPercent || 0;
+        const completed = progress.completed || false;
+        const quizPassed = progress.quizPassed || false;
+        const hasQuiz = video.hasQuiz || false;
+        const totalXP = (video.xpForWatching || 0) + (video.quizXP || 0);
+
+        const levelLabels = {
+            'INICIANTE': 'Iniciante',
+            'INTERMEDIARIO': 'Intermediario',
+            'AVANCADO': 'Avancado'
+        };
+
+        return `
+            <div class="academy-video-card ${completed ? 'completed' : ''}" onclick="openVideo('${video.id}')">
+                <div class="video-card-thumbnail">
+                    <img src="${video.thumbnailUrl || 'icons/video-placeholder.png'}" alt="${video.title}" onerror="this.src='icons/video-placeholder.png'">
+                    <div class="play-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <polygon points="5,3 19,12 5,21"/>
+                        </svg>
+                    </div>
+                    <span class="duration-badge">${formatDuration(video.durationSeconds)}</span>
+                </div>
+                <div class="video-card-info">
+                    <div class="video-card-title">${video.title}</div>
+                    <div class="video-card-meta">
+                        <span class="video-card-level">${levelLabels[video.level] || video.level}</span>
+                        <span class="video-card-xp">+${totalXP} XP</span>
+                    </div>
+                    <div class="video-card-progress">
+                        <div class="video-card-progress-bar">
+                            <div class="video-card-progress-fill ${completed ? 'completed' : ''}" style="width: ${progressPercent}%"></div>
+                        </div>
+                        <span class="video-card-progress-text">${progressPercent}%</span>
+                        ${hasQuiz ? `
+                            <span class="video-card-badge ${quizPassed ? 'quiz-done' : 'quiz'}">
+                                ${quizPassed ? '✓ Quiz' : 'Quiz'}
+                            </span>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Format duration (seconds to mm:ss)
+function formatDuration(seconds) {
+    if (!seconds) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Open video player
+async function openVideo(videoId) {
+    const video = academyVideos.find(v => v.id === videoId);
+    if (!video) {
+        console.error('[Academy] Video not found:', videoId);
+        return;
+    }
+
+    currentVideo = video;
+
+    // Update player UI
+    document.getElementById('videoPlayerTitle').textContent = video.title;
+    document.getElementById('videoInfoTitle').textContent = video.title;
+    document.getElementById('videoInfoDescription').textContent = video.description || '';
+    document.getElementById('videoInfoDuration').textContent = formatDuration(video.durationSeconds);
+    document.getElementById('videoInfoXP').textContent = video.xpForWatching || 0;
+    document.getElementById('videoInfoCategory').textContent = video.category || 'Tecnica';
+
+    // Set video source
+    const videoPlayer = document.getElementById('academyVideoPlayer');
+    const videoUrl = video.videoUrl.startsWith('http') ? video.videoUrl : `${API_URL}${video.videoUrl}`;
+    videoPlayer.src = videoUrl;
+
+    // Reset progress UI
+    const progress = video.progress || {};
+    updateVideoProgressUI(progress.progressPercent || 0);
+
+    // Setup quiz section
+    setupQuizSection(video);
+
+    // Show loading overlay
+    document.getElementById('videoLoadingOverlay').classList.remove('hidden');
+
+    // Navigate to video player
+    navigateTo('screen-video-player');
+
+    // Setup video events
+    videoPlayer.onloadeddata = () => {
+        document.getElementById('videoLoadingOverlay').classList.add('hidden');
+    };
+
+    videoPlayer.ontimeupdate = () => {
+        handleVideoTimeUpdate(videoPlayer);
+    };
+
+    videoPlayer.onerror = () => {
+        document.getElementById('videoLoadingOverlay').classList.add('hidden');
+        showToast('Erro ao carregar o video', 'error');
+    };
+}
+
+// Update video progress UI
+function updateVideoProgressUI(percent) {
+    document.getElementById('videoProgressPercent').textContent = `${Math.round(percent)}%`;
+    document.getElementById('videoProgressFill').style.width = `${percent}%`;
+
+    // Check if quiz can be unlocked (90%+)
+    const quizBtn = document.getElementById('videoQuizBtn');
+    const unlockInfo = document.getElementById('quizUnlockInfo');
+
+    if (percent >= 90 && currentVideo?.hasQuiz) {
+        if (quizBtn) quizBtn.disabled = false;
+        if (unlockInfo) unlockInfo.classList.add('unlocked');
+    }
+}
+
+// Handle video time update
+function handleVideoTimeUpdate(videoPlayer) {
+    if (!currentVideo || !videoPlayer.duration) return;
+
+    const currentTime = videoPlayer.currentTime;
+    const duration = videoPlayer.duration;
+    const progressPercent = Math.min(100, Math.round((currentTime / duration) * 100));
+
+    // Update UI
+    updateVideoProgressUI(progressPercent);
+
+    // Send progress to API every 5 seconds
+    clearTimeout(videoProgressInterval);
+    videoProgressInterval = setTimeout(() => {
+        updateVideoProgress(currentVideo.id, Math.round(currentTime), progressPercent);
+    }, 5000);
+}
+
+// Update video progress on server
+async function updateVideoProgress(videoId, watchedSeconds, progressPercent) {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        await fetch(`${API_URL}/api/mobile/academy/videos/${videoId}/progress`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ watchedSeconds, progressPercent })
+        });
+
+        // Check if completed (95%+) and should award XP
+        if (progressPercent >= 95) {
+            completeVideo(videoId);
+        }
+    } catch (error) {
+        console.error('[Academy] Error updating progress:', error);
+    }
+}
+
+// Complete video and award XP
+async function completeVideo(videoId) {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const response = await fetch(`${API_URL}/api/mobile/academy/videos/${videoId}/complete`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.xpAwarded > 0 && data.firstCompletion) {
+                showXPNotification(data.xpAwarded, 'Video concluido!');
+            }
+        }
+    } catch (error) {
+        console.error('[Academy] Error completing video:', error);
+    }
+}
+
+// Setup quiz section
+function setupQuizSection(video) {
+    const quizSection = document.getElementById('videoQuizSection');
+    const quizBtn = document.getElementById('videoQuizBtn');
+    const quizXPBadge = document.getElementById('quizXPBadge');
+    const unlockInfo = document.getElementById('quizUnlockInfo');
+
+    if (!video.hasQuiz) {
+        quizSection.style.display = 'none';
+        return;
+    }
+
+    quizSection.style.display = 'block';
+    quizXPBadge.textContent = `+${video.quizXP || 100} XP`;
+
+    const progress = video.progress || {};
+    const progressPercent = progress.progressPercent || 0;
+
+    // Check if already passed
+    if (progress.quizPassed) {
+        quizBtn.disabled = true;
+        quizBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                <path d="M9 11l3 3L22 4"/>
+                <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+            </svg>
+            <span>Quiz Concluido</span>
+            <span class="quiz-xp-badge">✓</span>
+        `;
+        unlockInfo.style.display = 'none';
+    } else if (progressPercent >= 90) {
+        quizBtn.disabled = false;
+        unlockInfo.classList.add('unlocked');
+    } else {
+        quizBtn.disabled = true;
+        unlockInfo.classList.remove('unlocked');
+    }
+}
+
+// Close video player
+function closeVideoPlayer() {
+    const videoPlayer = document.getElementById('academyVideoPlayer');
+    if (videoPlayer) {
+        videoPlayer.pause();
+    }
+    clearTimeout(videoProgressInterval);
+    currentVideo = null;
+    navigateTo('screen-learn');
+    loadAcademyVideos(); // Refresh to show updated progress
+}
+
+// Start video quiz
+async function startVideoQuiz() {
+    if (!currentVideo || !currentVideo.hasQuiz) return;
+
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            showToast('Faca login para responder o quiz', 'error');
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/api/mobile/academy/videos/${currentVideo.id}/quiz`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) throw new Error('Erro ao carregar quiz');
+
+        const data = await response.json();
+        currentQuiz = data.quiz;
+
+        if (!currentQuiz || !currentQuiz.questions || currentQuiz.questions.length === 0) {
+            showToast('Quiz nao disponivel', 'error');
+            return;
+        }
+
+        // Pause video
+        const videoPlayer = document.getElementById('academyVideoPlayer');
+        if (videoPlayer) videoPlayer.pause();
+
+        // Reset quiz state
+        currentQuestionIndex = 0;
+        quizAnswers = [];
+
+        // Setup quiz UI
+        document.getElementById('quizHeaderTitle').textContent = currentQuiz.title || 'Quiz';
+        document.getElementById('quizTotalQuestions').textContent = currentQuiz.questions.length;
+
+        // Render first question
+        renderQuizQuestion(0);
+
+        // Navigate to quiz screen
+        navigateTo('screen-quiz');
+
+    } catch (error) {
+        console.error('[Academy] Error loading quiz:', error);
+        showToast('Erro ao carregar quiz', 'error');
+    }
+}
+
+// Render quiz question
+function renderQuizQuestion(index) {
+    const question = currentQuiz.questions[index];
+    if (!question) return;
+
+    // Update header
+    document.getElementById('quizCurrentQuestion').textContent = index + 1;
+
+    // Render question text
+    document.getElementById('quizQuestionText').textContent = question.questionText;
+
+    // Render question image if exists
+    const imageEl = document.getElementById('quizQuestionImage');
+    if (question.imageUrl) {
+        imageEl.src = question.imageUrl;
+        imageEl.style.display = 'block';
+    } else {
+        imageEl.style.display = 'none';
+    }
+
+    // Render answer options
+    const optionsContainer = document.getElementById('quizAnswerOptions');
+    optionsContainer.innerHTML = question.answers.map((answer, i) => `
+        <div class="quiz-answer-option" onclick="selectQuizAnswer(${index}, '${answer.id}', this)">
+            <div class="answer-indicator">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+            </div>
+            <span class="answer-text">${answer.answerText}</span>
+        </div>
+    `).join('');
+
+    // Hide explanation and next button
+    document.getElementById('quizExplanation').style.display = 'none';
+    document.getElementById('quizNextBtn').style.display = 'none';
+
+    // Render progress dots
+    renderQuizProgressDots(index);
+}
+
+// Render quiz progress dots
+function renderQuizProgressDots(currentIndex) {
+    const dotsContainer = document.getElementById('quizProgressDots');
+    dotsContainer.innerHTML = currentQuiz.questions.map((_, i) => {
+        let dotClass = 'quiz-dot';
+        if (i === currentIndex) dotClass += ' current';
+        if (quizAnswers[i]) {
+            dotClass += quizAnswers[i].isCorrect ? ' correct' : ' incorrect';
+        }
+        return `<div class="${dotClass}"></div>`;
+    }).join('');
+}
+
+// Select quiz answer
+function selectQuizAnswer(questionIndex, answerId, element) {
+    const question = currentQuiz.questions[questionIndex];
+    if (!question) return;
+
+    // Check if already answered
+    if (quizAnswers[questionIndex]) return;
+
+    // Find correct answer
+    const correctAnswer = question.answers.find(a => a.isCorrect);
+    const selectedAnswer = question.answers.find(a => a.id === answerId);
+    const isCorrect = answerId === correctAnswer?.id;
+
+    // Store answer
+    quizAnswers[questionIndex] = {
+        questionId: question.id,
+        selectedAnswerId: answerId,
+        isCorrect
+    };
+
+    // Update UI
+    const options = document.querySelectorAll('.quiz-answer-option');
+    options.forEach(opt => {
+        opt.classList.add('disabled');
+        const optAnswerId = opt.getAttribute('onclick').match(/'([^']+)'/)?.[1];
+        if (optAnswerId === correctAnswer?.id) {
+            opt.classList.add('correct');
+        } else if (optAnswerId === answerId && !isCorrect) {
+            opt.classList.add('incorrect');
+        }
+    });
+
+    element.classList.add('selected');
+
+    // Show explanation if exists
+    if (question.explanation) {
+        document.getElementById('quizExplanationText').textContent = question.explanation;
+        document.getElementById('quizExplanation').style.display = 'block';
+    }
+
+    // Update progress dots
+    renderQuizProgressDots(questionIndex);
+
+    // Show next button
+    const nextBtn = document.getElementById('quizNextBtn');
+    const nextBtnText = document.getElementById('quizNextBtnText');
+    nextBtn.style.display = 'flex';
+
+    if (questionIndex === currentQuiz.questions.length - 1) {
+        nextBtnText.textContent = 'Ver Resultado';
+    } else {
+        nextBtnText.textContent = 'Proxima';
+    }
+}
+
+// Next quiz question
+function nextQuizQuestion() {
+    currentQuestionIndex++;
+
+    if (currentQuestionIndex >= currentQuiz.questions.length) {
+        // Submit quiz and show results
+        submitQuiz();
+    } else {
+        renderQuizQuestion(currentQuestionIndex);
+    }
+}
+
+// Submit quiz answers
+async function submitQuiz() {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const answers = quizAnswers.map(a => ({
+            questionId: a.questionId,
+            selectedAnswerIds: [a.selectedAnswerId]
+        }));
+
+        const response = await fetch(`${API_URL}/api/mobile/academy/videos/${currentVideo.id}/quiz/submit`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ answers })
+        });
+
+        if (!response.ok) throw new Error('Erro ao enviar respostas');
+
+        const result = await response.json();
+        showQuizResult(result);
+
+    } catch (error) {
+        console.error('[Academy] Error submitting quiz:', error);
+        showToast('Erro ao enviar respostas', 'error');
+    }
+}
+
+// Show quiz result
+function showQuizResult(result) {
+    const overlay = document.getElementById('quizResultOverlay');
+    const iconEl = document.getElementById('quizResultIcon');
+    const titleEl = document.getElementById('quizResultTitle');
+    const subtitleEl = document.getElementById('quizResultSubtitle');
+    const scoreCircle = document.getElementById('quizScoreCircle');
+    const scorePercent = document.getElementById('quizScorePercent');
+    const correctCount = document.getElementById('quizCorrectCount');
+    const passingScore = document.getElementById('quizPassingScore');
+    const xpSection = document.getElementById('quizResultXP');
+    const xpEarned = document.getElementById('quizXPEarned');
+    const retryBtn = document.getElementById('quizRetryBtn');
+
+    const passed = result.passed;
+    const score = result.score;
+    const correct = result.correctCount;
+    const total = result.totalQuestions;
+
+    // Update icon and title
+    if (passed) {
+        iconEl.textContent = '🎉';
+        titleEl.textContent = 'Parabens!';
+        subtitleEl.textContent = 'Voce passou no quiz!';
+        scoreCircle.className = 'score-circle passed';
+    } else {
+        iconEl.textContent = '😔';
+        titleEl.textContent = 'Tente Novamente';
+        subtitleEl.textContent = 'Voce nao atingiu a nota minima';
+        scoreCircle.className = 'score-circle failed';
+    }
+
+    scorePercent.textContent = `${score}%`;
+    correctCount.textContent = `${correct}/${total}`;
+    passingScore.textContent = `${currentQuiz.passingScore || 70}%`;
+
+    // Show XP if awarded
+    if (result.xpEarned > 0) {
+        xpSection.style.display = 'flex';
+        xpEarned.textContent = `+${result.xpEarned}`;
+    } else {
+        xpSection.style.display = 'none';
+    }
+
+    // Retry button
+    if (result.canRetry) {
+        retryBtn.style.display = 'block';
+        retryBtn.disabled = false;
+    } else {
+        retryBtn.style.display = 'none';
+    }
+
+    overlay.classList.add('active');
+}
+
+// Retry quiz
+function retryQuiz() {
+    document.getElementById('quizResultOverlay').classList.remove('active');
+    currentQuestionIndex = 0;
+    quizAnswers = [];
+    renderQuizQuestion(0);
+}
+
+// Close quiz result
+function closeQuizResult() {
+    document.getElementById('quizResultOverlay').classList.remove('active');
+    closeQuiz();
+}
+
+// Close quiz
+function closeQuiz() {
+    currentQuiz = null;
+    currentQuestionIndex = 0;
+    quizAnswers = [];
+    navigateTo('screen-video-player');
+
+    // Refresh video progress (quiz status may have changed)
+    if (currentVideo) {
+        loadAcademyVideos();
+    }
+}
+
+// Expose academy functions for debugging
+window.debugAcademy = {
+    loadVideos: loadAcademyVideos,
+    getVideos: () => academyVideos,
+    getCurrentVideo: () => currentVideo,
+    getCurrentQuiz: () => currentQuiz
 };

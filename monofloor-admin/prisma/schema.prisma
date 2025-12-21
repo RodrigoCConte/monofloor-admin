@@ -110,6 +110,8 @@ model User {
   absenceNotices        AbsenceNotice[]
   unreportedAbsences    UnreportedAbsence[]
   taskAssignments       TaskAssignment[]
+  videoProgress         VideoProgress[]
+  quizAttempts          QuizAttempt[]
 
   @@map("users")
 }
@@ -1305,6 +1307,7 @@ enum XpTransactionType {
   VIDEO_WATCHED     // Vídeo assistido
   PENALTY           // Penalidade (XP negativo)
   TASK_COMPLETED    // Tarefa concluída
+  QUIZ_PASSED       // Quiz aprovado
 }
 
 // =============================================
@@ -1553,5 +1556,203 @@ enum UploadType {
   REPORT            // Fotos de relatórios
   NOTIFICATION      // Vídeos de notificações
   HELP_REQUEST      // Arquivos de solicitações de ajuda
+  EDUCATIONAL_VIDEO // Vídeos educativos da academia
   OTHER             // Outros
+}
+
+// =============================================
+// EDUCATIONAL VIDEOS (Vídeos educativos da Academia)
+// =============================================
+model EducationalVideo {
+  id              String              @id @default(uuid())
+
+  // Conteúdo
+  title           String
+  description     String?             @db.Text
+  videoUrl        String              @map("video_url") @db.Text
+  thumbnailUrl    String?             @map("thumbnail_url")
+  durationSeconds Int                 @map("duration_seconds")
+
+  // Categorização
+  category        VideoCategory       @default(TECNICA)
+  level           VideoLevel          @default(INICIANTE)
+
+  // Ordenação e visibilidade
+  sortOrder       Int                 @default(0) @map("sort_order")
+  isActive        Boolean             @default(true) @map("is_active")
+  isRequired      Boolean             @default(false) @map("is_required")
+
+  // XP por assistir (sem quiz)
+  xpForWatching   Int                 @default(0) @map("xp_for_watching")
+
+  // Stats
+  viewsCount      Int                 @default(0) @map("views_count")
+  completionsCount Int                @default(0) @map("completions_count")
+
+  // Timestamps
+  publishedAt     DateTime?           @map("published_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  quiz            VideoQuiz?
+  progress        VideoProgress[]
+
+  @@index([isActive, category])
+  @@index([sortOrder])
+  @@map("educational_videos")
+}
+
+enum VideoCategory {
+  TECNICA           // Técnicas de aplicação
+  SEGURANCA         // Segurança no trabalho
+  PRODUTO           // Conhecimento do produto STELION
+  ATENDIMENTO       // Atendimento ao cliente
+  GERAL             // Conteúdo geral
+}
+
+enum VideoLevel {
+  INICIANTE         // Para novos aplicadores
+  INTERMEDIARIO     // Para aplicadores experientes
+  AVANCADO          // Técnicas avançadas
+}
+
+// =============================================
+// VIDEO QUIZ (Questionário do vídeo)
+// =============================================
+model VideoQuiz {
+  id              String              @id @default(uuid())
+  videoId         String              @unique @map("video_id")
+  video           EducationalVideo    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  // Configuração
+  title           String?
+  passingScore    Int                 @default(70) @map("passing_score")
+  maxAttempts     Int                 @default(3) @map("max_attempts")
+  xpReward        Int                 @default(100) @map("xp_reward")
+
+  // Timestamps
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  questions       QuizQuestion[]
+  attempts        QuizAttempt[]
+
+  @@map("video_quizzes")
+}
+
+// =============================================
+// QUIZ QUESTION (Pergunta do questionário)
+// =============================================
+model QuizQuestion {
+  id              String              @id @default(uuid())
+  quizId          String              @map("quiz_id")
+  quiz            VideoQuiz           @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  // Conteúdo
+  questionText    String              @map("question_text") @db.Text
+  questionType    QuestionType        @default(SINGLE_CHOICE) @map("question_type")
+
+  // Imagem opcional
+  imageUrl        String?             @map("image_url")
+
+  // Ordenação
+  sortOrder       Int                 @default(0) @map("sort_order")
+
+  // Explicação mostrada após resposta
+  explanation     String?             @db.Text
+
+  // Timestamps
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  // Relations
+  answers         QuizAnswer[]
+
+  @@index([quizId, sortOrder])
+  @@map("quiz_questions")
+}
+
+enum QuestionType {
+  SINGLE_CHOICE     // Apenas uma resposta correta
+  MULTIPLE_CHOICE   // Múltiplas respostas corretas
+  TRUE_FALSE        // Verdadeiro/Falso
+}
+
+// =============================================
+// QUIZ ANSWER (Resposta/Opção do questionário)
+// =============================================
+model QuizAnswer {
+  id              String              @id @default(uuid())
+  questionId      String              @map("question_id")
+  question        QuizQuestion        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  // Conteúdo
+  answerText      String              @map("answer_text")
+  isCorrect       Boolean             @default(false) @map("is_correct")
+
+  // Ordenação
+  sortOrder       Int                 @default(0) @map("sort_order")
+
+  @@index([questionId, sortOrder])
+  @@map("quiz_answers")
+}
+
+// =============================================
+// VIDEO PROGRESS (Progresso do usuário no vídeo)
+// =============================================
+model VideoProgress {
+  id              String              @id @default(uuid())
+  userId          String              @map("user_id")
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoId         String              @map("video_id")
+  video           EducationalVideo    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  // Progresso
+  watchedSeconds  Int                 @default(0) @map("watched_seconds")
+  progressPercent Int                 @default(0) @map("progress_percent")
+  completed       Boolean             @default(false)
+  completedAt     DateTime?           @map("completed_at")
+
+  // XP ganho por assistir
+  xpEarnedWatch   Int                 @default(0) @map("xp_earned_watch")
+
+  // Timestamps
+  startedAt       DateTime            @default(now()) @map("started_at")
+  lastWatchedAt   DateTime            @default(now()) @map("last_watched_at")
+
+  @@unique([userId, videoId])
+  @@index([userId, completed])
+  @@map("video_progress")
+}
+
+// =============================================
+// QUIZ ATTEMPT (Tentativa do usuário no quiz)
+// =============================================
+model QuizAttempt {
+  id              String              @id @default(uuid())
+  userId          String              @map("user_id")
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quizId          String              @map("quiz_id")
+  quiz            VideoQuiz           @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  // Resultado
+  score           Int
+  passed          Boolean             @default(false)
+  correctCount    Int                 @map("correct_count")
+  totalQuestions  Int                 @map("total_questions")
+
+  // Respostas do usuário (JSON)
+  answers         Json
+
+  // XP ganho
+  xpEarned        Int                 @default(0) @map("xp_earned")
+
+  // Timestamps
+  startedAt       DateTime            @default(now()) @map("started_at")
+  completedAt     DateTime?           @map("completed_at")
+
+  @@index([userId, quizId])
+  @@index([quizId, passed])
+  @@map("quiz_attempts")
 }
