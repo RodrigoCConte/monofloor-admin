@@ -752,13 +752,18 @@ router.post(
         });
 
         // Atualizar XP total do usuário
-        updatedUser = await prisma.user.update({
+        const dbResult = await prisma.user.update({
           where: { id: req.user!.sub },
           data: {
             xpTotal: { increment: XP_CHECKIN },
           },
           select: { xpTotal: true, level: true, punctualityStreak: true, punctualityMultiplier: true },
         });
+        // Convert Decimal to number for punctualityMultiplier
+        updatedUser = {
+          ...dbResult,
+          punctualityMultiplier: Number(dbResult.punctualityMultiplier),
+        };
 
         // Emitir notificação de pontualidade/multiplicador via Socket
         emitPunctualityMultiplier({
