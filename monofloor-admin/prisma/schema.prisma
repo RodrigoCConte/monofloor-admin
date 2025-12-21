@@ -579,8 +579,9 @@ model UserLocation {
   currentProject   Project? @relation(fields: [currentProjectId], references: [id])
 
   // GPS Status for auto-checkout (1 minute rule)
-  gpsStatus     String?   @map("gps_status") // 'granted', 'denied', 'prompt'
-  gpsOffAt      DateTime? @map("gps_off_at") // When GPS was turned off (null = GPS is on)
+  gpsStatus           String?   @map("gps_status") // 'granted', 'denied', 'prompt'
+  gpsOffAt            DateTime? @map("gps_off_at") // When GPS was turned off (null = GPS is on)
+  gpsOffConfirmations Int       @default(0) @map("gps_off_confirmations") // Number of consecutive GPS off confirmations
 
   updatedAt     DateTime  @updatedAt @map("updated_at")
 

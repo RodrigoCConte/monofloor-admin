@@ -18,7 +18,7 @@ import { isLunchTime } from '../../services/lunch-scheduler.service';
 import { sendRequestNotification } from '../../services/whatsapp.service';
 import { whisperService } from '../../services/ai/whisper.service';
 import { saveFile, deleteFile, UploadType } from '../../services/db-storage.service';
-import { updateGPSStatus, getGPSStatus } from '../../services/gps-autocheckout.service';
+import { updateGPSStatus, getGPSStatus, resetGPSConfirmations } from '../../services/gps-autocheckout.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1658,7 +1658,7 @@ router.post(
         );
       }
 
-      // Upsert user location
+      // Upsert user location - also reset GPS confirmations since user is sending location
       const location = await prisma.userLocation.upsert({
         where: { userId },
         update: {
@@ -1673,6 +1673,9 @@ router.post(
           currentProjectId: activeCheckin?.projectId || null,
           isOutOfArea: geofenceStatus.isOutOfArea,
           distanceFromProject: geofenceStatus.distance,
+          // Reset GPS confirmations - user is sending location, so GPS is working
+          gpsOffAt: null,
+          gpsOffConfirmations: 0,
         },
         create: {
           userId,
@@ -1687,6 +1690,9 @@ router.post(
           currentProjectId: activeCheckin?.projectId || null,
           isOutOfArea: geofenceStatus.isOutOfArea,
           distanceFromProject: geofenceStatus.distance,
+          // New record starts with no GPS confirmations
+          gpsOffAt: null,
+          gpsOffConfirmations: 0,
         },
       });
 
