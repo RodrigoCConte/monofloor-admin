@@ -235,6 +235,24 @@ export function emitXPGained(data: {
 }
 
 /**
+ * Emit XP lost event to a user (triggers XP loss animation)
+ */
+export function emitXPLost(data: {
+  userId: string;
+  userName: string;
+  amount: number;
+  reason?: string;
+  timestamp: Date;
+}): void {
+  if (io) {
+    io.to(`user:${data.userId}`).emit('xp:lost', data);
+    // Also notify admin
+    io.to('admin').emit('xp:lost', data);
+    console.log(`[Socket] Emitted xp:lost to user:${data.userId} - -${data.amount} XP`);
+  }
+}
+
+/**
  * Emit campaign winner event (triggers victory celebration animation)
  */
 export function emitCampaignWinner(data: {

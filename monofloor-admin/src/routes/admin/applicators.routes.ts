@@ -3,7 +3,7 @@ import { PrismaClient, UserStatus, UserRole } from '@prisma/client';
 import { body, param, query, validationResult } from 'express-validator';
 import { adminAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
-import { emitRoleEvolution } from '../../services/socket.service';
+import { emitRoleEvolution, emitXPGained, emitXPLost } from '../../services/socket.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -765,7 +765,26 @@ router.post(
         },
       });
 
-      // Send push notification with updated XP total
+      // Emit Socket.io event for real-time notification in-app
+      if (type === 'PRAISE') {
+        emitXPGained({
+          userId,
+          userName: updatedUser.name || 'Aplicador',
+          amount: Math.abs(finalAmount),
+          reason: `Elogio: ${reason}`,
+          timestamp: new Date(),
+        });
+      } else {
+        emitXPLost({
+          userId,
+          userName: updatedUser.name || 'Aplicador',
+          amount: Math.abs(finalAmount),
+          reason: `Penalidade: ${reason}`,
+          timestamp: new Date(),
+        });
+      }
+
+      // Send push notification with updated XP total (for when app is closed)
       try {
         const { sendXPAdjustmentPush } = await import('../../services/push.service');
         sendXPAdjustmentPush(userId, Math.abs(finalAmount), reason, type, updatedUser.xpTotal).catch((err) => {

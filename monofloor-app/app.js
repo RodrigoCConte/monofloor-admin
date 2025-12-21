@@ -1098,6 +1098,14 @@ function initSocketConnection() {
         );
     });
 
+    // Listen for XP lost events (admin penalty)
+    socket.on('xp:lost', (data) => {
+        console.log('[Socket] XP lost:', data);
+
+        // Show XP loss animation
+        showXPLossNotification(data.amount, data.reason || 'Penalidade');
+    });
+
     // Listen for campaign winner notification
     socket.on('campaign:winner', (data) => {
         console.log('[Socket] Campaign winner:', data);
