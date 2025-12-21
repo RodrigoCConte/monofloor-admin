@@ -180,6 +180,18 @@ router.get(
           dependsOn: {
             select: { id: true, title: true, status: true },
           },
+          assignedUsers: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  photoUrl: true,
+                  role: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -190,6 +202,13 @@ router.get(
           durationHours: Number(t.durationHours),
           estimatedHours: t.estimatedHours ? Number(t.estimatedHours) : null,
           taskTypeLabel: TASK_TYPE_LABELS[t.taskType],
+          assignedUsers: t.assignedUsers.map(a => ({
+            id: a.user.id,
+            name: a.user.name,
+            photoUrl: a.user.photoUrl,
+            role: a.user.role,
+            assignedAt: a.assignedAt,
+          })),
         })),
       });
     } catch (error) {
@@ -1033,6 +1052,218 @@ router.delete(
       res.json({
         success: true,
         message: 'Tarefa deletada com sucesso',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================
+// GET /api/admin/projects/:projectId/tasks/:taskId/assignments - Get task assignments
+// =============================================
+router.get(
+  '/:projectId/tasks/:taskId/assignments',
+  adminAuth,
+  [param('projectId').isUUID(), param('taskId').isUUID()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { projectId, taskId } = req.params;
+
+      const task = await prisma.projectTask.findFirst({
+        where: { id: taskId, projectId },
+        include: {
+          assignedUsers: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  photoUrl: true,
+                  role: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!task) {
+        throw new AppError('Tarefa nao encontrada', 404, 'TASK_NOT_FOUND');
+      }
+
+      res.json({
+        success: true,
+        data: task.assignedUsers.map(a => ({
+          id: a.user.id,
+          name: a.user.name,
+          photoUrl: a.user.photoUrl,
+          role: a.user.role,
+          email: a.user.email,
+          assignedAt: a.assignedAt,
+        })),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================
+// PUT /api/admin/projects/:projectId/tasks/:taskId/assignments - Update task assignments
+// =============================================
+router.put(
+  '/:projectId/tasks/:taskId/assignments',
+  adminAuth,
+  [
+    param('projectId').isUUID(),
+    param('taskId').isUUID(),
+    body('userIds').isArray(),
+    body('userIds.*').isUUID(),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { projectId, taskId } = req.params;
+      const { userIds } = req.body;
+
+      // Verify task exists
+      const task = await prisma.projectTask.findFirst({
+        where: { id: taskId, projectId },
+      });
+
+      if (!task) {
+        throw new AppError('Tarefa nao encontrada', 404, 'TASK_NOT_FOUND');
+      }
+
+      // Delete existing assignments
+      await prisma.taskAssignment.deleteMany({
+        where: { projectTaskId: taskId },
+      });
+
+      // Create new assignments
+      if (userIds.length > 0) {
+        await prisma.taskAssignment.createMany({
+          data: userIds.map((userId: string) => ({
+            projectTaskId: taskId,
+            userId,
+          })),
+        });
+      }
+
+      // Also update inputPeople to match the number of assigned users
+      await prisma.projectTask.update({
+        where: { id: taskId },
+        data: { inputPeople: userIds.length },
+      });
+
+      // Fetch updated task with assignments
+      const updatedTask = await prisma.projectTask.findUnique({
+        where: { id: taskId },
+        include: {
+          assignedUsers: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  photoUrl: true,
+                  role: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          taskId,
+          assignedUsers: updatedTask?.assignedUsers.map(a => ({
+            id: a.user.id,
+            name: a.user.name,
+            photoUrl: a.user.photoUrl,
+            role: a.user.role,
+            assignedAt: a.assignedAt,
+          })) || [],
+          inputPeople: userIds.length,
+        },
+        message: `${userIds.length} pessoa(s) atribuida(s) a tarefa`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================
+// PUT /api/admin/projects/:projectId/tasks/bulk-assignments - Bulk update assignments for multiple tasks
+// =============================================
+router.put(
+  '/:projectId/tasks/bulk-assignments',
+  adminAuth,
+  [
+    param('projectId').isUUID(),
+    body('taskIds').isArray({ min: 1 }),
+    body('taskIds.*').isUUID(),
+    body('userIds').isArray(),
+    body('userIds.*').isUUID(),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { projectId } = req.params;
+      const { taskIds, userIds } = req.body;
+
+      // Verify all tasks exist and belong to this project
+      const tasks = await prisma.projectTask.findMany({
+        where: {
+          id: { in: taskIds },
+          projectId,
+        },
+      });
+
+      if (tasks.length !== taskIds.length) {
+        throw new AppError('Uma ou mais tarefas nao encontradas', 404, 'TASKS_NOT_FOUND');
+      }
+
+      // Delete existing assignments for all tasks
+      await prisma.taskAssignment.deleteMany({
+        where: { projectTaskId: { in: taskIds } },
+      });
+
+      // Create new assignments for all tasks
+      if (userIds.length > 0) {
+        const assignmentsToCreate: { projectTaskId: string; userId: string }[] = [];
+        for (const taskId of taskIds) {
+          for (const userId of userIds) {
+            assignmentsToCreate.push({
+              projectTaskId: taskId,
+              userId,
+            });
+          }
+        }
+        await prisma.taskAssignment.createMany({
+          data: assignmentsToCreate,
+        });
+      }
+
+      // Update inputPeople for all tasks
+      await prisma.projectTask.updateMany({
+        where: { id: { in: taskIds } },
+        data: { inputPeople: userIds.length },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          updatedTasks: taskIds.length,
+          assignedUsers: userIds.length,
+        },
+        message: `${userIds.length} pessoa(s) atribuida(s) a ${taskIds.length} tarefa(s)`,
       });
     } catch (error) {
       next(error);

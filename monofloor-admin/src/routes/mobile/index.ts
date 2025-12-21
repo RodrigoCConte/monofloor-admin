@@ -13,6 +13,7 @@ import {
   emitBackInArea,
   emitBatteryCritical,
   emitLunchLeavingPrompt,
+  emitPunctualityMultiplier,
 } from '../../services/socket.service';
 import { isLunchTime } from '../../services/lunch-scheduler.service';
 import { sendRequestNotification } from '../../services/whatsapp.service';
@@ -723,36 +724,60 @@ router.post(
       });
 
       // =============================================
-      // XP REWARD: 100 XP por check-in (com multiplicador de pontualidade)
+      // XP REWARD: 100 XP APENAS no PRIMEIRO check-in do dia
+      // Multiplicador de pontualidade aplicado ao XP base
       // =============================================
       const XP_CHECKIN_BASE = 100;
+      let XP_CHECKIN = 0;
+      let updatedUser = { xpTotal: user?.xpTotal || 0, level: 1, punctualityStreak: punctualityResult.newStreak, punctualityMultiplier: punctualityResult.newMultiplier };
 
-      // Apply punctuality multiplier to check-in XP
-      const currentMultiplier = punctualityResult.newMultiplier;
-      const XP_CHECKIN = Math.round(XP_CHECKIN_BASE * currentMultiplier);
+      // Só dá XP no primeiro check-in do dia
+      if (punctualityResult.isFirstOfDay) {
+        // Apply punctuality multiplier to check-in XP
+        const currentMultiplier = punctualityResult.newMultiplier;
+        XP_CHECKIN = Math.round(XP_CHECKIN_BASE * currentMultiplier);
 
-      // Criar transação de XP
-      await prisma.xpTransaction.create({
-        data: {
+        // Criar transação de XP
+        await prisma.xpTransaction.create({
+          data: {
+            userId: req.user!.sub,
+            amount: XP_CHECKIN,
+            type: 'CHECKIN',
+            reason: currentMultiplier > 1
+              ? `Primeiro check-in do dia (${currentMultiplier.toFixed(1)}x pontualidade)`
+              : `Primeiro check-in do dia`,
+            checkinId: checkin.id,
+            projectId,
+          },
+        });
+
+        // Atualizar XP total do usuário
+        updatedUser = await prisma.user.update({
+          where: { id: req.user!.sub },
+          data: {
+            xpTotal: { increment: XP_CHECKIN },
+          },
+          select: { xpTotal: true, level: true, punctualityStreak: true, punctualityMultiplier: true },
+        });
+
+        // Emitir notificação de pontualidade/multiplicador via Socket
+        emitPunctualityMultiplier({
           userId: req.user!.sub,
-          amount: XP_CHECKIN,
-          type: 'CHECKIN',
-          reason: currentMultiplier > 1
-            ? `Check-in na obra ${checkin.project.cliente || checkin.project.title} (${currentMultiplier}x)`
-            : `Check-in na obra ${checkin.project.cliente || checkin.project.title}`,
-          checkinId: checkin.id,
-          projectId,
-        },
-      });
+          userName: user?.name || 'Aplicador',
+          multiplier: currentMultiplier,
+          streak: punctualityResult.newStreak,
+          xpEarned: XP_CHECKIN,
+          xpBase: XP_CHECKIN_BASE,
+          isPunctual: punctualityResult.isPunctual ?? true,
+          minutesLate: punctualityResult.minutesLate ?? 0,
+          streakBroken: punctualityResult.streakBroken,
+          timestamp: new Date(),
+        });
 
-      // Atualizar XP total do usuário
-      const updatedUser = await prisma.user.update({
-        where: { id: req.user!.sub },
-        data: {
-          xpTotal: { increment: XP_CHECKIN },
-        },
-        select: { xpTotal: true, level: true, punctualityStreak: true, punctualityMultiplier: true },
-      });
+        console.log(`[XP] First check-in of day for user ${req.user!.sub}: +${XP_CHECKIN} XP (${currentMultiplier}x multiplier)`);
+      } else {
+        console.log(`[XP] Not first check-in of day for user ${req.user!.sub}, no XP awarded`);
+      }
 
       // Update UserLocation to sync with checkin (for map)
       if (latitude && longitude) {
@@ -2290,19 +2315,26 @@ router.post(
         throw new AppError('Voce nao esta atribuido a este projeto', 403, 'NOT_ASSIGNED');
       }
 
-      // Get user info
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          name: true,
-          cpf: true,
-          phone: true,
+      // Get ALL active team members for this project (not just the current user)
+      const teamMembers = await prisma.projectAssignment.findMany({
+        where: {
+          projectId,
+          isActive: true,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              cpf: true,
+              phone: true,
+            },
+          },
         },
       });
 
-      if (!user) {
-        throw new AppError('Usuario nao encontrado', 404, 'USER_NOT_FOUND');
+      if (teamMembers.length === 0) {
+        throw new AppError('Nenhum membro ativo neste projeto', 404, 'NO_TEAM_MEMBERS');
       }
 
       // Get project info with responsible phones
@@ -2328,16 +2360,17 @@ router.post(
       // Import and call sendEntryRequest
       const { sendEntryRequest } = await import('../../services/whatsapp.service');
 
+      // Send ALL team members' info (not just the requesting user)
       const result = await sendEntryRequest({
         projectName: project.title,
         projectAddress: project.endereco || 'Endereco nao informado',
         responsiblePhones: project.responsiblePhones,
-        applicators: [{
-          name: user.name,
-          cpf: user.cpf || 'CPF nao informado',
-          phone: user.phone || undefined,
-          role: assignment.projectRole || 'APLICADOR_I',
-        }],
+        applicators: teamMembers.map((member) => ({
+          name: member.user.name,
+          cpf: member.user.cpf || 'CPF nao informado',
+          phone: member.user.phone || undefined,
+          role: member.projectRole || 'APLICADOR_I',
+        })),
       });
 
       if (!result.success) {

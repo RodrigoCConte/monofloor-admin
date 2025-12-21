@@ -109,6 +109,7 @@ model User {
   reportReminders       ReportReminder[]
   absenceNotices        AbsenceNotice[]
   unreportedAbsences    UnreportedAbsence[]
+  taskAssignments       TaskAssignment[]
 
   @@map("users")
 }
@@ -1146,11 +1147,27 @@ model ProjectTask {
 
   // Relations
   completions     TaskCompletion[]
+  assignedUsers   TaskAssignment[]
 
   @@index([projectId, sortOrder])
   @@index([projectId, status])
   @@index([projectId, publishedToApp])
   @@map("project_tasks")
+}
+
+// Atribuição de usuários a tarefas (quem vai fazer cada tarefa)
+model TaskAssignment {
+  id              String      @id @default(uuid())
+  projectTaskId   String      @map("project_task_id")
+  projectTask     ProjectTask @relation(fields: [projectTaskId], references: [id], onDelete: Cascade)
+  userId          String      @map("user_id")
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedAt      DateTime    @default(now()) @map("assigned_at")
+
+  @@unique([projectTaskId, userId])
+  @@index([projectTaskId])
+  @@index([userId])
+  @@map("task_assignments")
 }
 
 // Tipos de tarefa padrão do sistema STELION

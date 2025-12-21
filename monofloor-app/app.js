@@ -1236,6 +1236,42 @@ function initSocketConnection() {
 
         console.log('[GPS] Auto-checkout complete - UI updated, state cleared');
     });
+
+    // Listen for punctuality multiplier notification (first check-in of day)
+    socket.on('punctuality:multiplier', (data) => {
+        console.log('[Socket] Punctuality multiplier received:', data);
+
+        // Only show notification if it's for the current user
+        const currentUserId = getCurrentUserId();
+        if (data.userId !== currentUserId) {
+            console.log('[Socket] Ignoring punctuality notification for other user');
+            return;
+        }
+
+        // Show the punctuality/multiplier notification
+        showPunctualityNotification(data);
+
+        // Update local user data with new streak/multiplier
+        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+        userData.punctualityStreak = data.streak;
+        userData.punctualityMultiplier = data.multiplier;
+        localStorage.setItem('userData', JSON.stringify(userData));
+
+        // Show browser notification
+        if (data.isPunctual) {
+            showBrowserNotification(
+                `Pontualidade ${data.multiplier.toFixed(1)}x!`,
+                `+${data.xpEarned} XP - ${data.streak} dias consecutivos`,
+                { type: 'punctuality:multiplier', multiplier: data.multiplier }
+            );
+        } else if (data.streakBroken) {
+            showBrowserNotification(
+                'Sequência quebrada',
+                `Você chegou ${data.minutesLate} minutos atrasado. Multiplicador resetado.`,
+                { type: 'punctuality:broken' }
+            );
+        }
+    });
 }
 
 // =============================================
@@ -2017,6 +2053,155 @@ function showXPLoss(amount, reason = '') {
 }
 
 // =============================================
+// PUNCTUALITY NOTIFICATION (Multiplier celebration)
+// =============================================
+
+/**
+ * Show punctuality/multiplier notification
+ * Called when user does their first check-in of the day
+ * @param {Object} data - Punctuality data from socket
+ * @param {number} data.multiplier - Current multiplier (e.g., 1.5)
+ * @param {number} data.streak - Consecutive days streak
+ * @param {number} data.xpEarned - Total XP earned with multiplier
+ * @param {number} data.xpBase - Base XP before multiplier
+ * @param {boolean} data.isPunctual - If check-in was on time
+ * @param {number} data.minutesLate - Minutes late (if not punctual)
+ * @param {boolean} data.streakBroken - If streak was broken
+ */
+function showPunctualityNotification(data) {
+    const { multiplier, streak, xpEarned, xpBase, isPunctual, minutesLate, streakBroken } = data;
+
+    // Remove any existing punctuality overlay
+    const existingOverlay = document.querySelector('.punctuality-overlay');
+    if (existingOverlay) {
+        existingOverlay.remove();
+    }
+
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = streakBroken ? 'punctuality-overlay punctuality-broken' : 'punctuality-overlay punctuality-success';
+
+    if (streakBroken) {
+        // Streak broken - show reset notification
+        overlay.innerHTML = `
+            <div class="punctuality-container">
+                <div class="punctuality-icon-container">
+                    <div class="punctuality-icon-bg broken"></div>
+                    <div class="punctuality-icon-main">😔</div>
+                    <div class="punctuality-icon-clock">⏰</div>
+                </div>
+                <div class="punctuality-title broken">Sequência Quebrada</div>
+                <div class="punctuality-subtitle">
+                    Você chegou ${minutesLate} minutos atrasado
+                </div>
+                <div class="punctuality-multiplier-container broken">
+                    <div class="punctuality-multiplier-value">1.0x</div>
+                    <div class="punctuality-multiplier-label">Multiplicador resetado</div>
+                </div>
+                <div class="punctuality-xp-earned">
+                    <span class="xp-value">+${xpEarned}</span>
+                    <span class="xp-label">XP</span>
+                </div>
+                <div class="punctuality-tip">
+                    Chegue no horário amanhã para recomeçar sua sequência!
+                </div>
+                <button class="punctuality-continue-btn">Entendi</button>
+            </div>
+        `;
+    } else {
+        // Success - show celebration
+        const fireEmojis = Array.from({ length: streak > 1 ? Math.min(streak, 7) : 0 }, () => '🔥').join('');
+        const multiplierText = multiplier.toFixed(1);
+
+        // Generate confetti for success (cyan/blue theme)
+        const confettiColors = ['#06b6d4', '#0ea5e9', '#3b82f6', '#8b5cf6', '#22c55e'];
+        const confettiHtml = Array.from({ length: 25 }, (_, i) => {
+            const left = Math.random() * 100;
+            const delay = Math.random() * 0.5;
+            const duration = 1.5 + Math.random() * 1;
+            const color = confettiColors[Math.floor(Math.random() * confettiColors.length)];
+            const size = 4 + Math.random() * 5;
+            const type = Math.random() > 0.5 ? 'confetti-rect' : 'confetti-circle';
+            return `<div class="punctuality-confetti ${type}" style="left: ${left}%; background: ${color}; width: ${size}px; height: ${size * (type === 'confetti-rect' ? 0.4 : 1)}px; animation-delay: ${delay}s; animation-duration: ${duration}s;"></div>`;
+        }).join('');
+
+        // Generate rings (cyan theme)
+        const ringsHtml = Array.from({ length: 2 }, (_, i) => {
+            return `<div class="punctuality-ring" style="animation-delay: ${i * 0.3}s;"></div>`;
+        }).join('');
+
+        // Floating clock emojis
+        const floatingClocksHtml = Array.from({ length: 4 }, (_, i) => {
+            const left = 20 + Math.random() * 60;
+            const delay = Math.random() * 0.3;
+            return `<div class="punctuality-floating-clock" style="left: ${left}%; animation-delay: ${delay}s;">⏰</div>`;
+        }).join('');
+
+        overlay.innerHTML = `
+            <div class="punctuality-container">
+                <div class="punctuality-rings-container">${ringsHtml}</div>
+                <div class="punctuality-rays"></div>
+                <div class="punctuality-glow"></div>
+                <div class="punctuality-icon-container">
+                    <div class="punctuality-icon-bg"></div>
+                    <div class="punctuality-icon-main">⏰</div>
+                    ${streak > 1 ? '<div class="punctuality-icon-fire">🔥</div>' : ''}
+                </div>
+                <div class="punctuality-title">Pontualidade!</div>
+                <div class="punctuality-multiplier-container">
+                    <div class="punctuality-multiplier-badge">
+                        <div class="punctuality-multiplier-value">${multiplierText}x</div>
+                    </div>
+                    <div class="punctuality-multiplier-label">Multiplicador de XP</div>
+                </div>
+                ${streak > 1 ? `
+                <div class="punctuality-streak">
+                    <span class="streak-fire">${fireEmojis}</span>
+                    <span class="streak-text">${streak} dias consecutivos</span>
+                </div>
+                ` : ''}
+                <div class="punctuality-xp-breakdown">
+                    <div class="xp-base">${xpBase} XP base</div>
+                    <div class="xp-multiplied">× ${multiplierText}</div>
+                    <div class="xp-equals">=</div>
+                    <div class="xp-total">+${xpEarned} XP</div>
+                </div>
+                <button class="punctuality-continue-btn">Continuar</button>
+                <div class="punctuality-confetti-container">${confettiHtml}</div>
+                <div class="punctuality-floating-clocks-container">${floatingClocksHtml}</div>
+            </div>
+        `;
+    }
+
+    // Add to body
+    document.body.appendChild(overlay);
+
+    // Close on button click
+    const closeOverlay = () => {
+        overlay.style.animation = 'fadeOut 0.5s ease forwards';
+        setTimeout(() => overlay.remove(), 500);
+    };
+
+    overlay.querySelector('.punctuality-continue-btn').addEventListener('click', closeOverlay);
+
+    // Vibration pattern
+    if ('vibrate' in navigator) {
+        if (streakBroken) {
+            // Sad vibration for broken streak
+            navigator.vibrate([100, 50, 100]);
+        } else {
+            // Celebratory vibration for punctuality
+            navigator.vibrate([50, 30, 50, 30, 80, 50, 120]);
+        }
+    }
+
+    console.log(`[Punctuality] ${streakBroken ? 'Streak broken' : 'Success'} - ${multiplier}x multiplier, ${streak} day streak, +${xpEarned} XP`);
+}
+
+// Expose punctuality notification for testing
+window.showPunctualityNotification = showPunctualityNotification;
+
+// =============================================
 // CAMPAIGN WINNER ANIMATION (Victory celebration)
 // =============================================
 
@@ -2657,12 +2842,19 @@ function getInitials(name) {
 }
 
 // Render avatar (photo or initials)
-function renderAvatar(photoUrl, name, size = 40) {
-    const photo = getPhotoUrl(photoUrl);
+// If userId is provided, will try to use cached photo first
+function renderAvatar(photoUrl, name, size = 40, userId = null) {
+    // Try to use cached photo if no photoUrl but we have userId
+    let effectivePhotoUrl = photoUrl;
+    if (!photoUrl && userId) {
+        effectivePhotoUrl = getCachedPhoto(userId);
+    }
+
+    const photo = getPhotoUrl(effectivePhotoUrl);
     const initials = getInitials(name);
 
     if (photo) {
-        return `<img src="${photo}" alt="Avatar" class="avatar-img" style="width: ${size}px; height: ${size}px; border-radius: 50%; object-fit: cover;">`;
+        return `<img src="${photo}" alt="Avatar" class="avatar-img" style="width: ${size}px; height: ${size}px; border-radius: 50%; object-fit: cover;" loading="lazy">`;
     }
     return initials;
 }
@@ -4222,19 +4414,11 @@ async function compressImage(file, options = {}) {
                     return base64;
                 };
 
-                // Converter para blob e depois para File
-                canvas.toBlob((blob) => {
-                    if (!blob) {
-                        reject(new Error('Erro ao comprimir imagem'));
-                        return;
-                    }
-                    const compressedFile = new File([blob], file.name || 'photo.jpg', {
-                        type: 'image/jpeg',
-                        lastModified: Date.now()
-                    });
-                    console.log(`Imagem comprimida: ${img.width}x${img.height} -> ${Math.round(width)}x${Math.round(height)}, ${Math.round(blob.size / 1024)}KB`);
-                    resolve(compressedFile);
-                }, 'image/jpeg', quality);
+                // Comprimir e retornar como base64
+                const compressedBase64 = tryCompress(quality);
+                const sizeKB = (compressedBase64.length * 0.75) / 1024;
+                console.log(`Imagem comprimida: ${img.width}x${img.height} -> ${Math.round(width)}x${Math.round(height)}, ${Math.round(sizeKB)}KB`);
+                resolve(compressedBase64);
             };
             img.onerror = () => reject(new Error('Erro ao carregar imagem'));
             img.src = e.target.result;
@@ -4583,6 +4767,13 @@ function saveFeedPostsToCache() {
             imageUrl: post.imageUrl && post.imageUrl.startsWith('data:') ? null : post.imageUrl
         }));
         localStorage.setItem('feedPostsCache', JSON.stringify(postsForCache));
+
+        // Cache user photos separately for instant avatar loading
+        feedPosts.forEach(post => {
+            if (post.userId && post.userPhotoUrl) {
+                cachePhoto(post.userId, post.userPhotoUrl);
+            }
+        });
     } catch (e) {
         console.warn('Erro ao salvar cache do feed:', e);
     }
@@ -4810,11 +5001,25 @@ async function publishPost() {
     showPublishingModal(imageBase64);
 
     try {
-        // Preparar dados do post (só inclui projectId se for válido)
-        const postData = {
-            text: textContent || null,
-            imageBase64: imageBase64,
-        };
+        // Preparar dados do post (só inclui campos com valores válidos)
+        const postData = {};
+
+        // Só incluir texto se existir
+        if (textContent) {
+            postData.text = textContent;
+        }
+
+        // Só incluir imagem se for uma string base64 válida
+        if (imageBase64 && typeof imageBase64 === 'string' && imageBase64.length > 0 && imageBase64.startsWith('data:image/')) {
+            postData.imageBase64 = imageBase64;
+        } else if (imageBase64) {
+            // Log para debug se imagem estiver em formato inválido
+            console.warn('imageBase64 em formato inválido:', {
+                type: typeof imageBase64,
+                length: imageBase64?.length,
+                preview: typeof imageBase64 === 'string' ? imageBase64.substring(0, 50) : 'N/A'
+            });
+        }
 
         // Só adiciona projectId se for um UUID válido (não 'BEFORE_APP' ou outro valor especial)
         // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
@@ -4826,7 +5031,9 @@ async function publishPost() {
         console.log('Enviando post:', {
             hasText: !!postData.text,
             hasImage: !!postData.imageBase64,
-            projectId: postData.projectId || 'não definido'
+            projectId: postData.projectId || 'não definido',
+            textLength: postData.text?.length || 0,
+            imageLength: postData.imageBase64?.length || 0
         });
 
         // Enviar para o servidor
@@ -4842,6 +5049,13 @@ async function publishPost() {
         const result = await response.json();
 
         if (!response.ok) {
+            // Show detailed validation errors if available
+            const errorDetails = result.error?.details;
+            if (errorDetails && Array.isArray(errorDetails)) {
+                const detailsMsg = errorDetails.map(d => `${d.path}: ${d.msg}`).join(', ');
+                console.error('Validation details:', errorDetails);
+                throw new Error(`Erro de validacao: ${detailsMsg}`);
+            }
             throw new Error(result.error?.message || 'Erro ao publicar');
         }
 
@@ -4912,7 +5126,7 @@ function renderFeed() {
             const timeAgo = getTimeAgo(post.createdAt);
             const likedClass = post.liked ? 'liked' : '';
             const likesText = post.likes === 1 ? '1 curtida' : `${post.likes} curtidas`;
-            const avatarContent = renderAvatar(post.userPhotoUrl, post.userName, 40);
+            const avatarContent = renderAvatar(post.userPhotoUrl, post.userName, 40, post.userId);
             const commentsCount = post.commentsList?.length || post.comments || 0;
             const isOwnPost = post.userId === currentUserId;
 
@@ -5095,7 +5309,7 @@ function renderComments() {
     } else {
         commentsList.innerHTML = post.commentsList.map(comment => {
             const timeAgo = getTimeAgo(comment.createdAt);
-            const avatarContent = renderAvatar(comment.userPhotoUrl, comment.userName, 36);
+            const avatarContent = renderAvatar(comment.userPhotoUrl, comment.userName, 36, comment.userId);
             return `
                 <div class="comment">
                     <div class="comment-avatar">${avatarContent}</div>
@@ -6977,7 +7191,46 @@ async function submitReport() {
 // =============================================
 let cachedProfile = null;
 const PROFILE_CACHE_KEY = 'profileCache';
-const PROFILE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const PHOTO_CACHE_KEY = 'photosCache'; // Dedicated cache for profile photos
+
+/**
+ * Cache a photo URL/base64 by ID (for instant loading)
+ * Used for profile photos and feed user avatars
+ */
+function cachePhoto(userId, photoUrl) {
+    if (!photoUrl || !userId) return;
+    try {
+        const cache = JSON.parse(localStorage.getItem(PHOTO_CACHE_KEY) || '{}');
+        cache[userId] = {
+            url: photoUrl,
+            timestamp: Date.now()
+        };
+        // Keep only last 50 photos to avoid storage overflow
+        const entries = Object.entries(cache);
+        if (entries.length > 50) {
+            const sorted = entries.sort((a, b) => b[1].timestamp - a[1].timestamp);
+            const trimmed = Object.fromEntries(sorted.slice(0, 50));
+            localStorage.setItem(PHOTO_CACHE_KEY, JSON.stringify(trimmed));
+        } else {
+            localStorage.setItem(PHOTO_CACHE_KEY, JSON.stringify(cache));
+        }
+    } catch (e) {
+        // Storage full or other error
+    }
+}
+
+/**
+ * Get cached photo URL for a user
+ */
+function getCachedPhoto(userId) {
+    if (!userId) return null;
+    try {
+        const cache = JSON.parse(localStorage.getItem(PHOTO_CACHE_KEY) || '{}');
+        return cache[userId]?.url || null;
+    } catch (e) {
+        return null;
+    }
+}
 
 /**
  * Load profile with cache-first strategy
@@ -7027,6 +7280,8 @@ async function loadProfile() {
 
 /**
  * Get profile from localStorage cache
+ * ALWAYS returns cached data if available (stale-while-revalidate pattern)
+ * Background fetch will update the cache
  */
 function getProfileFromCache() {
     try {
@@ -7034,12 +7289,11 @@ function getProfileFromCache() {
         if (!cacheData) return null;
 
         const { profile, timestamp } = JSON.parse(cacheData);
-        const age = Date.now() - timestamp;
 
-        // Return even if stale (we'll update in background)
-        // But if very old (>1 hour), prefer fresh fetch
-        if (age > 60 * 60 * 1000) return null;
-
+        // ALWAYS return cached profile, even if stale
+        // The background fetch in loadProfile() will update it
+        // This ensures instant loading on app open
+        console.log(`[Cache] Profile from cache (age: ${Math.round((Date.now() - timestamp) / 60000)} min)`);
         return profile;
     } catch (e) {
         return null;
@@ -7057,6 +7311,11 @@ function saveProfileToCache(profile) {
         };
         localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(cacheData));
         localStorage.setItem('user', JSON.stringify(profile));
+
+        // Also cache profile photo separately for instant avatar loading
+        if (profile.id && profile.photoUrl) {
+            cachePhoto(profile.id, profile.photoUrl);
+        }
     } catch (e) {
         console.log('Failed to cache profile:', e);
     }

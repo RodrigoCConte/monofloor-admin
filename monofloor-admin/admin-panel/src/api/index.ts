@@ -136,6 +136,13 @@ export const projectsApi = {
     api.get(`/api/admin/projects/${projectId}/tasks/stats`),
   publishTasks: (projectId: string) =>
     api.post(`/api/admin/projects/${projectId}/tasks/publish`),
+  // Task assignments
+  getTaskAssignments: (projectId: string, taskId: string) =>
+    api.get(`/api/admin/projects/${projectId}/tasks/${taskId}/assignments`),
+  updateTaskAssignments: (projectId: string, taskId: string, userIds: string[]) =>
+    api.put(`/api/admin/projects/${projectId}/tasks/${taskId}/assignments`, { userIds }),
+  bulkUpdateTaskAssignments: (projectId: string, taskIds: string[], userIds: string[]) =>
+    api.put(`/api/admin/projects/${projectId}/tasks/bulk-assignments`, { taskIds, userIds }),
 };
 
 // Tasks API (standalone for task-types)
@@ -177,6 +184,20 @@ export const contributionsApi = {
   getPendingCount: () => api.get('/api/admin/contributions/pending-count'),
   approve: (id: string) => api.post(`/api/admin/contributions/${id}/approve`),
   reject: (id: string) => api.post(`/api/admin/contributions/${id}/reject`),
+};
+
+// Help Requests API
+export const helpRequestsApi = {
+  getAll: (params?: { status?: string; type?: string; page?: number; limit?: number }) =>
+    api.get('/api/admin/help-requests', { params }),
+  getPendingCount: () => api.get('/api/admin/help-requests/pending-count'),
+  getById: (id: string) => api.get(`/api/admin/help-requests/${id}`),
+  updateStatus: (id: string, status: string, adminNotes?: string) =>
+    api.put(`/api/admin/help-requests/${id}`, { status, adminNotes }),
+  resolve: (id: string, adminNotes?: string) =>
+    api.post(`/api/admin/help-requests/${id}/resolve`, { adminNotes }),
+  cancel: (id: string, adminNotes?: string) =>
+    api.post(`/api/admin/help-requests/${id}/cancel`, { adminNotes }),
 };
 
 // Campaigns API

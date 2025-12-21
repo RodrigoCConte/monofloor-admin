@@ -340,6 +340,30 @@ export function emitNotificationToUser(userId: string, data: {
 }
 
 /**
+ * Emit punctuality multiplier event to a user
+ * Triggered when user does a punctual first check-in of the day
+ */
+export function emitPunctualityMultiplier(data: {
+  userId: string;
+  userName: string;
+  multiplier: number;
+  streak: number;
+  xpEarned: number;
+  xpBase: number;
+  isPunctual: boolean;
+  minutesLate: number;
+  streakBroken: boolean;
+  timestamp: Date;
+}): void {
+  if (io) {
+    io.to(`user:${data.userId}`).emit('punctuality:multiplier', data);
+    // Also notify admin
+    io.to('admin').emit('punctuality:multiplier', data);
+    console.log(`[Socket] Emitted punctuality:multiplier to user:${data.userId} - ${data.multiplier}x (${data.streak} dias)`);
+  }
+}
+
+/**
  * Emit GPS auto-checkout event to a user
  * Triggered when user has GPS off for 5+ minutes (10 confirmations)
  */

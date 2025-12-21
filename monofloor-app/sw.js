@@ -3,7 +3,7 @@
  * Handles push notifications, background sync, and IMAGE CACHING
  */
 
-const CACHE_NAME = 'monofloor-v3'; // Bump version to force cache refresh
+const CACHE_NAME = 'monofloor-v5'; // v5: Aggressive stale-while-revalidate for instant loading
 const IMAGE_CACHE_NAME = 'monofloor-images-v1';
 const API_CACHE_NAME = 'monofloor-api-v1';
 
@@ -63,9 +63,10 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Cache API responses for profile data (short TTL)
+    // Cache API responses for profile and feed (longer TTL for instant loading)
     if (isProfileApiRequest(url)) {
-        event.respondWith(staleWhileRevalidate(event.request, API_CACHE_NAME, 5 * 60 * 1000)); // 5 min TTL
+        // 30 min TTL - but always return cached first, update in background
+        event.respondWith(staleWhileRevalidate(event.request, API_CACHE_NAME, 30 * 60 * 1000));
         return;
     }
 });
@@ -113,6 +114,7 @@ function isProfileApiRequest(url) {
 /**
  * Cache-first strategy for images
  * Returns cached version immediately, updates cache in background
+ * Handles CORS and opaque responses properly
  */
 async function cacheFirstImage(request) {
     const cache = await caches.open(IMAGE_CACHE_NAME);
@@ -126,10 +128,24 @@ async function cacheFirstImage(request) {
 
     // Not in cache, fetch and cache
     try {
-        const networkResponse = await fetch(request);
-        if (networkResponse.ok) {
-            // Clone before caching (response can only be used once)
-            cache.put(request, networkResponse.clone());
+        // Use no-cors mode for cross-origin images to avoid blocking
+        const fetchRequest = new Request(request.url, {
+            mode: 'cors',
+            credentials: 'omit'
+        });
+
+        const networkResponse = await fetch(fetchRequest).catch(() => {
+            // If CORS fails, try with no-cors (will be opaque)
+            return fetch(new Request(request.url, { mode: 'no-cors' }));
+        });
+
+        // Only cache successful responses (not opaque)
+        // Opaque responses have status 0 and can't be inspected
+        if (networkResponse.ok || networkResponse.status === 0) {
+            // Don't cache opaque responses (status 0) as they cause issues
+            if (networkResponse.status !== 0) {
+                cache.put(request, networkResponse.clone());
+            }
         }
         return networkResponse;
     } catch (error) {
@@ -154,26 +170,27 @@ function updateCacheInBackground(request, cache) {
 
 /**
  * Stale-while-revalidate strategy for API data
- * Returns cached version immediately (if fresh), updates in background
+ * ALWAYS returns cached version immediately (for instant loading)
+ * Updates in background, regardless of freshness
  */
 async function staleWhileRevalidate(request, cacheName, maxAge) {
     const cache = await caches.open(cacheName);
     const cachedResponse = await cache.match(request);
 
-    // Check if cached response is still fresh
+    // ALWAYS update in background (non-blocking)
+    updateApiCacheInBackground(request, cache);
+
+    // If we have cached data, return it IMMEDIATELY (instant loading)
     if (cachedResponse) {
         const cachedDate = new Date(cachedResponse.headers.get('sw-cached-at') || 0);
         const age = Date.now() - cachedDate.getTime();
-
-        if (age < maxAge) {
-            // Fresh cache - return it and update in background
-            updateApiCacheInBackground(request, cache);
-            return cachedResponse;
-        }
+        console.log(`[SW] Returning cached API response (age: ${Math.round(age / 60000)} min)`);
+        return cachedResponse;
     }
 
-    // Stale or no cache - fetch fresh
+    // No cache - must fetch (first load)
     try {
+        console.log('[SW] No cache, fetching from network:', request.url);
         const networkResponse = await fetch(request);
         if (networkResponse.ok) {
             // Add timestamp header for freshness check
@@ -189,10 +206,7 @@ async function staleWhileRevalidate(request, cacheName, maxAge) {
         }
         return networkResponse;
     } catch (error) {
-        // Network failed - return stale cache if available
-        if (cachedResponse) {
-            return cachedResponse;
-        }
+        console.log('[SW] Network failed and no cache available');
         throw error;
     }
 }

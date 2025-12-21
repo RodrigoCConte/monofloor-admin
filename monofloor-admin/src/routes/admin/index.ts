@@ -7,6 +7,7 @@ import { reportsRoutes } from './reports.routes';
 import simpleVideoReportsRoutes from './simple-video-reports.routes';
 import { locationsRoutes } from './locations.routes';
 import { contributionsRoutes } from './contributions.routes';
+import { helpRequestsRoutes } from './help-requests.routes';
 import { campaignsRoutes } from './campaigns.routes';
 import { badgesRoutes } from './badges.routes';
 import { notificationsRoutes } from './notifications.routes';
@@ -21,6 +22,7 @@ router.use('/reports', reportsRoutes);
 router.use('/reports', simpleVideoReportsRoutes);  // Simple video reports (new!)
 router.use('/locations', locationsRoutes);
 router.use('/contributions', contributionsRoutes);
+router.use('/help-requests', helpRequestsRoutes);
 router.use('/campaigns', campaignsRoutes);
 router.use('/badges', badgesRoutes);
 router.use('/notifications', notificationsRoutes);

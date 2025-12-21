@@ -13263,3 +13263,429 @@ body {
     }
 }
 
+
+/* =============================================
+   PUNCTUALITY NOTIFICATION STYLES
+   ============================================= */
+
+/* Base overlay */
+.punctuality-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10002;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    animation: punctualityFadeIn 0.4s ease forwards;
+    pointer-events: all;
+    overflow: hidden;
+}
+
+.punctuality-overlay.punctuality-success {
+    background: radial-gradient(ellipse at center, rgba(0, 30, 40, 0.95) 0%, rgba(0, 10, 20, 0.98) 100%);
+}
+
+.punctuality-overlay.punctuality-broken {
+    background: radial-gradient(ellipse at center, rgba(40, 20, 0, 0.95) 0%, rgba(20, 10, 0, 0.98) 100%);
+}
+
+@keyframes punctualityFadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+/* Container */
+.punctuality-container {
+    position: relative;
+    text-align: center;
+    animation: punctualityBounce 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    z-index: 10;
+    padding: 24px;
+}
+
+@keyframes punctualityBounce {
+    0% { transform: scale(0) rotate(-10deg); opacity: 0; }
+    50% { transform: scale(1.1) rotate(3deg); }
+    70% { transform: scale(0.95) rotate(-1deg); }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+/* Rings */
+.punctuality-rings-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.punctuality-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 80px;
+    height: 80px;
+    border: 3px solid rgba(6, 182, 212, 0.6);
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    animation: punctualityRingExpand 1.5s ease-out forwards infinite;
+}
+
+@keyframes punctualityRingExpand {
+    0% { transform: translate(-50%, -50%) scale(0); opacity: 1; border-width: 4px; }
+    100% { transform: translate(-50%, -50%) scale(4); opacity: 0; border-width: 1px; }
+}
+
+/* Rays */
+.punctuality-rays {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 280px;
+    height: 280px;
+    transform: translate(-50%, -50%);
+    background: conic-gradient(
+        from 0deg,
+        transparent 0deg,
+        rgba(6, 182, 212, 0.12) 10deg,
+        transparent 20deg,
+        transparent 30deg,
+        rgba(6, 182, 212, 0.12) 40deg,
+        transparent 50deg
+    );
+    animation: punctualityRaysSpin 10s linear infinite;
+    border-radius: 50%;
+}
+
+@keyframes punctualityRaysSpin {
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Glow */
+.punctuality-glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 140px;
+    height: 140px;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(6, 182, 212, 0.35) 0%, transparent 70%);
+    animation: punctualityGlowPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes punctualityGlowPulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+    50% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
+}
+
+/* Icon Container */
+.punctuality-icon-container {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 16px;
+}
+
+.punctuality-icon-bg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 90px;
+    height: 90px;
+    background: linear-gradient(135deg, #06b6d4 0%, #0284c7 100%);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 8px 30px rgba(6, 182, 212, 0.4),
+                0 0 60px rgba(6, 182, 212, 0.2);
+    animation: punctualityIconPulse 1.5s ease-in-out infinite;
+}
+
+.punctuality-icon-bg.broken {
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    box-shadow: 0 8px 30px rgba(249, 115, 22, 0.4),
+                0 0 60px rgba(249, 115, 22, 0.2);
+}
+
+@keyframes punctualityIconPulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.05); }
+}
+
+.punctuality-icon-main {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 48px;
+    z-index: 2;
+    animation: punctualityIconBob 2s ease-in-out infinite;
+}
+
+@keyframes punctualityIconBob {
+    0%, 100% { transform: translate(-50%, -50%) translateY(0); }
+    50% { transform: translate(-50%, -50%) translateY(-4px); }
+}
+
+.punctuality-icon-fire {
+    position: absolute;
+    top: -5px;
+    right: 0;
+    font-size: 28px;
+    animation: fireWiggle 0.5s ease-in-out infinite;
+}
+
+@keyframes fireWiggle {
+    0%, 100% { transform: rotate(-5deg); }
+    50% { transform: rotate(5deg); }
+}
+
+.punctuality-icon-clock {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    font-size: 24px;
+    opacity: 0.6;
+}
+
+/* Title */
+.punctuality-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #06b6d4;
+    margin-bottom: 8px;
+    text-shadow: 0 2px 10px rgba(6, 182, 212, 0.5);
+}
+
+.punctuality-title.broken {
+    color: #f97316;
+    text-shadow: 0 2px 10px rgba(249, 115, 22, 0.5);
+}
+
+.punctuality-subtitle {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 16px;
+}
+
+/* Multiplier */
+.punctuality-multiplier-container {
+    margin: 20px 0;
+}
+
+.punctuality-multiplier-container.broken {
+    opacity: 0.7;
+}
+
+.punctuality-multiplier-badge {
+    display: inline-block;
+    padding: 12px 28px;
+    background: linear-gradient(135deg, #06b6d4 0%, #0284c7 100%);
+    border-radius: 20px;
+    box-shadow: 0 4px 20px rgba(6, 182, 212, 0.4);
+    animation: multiplierPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes multiplierPulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 4px 20px rgba(6, 182, 212, 0.4); }
+    50% { transform: scale(1.05); box-shadow: 0 6px 30px rgba(6, 182, 212, 0.6); }
+}
+
+.punctuality-multiplier-value {
+    font-size: 36px;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.punctuality-broken .punctuality-multiplier-value {
+    font-size: 28px;
+    color: #f97316;
+}
+
+.punctuality-multiplier-label {
+    font-size: 13px;
+    color: #06b6d4;
+    margin-top: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.punctuality-broken .punctuality-multiplier-label {
+    color: #f97316;
+}
+
+/* Streak */
+.punctuality-streak {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 16px 0;
+    padding: 10px 20px;
+    background: rgba(6, 182, 212, 0.15);
+    border-radius: 20px;
+    border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.streak-fire {
+    font-size: 18px;
+}
+
+.streak-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+}
+
+/* XP Breakdown */
+.punctuality-xp-breakdown {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 20px 0;
+    font-size: 14px;
+    color: #888;
+}
+
+.punctuality-xp-breakdown .xp-base {
+    color: #888;
+}
+
+.punctuality-xp-breakdown .xp-multiplied {
+    color: #06b6d4;
+    font-weight: 600;
+}
+
+.punctuality-xp-breakdown .xp-equals {
+    color: #666;
+}
+
+.punctuality-xp-breakdown .xp-total {
+    font-size: 18px;
+    font-weight: 700;
+    color: #22c55e;
+}
+
+/* XP Earned (for broken streak) */
+.punctuality-xp-earned {
+    margin: 16px 0;
+}
+
+.punctuality-xp-earned .xp-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #22c55e;
+}
+
+.punctuality-xp-earned .xp-label {
+    font-size: 16px;
+    color: #22c55e;
+    margin-left: 4px;
+}
+
+/* Tip */
+.punctuality-tip {
+    font-size: 13px;
+    color: #666;
+    margin: 12px 0;
+    padding: 10px 16px;
+    background: rgba(249, 115, 22, 0.1);
+    border-radius: 12px;
+    border-left: 3px solid #f97316;
+}
+
+/* Continue Button */
+.punctuality-continue-btn {
+    margin-top: 20px;
+    padding: 14px 40px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #000;
+    background: linear-gradient(135deg, #06b6d4 0%, #0ea5e9 100%);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(6, 182, 212, 0.4);
+    transition: all 0.2s ease;
+}
+
+.punctuality-continue-btn:active {
+    transform: scale(0.98);
+    box-shadow: 0 2px 10px rgba(6, 182, 212, 0.3);
+}
+
+.punctuality-broken .punctuality-continue-btn {
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4);
+}
+
+/* Confetti */
+.punctuality-confetti-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.punctuality-confetti {
+    position: absolute;
+    top: -20px;
+    border-radius: 2px;
+    animation: punctualityConfettiFall 2s ease-out forwards;
+}
+
+.punctuality-confetti.confetti-circle {
+    border-radius: 50%;
+}
+
+@keyframes punctualityConfettiFall {
+    0% {
+        transform: translateY(0) rotate(0deg);
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(100vh) rotate(720deg);
+        opacity: 0;
+    }
+}
+
+/* Floating Clocks */
+.punctuality-floating-clocks-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.punctuality-floating-clock {
+    position: absolute;
+    bottom: 100%;
+    font-size: 24px;
+    animation: floatClockUp 2.5s ease-out forwards;
+}
+
+@keyframes floatClockUp {
+    0% {
+        transform: translateY(0) scale(0.5);
+        opacity: 0;
+    }
+    20% {
+        opacity: 1;
+        transform: translateY(-20vh) scale(1);
+    }
+    100% {
+        transform: translateY(-100vh) scale(0.8);
+        opacity: 0;
+    }
+}

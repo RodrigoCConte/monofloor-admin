@@ -114,6 +114,26 @@ const generatingTasks = ref(false);
 const selectedTask = ref<any>(null);
 const showTaskEditor = ref(false);
 
+// People selection for tasks (multi-select)
+const showPeopleModal = ref(false);
+const currentTaskForPeople = ref<any>(null);
+const selectedPeopleIds = ref<string[]>([]);
+const peopleSearchQuery = ref('');
+const replicateToBelow = ref(false);
+const savingPeopleAssignment = ref(false);
+
+// Filtered team members for people selection
+// Note: team members have properties at top level (id, name, photoUrl, etc.), not nested under 'user'
+const filteredTeamForPeople = computed(() => {
+  if (!team.value || team.value.length === 0) return [];
+  if (!peopleSearchQuery.value) return team.value;
+  const query = peopleSearchQuery.value.toLowerCase();
+  return team.value.filter((m: any) =>
+    m.name?.toLowerCase().includes(query) ||
+    m.username?.toLowerCase().includes(query)
+  );
+});
+
 // Available task types with colors for dropdown
 const availableTaskTypes = [
   { value: 'PREPARACAO', label: 'Preparacao', color: '#64748b' },
@@ -1792,6 +1812,128 @@ const deleteTask = async (taskId: string) => {
   }
 };
 
+// People selection for tasks
+const openPeopleModal = (task: any) => {
+  if (!task) return;
+  currentTaskForPeople.value = task;
+  // Initialize with current assigned users if any
+  // API returns { id, name, photoUrl, role, assignedAt } - so we use 'id' directly
+  selectedPeopleIds.value = (task.assignedUsers || [])
+    .map((au: any) => au.id || au.userId || au.user?.id)
+    .filter((id: any) => id);
+  peopleSearchQuery.value = '';
+  replicateToBelow.value = false;
+  showPeopleModal.value = true;
+
+  console.log('[DEBUG] openPeopleModal:', {
+    taskId: task.id,
+    taskTitle: task.title,
+    assignedUsers: task.assignedUsers,
+    selectedPeopleIds: selectedPeopleIds.value,
+    teamLoaded: team.value.length,
+    teamData: team.value.slice(0, 3).map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      photoUrl: m.photoUrl,
+      projectRole: m.projectRole,
+    })),
+  });
+};
+
+const closePeopleModal = () => {
+  showPeopleModal.value = false;
+  currentTaskForPeople.value = null;
+  selectedPeopleIds.value = [];
+  peopleSearchQuery.value = '';
+  replicateToBelow.value = false;
+};
+
+const togglePersonSelection = (userId: string) => {
+  console.log('[DEBUG] togglePersonSelection called with userId:', userId);
+  if (!userId) {
+    console.warn('[DEBUG] togglePersonSelection: userId is undefined/null!');
+    return;
+  }
+  const index = selectedPeopleIds.value.indexOf(userId);
+  if (index === -1) {
+    selectedPeopleIds.value.push(userId);
+  } else {
+    selectedPeopleIds.value.splice(index, 1);
+  }
+  console.log('[DEBUG] selectedPeopleIds after toggle:', [...selectedPeopleIds.value]);
+};
+
+const savePeopleAssignment = async () => {
+  if (!currentTaskForPeople.value) return;
+
+  savingPeopleAssignment.value = true;
+  try {
+    const projectId = route.params.id as string;
+    const taskId = currentTaskForPeople.value.id;
+
+    // Filter out any invalid IDs (undefined, null, empty strings)
+    const validUserIds = selectedPeopleIds.value.filter((id: any) =>
+      id && typeof id === 'string' && id.length > 0
+    );
+
+    console.log('[DEBUG] savePeopleAssignment:', {
+      projectId,
+      taskId,
+      selectedPeopleIds: selectedPeopleIds.value,
+      validUserIds,
+      replicateToBelow: replicateToBelow.value,
+      teamCount: team.value.length,
+      teamSample: team.value.slice(0, 2).map((m: any) => ({ id: m.id, name: m.name })),
+    });
+
+    if (replicateToBelow.value) {
+      // Find the index of current task and get all tasks from this one onwards
+      const taskIndex = tasks.value.findIndex((t: any) => t.id === taskId);
+      if (taskIndex !== -1) {
+        const taskIdsToUpdate = tasks.value.slice(taskIndex).map((t: any) => t.id);
+        console.log('[DEBUG] Bulk update:', { taskIdsToUpdate, validUserIds });
+        await projectsApi.bulkUpdateTaskAssignments(projectId, taskIdsToUpdate, validUserIds);
+      }
+    } else {
+      // Update only this task
+      console.log('[DEBUG] Single task update:', { taskId, validUserIds });
+      await projectsApi.updateTaskAssignments(projectId, taskId, validUserIds);
+    }
+
+    // Reload tasks to get updated assignments
+    await loadTasks();
+    closePeopleModal();
+  } catch (error: any) {
+    console.error('Error saving people assignment:', error);
+    console.error('[DEBUG] Error response:', error.response?.data);
+    const errData = error.response?.data?.error;
+    const errMsg = typeof errData === 'object' ? errData?.message : errData;
+    alert('Erro ao atribuir pessoas: ' + (errMsg || error.message || 'Erro desconhecido'));
+  } finally {
+    savingPeopleAssignment.value = false;
+  }
+};
+
+// Get assigned users for a task (for display)
+// Note: task.assignedUsers comes from API with { id, name, photoUrl, role, assignedAt } flat structure
+// team members also have flat structure (id, name, photoUrl directly, not nested under 'user')
+const getTaskAssignedUsers = (task: any) => {
+  if (!task || !task.assignedUsers || !Array.isArray(task.assignedUsers) || task.assignedUsers.length === 0) {
+    return [];
+  }
+  return task.assignedUsers.map((au: any) => {
+    if (!au) return { name: 'Desconhecido', id: '' };
+    // au already has flat structure: { id, name, photoUrl }
+    if (au.name) {
+      return au;
+    }
+    // Fallback: try to find in team by userId
+    const userId = au.userId || au.id;
+    const teamMember = team.value.find((m: any) => m.id === userId);
+    return teamMember || { name: 'Desconhecido', id: userId || '' };
+  }).filter((u: any) => u && u.name);
+};
+
 const generateTasks = async () => {
   if (!confirm('Gerar tarefas automaticamente baseado nas metragens e prazo do projeto?')) return;
 
@@ -3239,17 +3381,31 @@ onMounted(async () => {
                       </select>
                     </div>
 
-                    <!-- People Select - Único para todo o grupo -->
+                    <!-- People Select - Multi-select com modal -->
                     <div class="gantt-input-cell">
-                      <select
-                        :value="task.inputPeople || 0"
-                        @change="(e) => { task.inputPeople = Number((e.target as HTMLSelectElement).value); onInputChange(task); }"
-                        class="gantt-select-input"
-                        :class="{ 'input-disabled': !task.consumesResources }"
+                      <button
+                        type="button"
+                        class="people-select-btn"
+                        :class="{ 'input-disabled': !task.consumesResources, 'has-people': getTaskAssignedUsers(task).length > 0 }"
                         :disabled="!task.consumesResources"
+                        @click="openPeopleModal(task)"
                       >
-                        <option v-for="p in 11" :key="p-1" :value="p-1">{{ p-1 }}p</option>
-                      </select>
+                        <div class="people-avatars" v-if="getTaskAssignedUsers(task).length > 0">
+                          <div
+                            v-for="(person, idx) in getTaskAssignedUsers(task).slice(0, 3)"
+                            :key="person?.id || idx"
+                            class="mini-avatar"
+                            :title="person?.name || 'Aplicador'"
+                          >
+                            <img v-if="person?.photoUrl" :src="person.photoUrl" :alt="person?.name || ''" />
+                            <span v-else>{{ (person?.name || '?')[0]?.toUpperCase() || '?' }}</span>
+                          </div>
+                          <span v-if="getTaskAssignedUsers(task).length > 3" class="more-count">
+                            +{{ getTaskAssignedUsers(task).length - 3 }}
+                          </span>
+                        </div>
+                        <span class="people-count">{{ getTaskAssignedUsers(task).length || 0 }}p</span>
+                      </button>
                     </div>
 
                     <!-- Calculated Hours - Total para grupos -->
@@ -4101,6 +4257,90 @@ onMounted(async () => {
             {{ sendingEntryRequest ? 'Enviando...' : 'Enviar Solicitacao' }}
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- People Selection Modal for Tasks -->
+  <div v-if="showPeopleModal" class="modal-overlay" @click="closePeopleModal">
+    <div class="modal modal-lg" @click.stop>
+      <div class="modal-header">
+        <h3>Selecionar Equipe</h3>
+        <button class="modal-close" @click="closePeopleModal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- Task info -->
+        <div v-if="currentTaskForPeople" class="task-info-banner">
+          <div class="task-color-dot" :style="{ backgroundColor: currentTaskForPeople.color || '#c9a962' }"></div>
+          <span>{{ currentTaskForPeople.title }}</span>
+        </div>
+
+        <!-- Search bar -->
+        <div class="search-bar">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            type="text"
+            v-model="peopleSearchQuery"
+            class="search-input"
+            placeholder="Buscar aplicador..."
+          />
+        </div>
+
+        <!-- People list -->
+        <div class="people-selection-list">
+          <div v-if="filteredTeamForPeople.length === 0" class="empty-team">
+            <span v-if="team.length === 0">Nenhum membro na equipe do projeto</span>
+            <span v-else>Nenhum resultado encontrado</span>
+          </div>
+          <label
+            v-for="member in filteredTeamForPeople"
+            :key="member.id"
+            class="people-checkbox-item"
+            :class="{ 'selected': selectedPeopleIds.includes(member.id) }"
+          >
+            <input
+              type="checkbox"
+              :checked="selectedPeopleIds.includes(member.id)"
+              @change="togglePersonSelection(member.id)"
+            />
+            <div class="person-avatar">
+              <img v-if="member.photoUrl" :src="member.photoUrl" :alt="member.name" />
+              <span v-else>{{ (member.name || '?')[0].toUpperCase() }}</span>
+            </div>
+            <div class="person-info">
+              <span class="person-name">{{ member.name || 'Sem nome' }}</span>
+              <span class="person-role">{{ getRoleLabel(member.projectRole) }}</span>
+            </div>
+            <svg v-if="selectedPeopleIds.includes(member.id)" class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </label>
+        </div>
+
+        <!-- Replicate option -->
+        <label class="replicate-option">
+          <input type="checkbox" v-model="replicateToBelow" />
+          <span>Aplicar para todas as atividades abaixo desta</span>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="closePeopleModal">Cancelar</button>
+        <button
+          class="btn btn-primary"
+          @click="savePeopleAssignment"
+          :disabled="savingPeopleAssignment"
+        >
+          <div v-if="savingPeopleAssignment" class="btn-spinner"></div>
+          {{ savingPeopleAssignment ? 'Salvando...' : 'Confirmar' }}
+        </button>
       </div>
     </div>
   </div>
@@ -8092,5 +8332,225 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+}
+
+/* People Select Button for Gantt */
+.people-select-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 50px;
+  height: 32px;
+}
+
+.people-select-btn:hover:not(:disabled) {
+  background: rgba(201, 169, 98, 0.15);
+  border-color: rgba(201, 169, 98, 0.4);
+}
+
+.people-select-btn.has-people {
+  border-color: rgba(201, 169, 98, 0.3);
+  background: rgba(201, 169, 98, 0.1);
+}
+
+.people-select-btn.input-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.people-avatars {
+  display: flex;
+  align-items: center;
+}
+
+.mini-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #c9a962, #d4af37);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #000;
+  overflow: hidden;
+  margin-left: -6px;
+  border: 2px solid var(--bg-card);
+}
+
+.mini-avatar:first-child {
+  margin-left: 0;
+}
+
+.mini-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.more-count {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-left: 4px;
+}
+
+.people-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-color);
+}
+
+/* People Selection Modal */
+.task-info-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(201, 169, 98, 0.1);
+  border: 1px solid rgba(201, 169, 98, 0.2);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.task-info-banner span {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.people-selection-list {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.people-selection-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.people-selection-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.people-selection-list::-webkit-scrollbar-thumb {
+  background: rgba(201, 169, 98, 0.3);
+  border-radius: 3px;
+}
+
+.people-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.people-checkbox-item:hover {
+  background: rgba(201, 169, 98, 0.1);
+  border-color: rgba(201, 169, 98, 0.2);
+}
+
+.people-checkbox-item.selected {
+  background: rgba(201, 169, 98, 0.15);
+  border-color: rgba(201, 169, 98, 0.4);
+}
+
+.people-checkbox-item input[type="checkbox"] {
+  display: none;
+}
+
+.person-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #c9a962, #d4af37);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: #000;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.person-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.person-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.person-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.person-role {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.check-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--accent-color);
+  flex-shrink: 0;
+}
+
+.replicate-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.replicate-option:hover {
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.replicate-option input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #3b82f6;
+}
+
+.replicate-option span {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.empty-team {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 14px;
 }
 </style>
