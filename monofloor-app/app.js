@@ -6755,12 +6755,6 @@ async function submitReport() {
     const notesEl = document.getElementById('reportNotes');
     const notes = notesEl ? notesEl.value : '';
 
-    // Coletar tags selecionadas
-    const selectedTags = [];
-    document.querySelectorAll('.tag-item.selected').forEach(tag => {
-        selectedTags.push(tag.textContent.trim());
-    });
-
     try {
         const response = await fetch(`${API_URL}/api/mobile/reports`, {
             method: 'POST',
@@ -6770,8 +6764,7 @@ async function submitReport() {
             },
             body: JSON.stringify({
                 projectId,
-                notes,
-                tags: selectedTags
+                notes
             })
         });
 
@@ -6780,9 +6773,6 @@ async function submitReport() {
         if (data.success) {
             // Limpar form
             if (notesEl) notesEl.value = '';
-            document.querySelectorAll('.tag-item.selected').forEach(tag => {
-                tag.classList.remove('selected');
-            });
 
             // Se o usuário ainda está checado, fazer checkout automático
             console.log('[REPORT] Verificando checkout automático - isCheckedIn:', isCheckedIn, 'activeCheckinId:', activeCheckinId);
