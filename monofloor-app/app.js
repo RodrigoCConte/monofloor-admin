@@ -10465,24 +10465,40 @@ function showGPSWarningModal(secondsRemaining) {
 
     const modal = document.createElement('div');
     modal.id = 'gps-warning-modal';
-    modal.className = 'gps-checkout-modal active';
+    modal.className = 'gps-mobile-modal active';
     modal.innerHTML = `
-        <div class="gps-checkout-content">
-            <div class="gps-checkout-icon">⚠️</div>
-            <h3>GPS Desativado</h3>
-            <p>Seu check-out será feito automaticamente em <strong id="gps-countdown">${secondsRemaining}</strong> segundos.</p>
-            <p class="gps-subtitle">Ative o GPS para continuar trabalhando.</p>
+        <div class="gps-mobile-content warning">
+            <div class="gps-mobile-header">
+                <div class="gps-mobile-icon-wrapper warning">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                        <circle cx="12" cy="10" r="3"/>
+                        <line x1="4" y1="4" x2="20" y2="20" stroke="#ef4444" stroke-width="3"/>
+                    </svg>
+                </div>
+                <h3 class="gps-mobile-title">GPS Desativado</h3>
+            </div>
+            <div class="gps-mobile-body">
+                <div class="gps-countdown-circle">
+                    <span id="gps-countdown">${secondsRemaining}</span>
+                    <span class="gps-countdown-label">segundos</span>
+                </div>
+                <p class="gps-mobile-message">Seu check-out será realizado automaticamente</p>
+                <p class="gps-mobile-hint">Ative o GPS para continuar trabalhando</p>
+            </div>
         </div>
     `;
     document.body.appendChild(modal);
 
-    // Countdown
+    // Countdown with animation
     let remaining = secondsRemaining;
     const countdownInterval = setInterval(() => {
         remaining--;
         const countdownEl = document.getElementById('gps-countdown');
         if (countdownEl) {
             countdownEl.textContent = remaining;
+            countdownEl.classList.add('pulse');
+            setTimeout(() => countdownEl.classList.remove('pulse'), 200);
         }
         if (remaining <= 0) {
             clearInterval(countdownInterval);
@@ -10521,22 +10537,47 @@ function showGPSAutoCheckoutNotification(projectName) {
 
     const modal = document.createElement('div');
     modal.id = 'gps-autocheckout-modal';
-    modal.className = 'gps-checkout-modal active';
+    modal.className = 'gps-mobile-modal active';
     modal.innerHTML = `
-        <div class="gps-checkout-content">
-            <div class="gps-checkout-icon">🚫</div>
-            <h3>Check-out Automático Realizado</h3>
-            <p>${projectName}: <strong>Seu check-out automático foi realizado e suas horas no projeto não serão computadas.</strong></p>
-            <p class="gps-subtitle">GPS desativado por mais de 60 segundos.</p>
-            <button class="gps-checkout-btn" onclick="closeGPSAutoCheckoutModal()">Entendi</button>
+        <div class="gps-mobile-content checkout">
+            <div class="gps-mobile-header">
+                <div class="gps-mobile-icon-wrapper checkout">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M15 9l-6 6"/>
+                        <path d="M9 9l6 6"/>
+                    </svg>
+                </div>
+                <h3 class="gps-mobile-title">Check-out Realizado</h3>
+            </div>
+            <div class="gps-mobile-body">
+                <div class="gps-project-badge">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                        <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                    <span>${projectName}</span>
+                </div>
+                <p class="gps-mobile-message-checkout">Seu check-out automático foi realizado</p>
+                <p class="gps-mobile-warning">Suas horas não serão computadas</p>
+                <p class="gps-mobile-reason">GPS desativado por mais de 60 segundos</p>
+            </div>
+            <button class="gps-mobile-btn" onclick="closeGPSAutoCheckoutModal()">
+                <span>Entendi</span>
+            </button>
         </div>
     `;
     document.body.appendChild(modal);
 
-    // Auto-close after 10 seconds
+    // Vibrate if available
+    if (navigator.vibrate) {
+        navigator.vibrate([100, 50, 100, 50, 200]);
+    }
+
+    // Auto-close after 15 seconds
     setTimeout(() => {
         closeGPSAutoCheckoutModal();
-    }, 10000);
+    }, 15000);
 }
 
 /**
