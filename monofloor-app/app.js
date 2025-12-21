@@ -573,6 +573,15 @@ const LOCATION_INTERVAL_WITHOUT_CHECKIN = 5 * 60 * 1000; // 5 minutes when not c
 let isOnline = navigator.onLine;
 let pendingLocationUpdates = []; // Queue for offline updates
 
+// Offline Location Tracking with IndexedDB
+const LOCATION_DB_NAME = 'monofloorLocations';
+const LOCATION_DB_VERSION = 1;
+const LOCATION_STORE_NAME = 'pendingLocations';
+const GPS_LOG_STORE_NAME = 'gpsOffLogs';
+let locationDB = null;
+let gpsOffStartTime = null; // Track when GPS was turned off
+let gpsAlertShown = false; // Track if persistent alert is shown
+
 // Check location permission status
 async function checkLocationPermission() {
     if (!navigator.permissions) {
@@ -773,10 +782,10 @@ async function sendLocationWithBattery() {
             timestamp: new Date().toISOString()
         };
 
-        // If offline, queue the update for later
+        // If offline, queue the update for later (using IndexedDB)
         if (!isOnline) {
-            pendingLocationUpdates.push(payload);
-            console.log('Offline - queued location update:', pendingLocationUpdates.length);
+            await saveLocationToIndexedDB(payload);
+            console.log('Offline - localização salva no IndexedDB');
             updateLocationBanner(false, 'offline');
             return;
         }
@@ -794,9 +803,9 @@ async function sendLocationWithBattery() {
         updateLocationBanner(true);
     } catch (error) {
         console.log('Error sending location:', error);
-        // Queue the payload if send failed
+        // Queue the payload if send failed (using IndexedDB)
         if (error.name !== 'GeolocationPositionError') {
-            pendingLocationUpdates.push({
+            await saveLocationToIndexedDB({
                 latitude: null,
                 longitude: null,
                 isOnline: false,
@@ -811,31 +820,10 @@ async function sendLocationWithBattery() {
     }
 }
 
-// Send pending location updates when back online
+// Send pending location updates when back online (now uses IndexedDB)
 async function sendPendingLocationUpdates() {
-    if (pendingLocationUpdates.length === 0) return;
-
-    console.log('Sending pending location updates:', pendingLocationUpdates.length);
-
-    const updates = [...pendingLocationUpdates];
-    pendingLocationUpdates = [];
-
-    for (const payload of updates) {
-        try {
-            await fetch(`${API_URL}/api/mobile/location`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${getAuthToken()}`
-                },
-                body: JSON.stringify({ ...payload, wasQueued: true })
-            });
-        } catch (error) {
-            console.log('Failed to send queued update:', error);
-            // Re-queue failed updates
-            pendingLocationUpdates.push(payload);
-        }
-    }
+    // Use the new sync function that works with IndexedDB
+    await syncPendingLocations();
 }
 
 // Initialize network status monitoring
@@ -10080,3 +10068,477 @@ console.log('  - window.updateSW() - Forçar atualização do Service Worker');
 console.log('  - window.testLocalNotification() - Testar notificação local');
 console.log('  - window.simulateXPGain(100, "razão") - Simular XP Gain');
 console.log('  - window.simulateXPLoss(100, "razão") - Simular XP Loss');
+
+// =============================================
+// OFFLINE LOCATION SYSTEM with IndexedDB
+// =============================================
+
+/**
+ * Initialize IndexedDB for offline locations
+ */
+function initLocationDB() {
+    return new Promise((resolve, reject) => {
+        if (locationDB) {
+            resolve(locationDB);
+            return;
+        }
+
+        if (!window.indexedDB) {
+            console.warn('[LocationDB] IndexedDB não suportado, usando array em memória');
+            resolve(null);
+            return;
+        }
+
+        const request = indexedDB.open(LOCATION_DB_NAME, LOCATION_DB_VERSION);
+
+        request.onerror = (event) => {
+            console.error('[LocationDB] Erro ao abrir:', event.target.error);
+            resolve(null);
+        };
+
+        request.onsuccess = (event) => {
+            locationDB = event.target.result;
+            console.log('[LocationDB] IndexedDB inicializado');
+            resolve(locationDB);
+        };
+
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+
+            // Store for pending locations
+            if (!db.objectStoreNames.contains(LOCATION_STORE_NAME)) {
+                const locationStore = db.createObjectStore(LOCATION_STORE_NAME, {
+                    keyPath: 'id',
+                    autoIncrement: true
+                });
+                locationStore.createIndex('timestamp', 'timestamp', { unique: false });
+                console.log('[LocationDB] Store de localizações criado');
+            }
+
+            // Store for GPS off logs
+            if (!db.objectStoreNames.contains(GPS_LOG_STORE_NAME)) {
+                const gpsLogStore = db.createObjectStore(GPS_LOG_STORE_NAME, {
+                    keyPath: 'id',
+                    autoIncrement: true
+                });
+                gpsLogStore.createIndex('startTime', 'startTime', { unique: false });
+                console.log('[LocationDB] Store de GPS logs criado');
+            }
+        };
+    });
+}
+
+/**
+ * Save location to IndexedDB when offline
+ */
+async function saveLocationToIndexedDB(location) {
+    try {
+        await initLocationDB();
+
+        if (!locationDB) {
+            // Fallback to memory array
+            pendingLocationUpdates.push(location);
+            console.log('[LocationDB] Fallback: salvo em memória');
+            return;
+        }
+
+        const transaction = locationDB.transaction([LOCATION_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(LOCATION_STORE_NAME);
+        store.add(location);
+
+        transaction.oncomplete = () => {
+            console.log('[LocationDB] Localização salva offline');
+        };
+
+        transaction.onerror = (event) => {
+            console.error('[LocationDB] Erro ao salvar:', event.target.error);
+            pendingLocationUpdates.push(location);
+        };
+    } catch (error) {
+        console.error('[LocationDB] Erro:', error);
+        pendingLocationUpdates.push(location);
+    }
+}
+
+/**
+ * Get all pending locations from IndexedDB
+ */
+async function getPendingLocationsFromIndexedDB() {
+    try {
+        await initLocationDB();
+
+        if (!locationDB) {
+            return pendingLocationUpdates;
+        }
+
+        return new Promise((resolve, reject) => {
+            const transaction = locationDB.transaction([LOCATION_STORE_NAME], 'readonly');
+            const store = transaction.objectStore(LOCATION_STORE_NAME);
+            const request = store.getAll();
+
+            request.onsuccess = () => {
+                const dbLocations = request.result || [];
+                // Combine with memory array
+                const allLocations = [...pendingLocationUpdates, ...dbLocations];
+                resolve(allLocations);
+            };
+
+            request.onerror = () => {
+                resolve(pendingLocationUpdates);
+            };
+        });
+    } catch (error) {
+        console.error('[LocationDB] Erro ao buscar:', error);
+        return pendingLocationUpdates;
+    }
+}
+
+/**
+ * Clear all pending locations from IndexedDB after successful sync
+ */
+async function clearPendingLocationsFromIndexedDB() {
+    try {
+        pendingLocationUpdates = [];
+
+        if (!locationDB) return;
+
+        const transaction = locationDB.transaction([LOCATION_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(LOCATION_STORE_NAME);
+        store.clear();
+
+        console.log('[LocationDB] Localizações pendentes limpos');
+    } catch (error) {
+        console.error('[LocationDB] Erro ao limpar:', error);
+    }
+}
+
+/**
+ * Sync all pending locations to server
+ */
+async function syncPendingLocations() {
+    const locations = await getPendingLocationsFromIndexedDB();
+
+    if (locations.length === 0) {
+        console.log('[LocationSync] Nenhuma localização pendente');
+        return;
+    }
+
+    console.log(`[LocationSync] Sincronizando ${locations.length} localizações...`);
+
+    const token = getAuthToken();
+    if (!token) {
+        console.log('[LocationSync] Sem token, sync cancelado');
+        return;
+    }
+
+    let successCount = 0;
+    const failedLocations = [];
+
+    for (const location of locations) {
+        try {
+            const response = await fetch(`${API_URL}/api/mobile/location`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    ...location,
+                    wasQueued: true,
+                    syncedAt: new Date().toISOString()
+                })
+            });
+
+            if (response.ok) {
+                successCount++;
+            } else {
+                failedLocations.push(location);
+            }
+        } catch (error) {
+            console.log('[LocationSync] Erro ao enviar:', error);
+            failedLocations.push(location);
+        }
+    }
+
+    // Clear successful syncs
+    await clearPendingLocationsFromIndexedDB();
+
+    // Re-save failed ones
+    for (const failed of failedLocations) {
+        await saveLocationToIndexedDB(failed);
+    }
+
+    console.log(`[LocationSync] Sincronizado: ${successCount}/${locations.length}`);
+
+    if (successCount > 0) {
+        showToast(`${successCount} localização(ões) sincronizada(s)`, 'success');
+    }
+}
+
+// =============================================
+// GPS OFF PERIOD LOGGING
+// =============================================
+
+/**
+ * Log when GPS is turned off during active check-in
+ */
+async function logGPSOffStart() {
+    if (gpsOffStartTime) return; // Already tracking
+
+    gpsOffStartTime = new Date().toISOString();
+
+    console.log('[GPS Log] GPS desligado às', gpsOffStartTime);
+
+    // Show persistent alert if checked in
+    if (activeCheckinId) {
+        showGPSOffAlert();
+    }
+}
+
+/**
+ * Log when GPS is turned back on
+ */
+async function logGPSOffEnd() {
+    if (!gpsOffStartTime) return;
+
+    const endTime = new Date().toISOString();
+    const startTime = gpsOffStartTime;
+    gpsOffStartTime = null;
+
+    // Calculate duration
+    const durationMs = new Date(endTime) - new Date(startTime);
+    const durationMinutes = Math.round(durationMs / 60000);
+
+    console.log(`[GPS Log] GPS ligado após ${durationMinutes} minutos`);
+
+    // Hide persistent alert
+    hideGPSOffAlert();
+
+    // Save log to IndexedDB
+    await saveGPSOffLog({
+        startTime,
+        endTime,
+        durationMinutes,
+        hadActiveCheckin: !!activeCheckinId,
+        checkinId: activeCheckinId
+    });
+
+    // Try to sync immediately
+    if (isOnline) {
+        await syncGPSOffLogs();
+    }
+}
+
+/**
+ * Save GPS off period to IndexedDB
+ */
+async function saveGPSOffLog(log) {
+    try {
+        await initLocationDB();
+
+        if (!locationDB) {
+            console.log('[GPS Log] IndexedDB não disponível, log perdido');
+            return;
+        }
+
+        const transaction = locationDB.transaction([GPS_LOG_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(GPS_LOG_STORE_NAME);
+        store.add(log);
+
+        console.log('[GPS Log] Período sem GPS salvo:', log.durationMinutes, 'min');
+    } catch (error) {
+        console.error('[GPS Log] Erro ao salvar:', error);
+    }
+}
+
+/**
+ * Sync GPS off logs to server
+ */
+async function syncGPSOffLogs() {
+    try {
+        await initLocationDB();
+        if (!locationDB) return;
+
+        const transaction = locationDB.transaction([GPS_LOG_STORE_NAME], 'readonly');
+        const store = transaction.objectStore(GPS_LOG_STORE_NAME);
+        const request = store.getAll();
+
+        request.onsuccess = async () => {
+            const logs = request.result || [];
+            if (logs.length === 0) return;
+
+            const token = getAuthToken();
+            if (!token) return;
+
+            console.log(`[GPS Log] Sincronizando ${logs.length} logs...`);
+
+            try {
+                const response = await fetch(`${API_URL}/api/mobile/location/gps-off-logs`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ logs })
+                });
+
+                if (response.ok) {
+                    // Clear synced logs
+                    const clearTx = locationDB.transaction([GPS_LOG_STORE_NAME], 'readwrite');
+                    clearTx.objectStore(GPS_LOG_STORE_NAME).clear();
+                    console.log('[GPS Log] Logs sincronizados e limpos');
+                }
+            } catch (error) {
+                console.log('[GPS Log] Erro ao sincronizar:', error);
+            }
+        };
+    } catch (error) {
+        console.error('[GPS Log] Erro:', error);
+    }
+}
+
+// =============================================
+// PERSISTENT GPS ALERT (during check-in)
+// =============================================
+
+/**
+ * Show persistent GPS off alert during check-in
+ */
+function showGPSOffAlert() {
+    if (gpsAlertShown) return;
+    gpsAlertShown = true;
+
+    const banner = document.getElementById('gps-off-alert-banner');
+    if (banner) {
+        banner.style.display = 'block';
+        // Add animation
+        banner.classList.add('pulse-alert');
+    }
+
+    // Vibrate to get attention
+    if (navigator.vibrate) {
+        navigator.vibrate([300, 100, 300, 100, 300]);
+    }
+}
+
+/**
+ * Hide GPS off alert
+ */
+function hideGPSOffAlert() {
+    gpsAlertShown = false;
+
+    const banner = document.getElementById('gps-off-alert-banner');
+    if (banner) {
+        banner.style.display = 'none';
+        banner.classList.remove('pulse-alert');
+    }
+}
+
+/**
+ * User clicked to enable GPS from alert
+ */
+async function requestGPSFromAlert() {
+    hideGPSOffAlert();
+
+    // Try to request permission again
+    try {
+        const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 10000
+            });
+        });
+
+        // Success! GPS is back on
+        locationPermissionStatus = 'granted';
+        await logGPSOffEnd();
+        startLocationTracking();
+        showToast('GPS ativado! Localização restaurada.', 'success');
+
+    } catch (error) {
+        if (error.code === error.PERMISSION_DENIED) {
+            showToast('Ative o GPS nas configurações do dispositivo', 'warning');
+            // Show alert again after delay
+            setTimeout(() => {
+                if (activeCheckinId && locationPermissionStatus !== 'granted') {
+                    showGPSOffAlert();
+                }
+            }, 5000);
+        }
+    }
+}
+
+// =============================================
+// Enhanced GPS Monitoring
+// =============================================
+
+/**
+ * Monitor GPS permission changes
+ */
+async function initGPSMonitoring() {
+    if (!navigator.permissions) return;
+
+    try {
+        const status = await navigator.permissions.query({ name: 'geolocation' });
+
+        status.addEventListener('change', () => {
+            console.log('[GPS Monitor] Permissão mudou para:', status.state);
+
+            if (status.state === 'granted') {
+                locationPermissionStatus = 'granted';
+                logGPSOffEnd();
+                hideLocationDeniedBanner();
+                startLocationTracking();
+            } else if (status.state === 'denied') {
+                locationPermissionStatus = 'denied';
+                logGPSOffStart();
+                showLocationDeniedBanner();
+
+                // Show persistent alert if checked in
+                if (activeCheckinId) {
+                    showGPSOffAlert();
+                }
+            }
+        });
+
+        console.log('[GPS Monitor] Monitoramento de permissão iniciado');
+    } catch (error) {
+        console.log('[GPS Monitor] Erro:', error);
+    }
+}
+
+// Initialize systems on load
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize offline location DB
+    initLocationDB().then(() => {
+        console.log('[LocationDB] Pronto');
+    });
+
+    // Initialize GPS monitoring
+    initGPSMonitoring();
+
+    // Sync pending data when online
+    if (isOnline) {
+        setTimeout(() => {
+            syncPendingLocations();
+            syncGPSOffLogs();
+        }, 3000);
+    }
+});
+
+// Sync when coming back online
+window.addEventListener('online', () => {
+    setTimeout(() => {
+        syncPendingLocations();
+        syncGPSOffLogs();
+    }, 2000);
+});
+
+// Export functions for debugging
+window.debugLocation = {
+    getPending: getPendingLocationsFromIndexedDB,
+    syncNow: syncPendingLocations,
+    syncGPSLogs: syncGPSOffLogs,
+    showGPSAlert: showGPSOffAlert,
+    hideGPSAlert: hideGPSOffAlert
+};

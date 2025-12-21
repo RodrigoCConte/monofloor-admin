@@ -4764,6 +4764,95 @@ body {
 }
 
 /* =============================================
+   GPS OFF ALERT BANNER (Persistent during check-in)
+   ============================================= */
+.gps-off-alert-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    padding: 16px;
+    z-index: 1002;
+    animation: slideDown 0.3s ease;
+    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+}
+
+.gps-off-alert-banner.pulse-alert {
+    animation: slideDown 0.3s ease, gpsAlertPulse 2s infinite;
+}
+
+@keyframes gpsAlertPulse {
+    0%, 100% {
+        box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+    }
+    50% {
+        box-shadow: 0 4px 30px rgba(239, 68, 68, 0.8);
+    }
+}
+
+.gps-alert-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 375px;
+    margin: 0 auto;
+}
+
+.gps-alert-icon {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.gps-alert-icon svg {
+    width: 24px;
+    height: 24px;
+    color: #fff;
+}
+
+.gps-alert-text {
+    flex: 1;
+}
+
+.gps-alert-text strong {
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.gps-alert-text p {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 12px;
+    margin: 0;
+}
+
+.gps-alert-button {
+    background: #fff;
+    color: #dc2626;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.gps-alert-button:active {
+    transform: scale(0.95);
+    background: rgba(255, 255, 255, 0.9);
+}
+
+/* =============================================
    LUNCH REMINDER MODAL STYLES
    ============================================= */
 

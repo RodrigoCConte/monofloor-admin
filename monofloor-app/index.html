@@ -1569,6 +1569,26 @@
             </div>
         </div>
 
+        <!-- GPS Off Alert Banner (persistent during check-in) -->
+        <div id="gps-off-alert-banner" class="gps-off-alert-banner" style="display: none;">
+            <div class="gps-alert-content">
+                <div class="gps-alert-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                        <circle cx="12" cy="10" r="3"/>
+                        <line x1="2" y1="2" x2="22" y2="22" stroke="#ef4444" stroke-width="3"/>
+                    </svg>
+                </div>
+                <div class="gps-alert-text">
+                    <strong>GPS Desligado!</strong>
+                    <p>Suas horas podem não ser computadas corretamente</p>
+                </div>
+                <button class="gps-alert-button" onclick="requestGPSFromAlert()">
+                    Ativar GPS
+                </button>
+            </div>
+        </div>
+
         <!-- Lunch Reminder Modal -->
         <div id="lunch-reminder-modal" class="modal-overlay">
             <div class="modal-content lunch-modal">

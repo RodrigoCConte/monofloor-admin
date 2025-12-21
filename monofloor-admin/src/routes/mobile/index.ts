@@ -1813,6 +1813,50 @@ router.put('/location/offline', mobileAuth, async (req, res, next) => {
   }
 });
 
+// POST /api/mobile/location/gps-off-logs - Receive GPS off period logs
+router.post('/location/gps-off-logs', mobileAuth, async (req, res, next) => {
+  try {
+    const userId = req.user!.sub;
+    const { logs } = req.body;
+
+    if (!logs || !Array.isArray(logs)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_LOGS', message: 'Logs inválidos' },
+      });
+    }
+
+    console.log(`[GPS Logs] Recebido ${logs.length} log(s) de GPS off do usuário ${userId}`);
+
+    // Log GPS off periods to console for monitoring
+    // Could be extended to store in a dedicated table in the future
+    for (const log of logs) {
+      const logEntry = {
+        userId,
+        durationMinutes: log.durationMinutes,
+        startTime: log.startTime,
+        endTime: log.endTime,
+        hadActiveCheckin: log.hadActiveCheckin,
+        checkinId: log.checkinId,
+      };
+
+      console.log(`[GPS Log] User ${userId}: GPS off for ${log.durationMinutes} min (${log.startTime} - ${log.endTime}), checkin: ${log.hadActiveCheckin}`);
+
+      // If there was an active check-in, we might want to flag it
+      if (log.hadActiveCheckin && log.checkinId) {
+        console.warn(`[GPS Warning] User ${userId} had GPS off during active checkin ${log.checkinId}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `${logs.length} log(s) recebido(s)`,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // =============================================
 // HELP REQUESTS (Material ou Ajuda)
 // =============================================
