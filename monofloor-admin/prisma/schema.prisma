@@ -377,7 +377,8 @@ enum CheckoutReason {
   COMPRA_INSUMOS
   ALMOCO_INTERVALO
   AUTO_DISTANTE      // Auto-checkout por sair da área do projeto (>100m)
-  GPS_DESATIVADO     // Auto-checkout por GPS desligado por 60+ segundos
+  GPS_DESATIVADO     // Auto-checkout por GPS desligado por 5+ minutos
+  INATIVIDADE        // Auto-checkout por falta de localização por 30+ minutos
 }
 
 // =============================================
