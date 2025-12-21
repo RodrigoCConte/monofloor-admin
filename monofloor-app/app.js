@@ -9448,7 +9448,7 @@ async function loadAbsenceDates() {
             return;
         }
 
-        const response = await fetch(`${API_BASE_URL}/api/mobile/absences/available-dates?offset=${absenceDatesOffset}&count=5`, {
+        const response = await fetch(`${API_URL}/api/mobile/absences/available-dates?offset=${absenceDatesOffset}&count=5`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -9565,7 +9565,7 @@ async function submitAbsenceNotice() {
             return;
         }
 
-        const response = await fetch(`${API_BASE_URL}/api/mobile/absences`, {
+        const response = await fetch(`${API_URL}/api/mobile/absences`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -9663,7 +9663,7 @@ async function submitAbsenceReason() {
             return;
         }
 
-        const response = await fetch(`${API_BASE_URL}/api/mobile/absences/respond`, {
+        const response = await fetch(`${API_URL}/api/mobile/absences/respond`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -9705,7 +9705,7 @@ async function checkPendingAbsenceInquiry() {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const response = await fetch(`${API_BASE_URL}/api/mobile/absences/pending-inquiry`, {
+        const response = await fetch(`${API_URL}/api/mobile/absences/pending-inquiry`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
