@@ -1778,50 +1778,40 @@ function showXPGain(amount, reason = '') {
     const overlay = document.createElement('div');
     overlay.className = 'xp-gain-overlay';
 
-    // Generate confetti particles (colorful celebration)
-    const confettiColors = ['#fbbf24', '#f59e0b', '#22c55e', '#3b82f6', '#ef4444', '#a855f7', '#ec4899'];
-    const confettiHtml = Array.from({ length: 50 }, (_, i) => {
+    // Generate confetti particles (reduced for mobile performance)
+    const confettiColors = ['#fbbf24', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7'];
+    const confettiHtml = Array.from({ length: 30 }, (_, i) => {
         const left = Math.random() * 100;
-        const delay = Math.random() * 0.8;
-        const duration = 2 + Math.random() * 2;
+        const delay = Math.random() * 0.6;
+        const duration = 1.5 + Math.random() * 1.5;
         const color = confettiColors[Math.floor(Math.random() * confettiColors.length)];
-        const size = 6 + Math.random() * 8;
+        const size = 5 + Math.random() * 6;
         const rotation = Math.random() * 360;
         const type = Math.random() > 0.5 ? 'confetti-rect' : 'confetti-circle';
         return `<div class="xp-confetti ${type}" style="left: ${left}%; background: ${color}; width: ${size}px; height: ${size * (type === 'confetti-rect' ? 0.4 : 1)}px; animation-delay: ${delay}s; animation-duration: ${duration}s; --rotation: ${rotation}deg;"></div>`;
     }).join('');
 
-    // Generate floating coins
-    const coinsHtml = Array.from({ length: 8 }, (_, i) => {
-        const left = 10 + Math.random() * 80;
-        const delay = Math.random() * 0.6;
-        return `<div class="xp-coin" style="left: ${left}%; animation-delay: ${delay}s;">🪙</div>`;
+    // Generate floating stars (main element - replacing coins)
+    const floatingStarsHtml = Array.from({ length: 6 }, (_, i) => {
+        const left = 15 + Math.random() * 70;
+        const delay = Math.random() * 0.5;
+        return `<div class="xp-floating-star" style="left: ${left}%; animation-delay: ${delay}s;">⭐</div>`;
     }).join('');
 
-    // Generate star bursts
-    const starsHtml = Array.from({ length: 15 }, (_, i) => {
-        const angle = (i / 15) * 360;
-        const distance = 80 + Math.random() * 60;
-        const delay = Math.random() * 0.3;
-        const size = 0.6 + Math.random() * 0.8;
-        return `<div class="xp-star-burst" style="--angle: ${angle}deg; --distance: ${distance}px; animation-delay: ${delay}s; transform: scale(${size});">✨</div>`;
+    // Generate star bursts radiating from center
+    const starsHtml = Array.from({ length: 12 }, (_, i) => {
+        const angle = (i / 12) * 360;
+        const distance = 60 + Math.random() * 40;
+        const delay = Math.random() * 0.2;
+        return `<div class="xp-star-burst" style="--angle: ${angle}deg; --distance: ${distance}px; animation-delay: ${delay}s;">⭐</div>`;
     }).join('');
 
     // Generate expanding rings
-    const ringsHtml = Array.from({ length: 3 }, (_, i) => {
-        return `<div class="xp-ring" style="animation-delay: ${i * 0.2}s;"></div>`;
+    const ringsHtml = Array.from({ length: 2 }, (_, i) => {
+        return `<div class="xp-ring" style="animation-delay: ${i * 0.3}s;"></div>`;
     }).join('');
 
-    // Generate sparkle trail
-    const sparklesHtml = Array.from({ length: 20 }, (_, i) => {
-        const left = Math.random() * 100;
-        const top = Math.random() * 100;
-        const delay = Math.random() * 1.5;
-        const size = 0.3 + Math.random() * 0.7;
-        return `<div class="xp-sparkle-new" style="left: ${left}%; top: ${top}%; animation-delay: ${delay}s; transform: scale(${size});">⭐</div>`;
-    }).join('');
-
-    // Create content
+    // Create content - Mobile optimized layout
     overlay.innerHTML = `
         <div class="xp-gain-container">
             <div class="xp-rings-container">${ringsHtml}</div>
@@ -1830,18 +1820,17 @@ function showXPGain(amount, reason = '') {
             <div class="xp-icon-container">
                 <div class="xp-icon-bg"></div>
                 <div class="xp-icon-main">🏆</div>
-                <div class="xp-icon-shine"></div>
+                <div class="xp-icon-star">⭐</div>
             </div>
             <div class="xp-amount-container">
-                <div class="xp-amount-label">XP GANHO!</div>
                 <div class="xp-amount-value">+${amount}</div>
+                <div class="xp-amount-label">XP</div>
             </div>
             ${reason ? `<div class="xp-reason-new">${reason}</div>` : ''}
             <button class="xp-gain-continue-btn">Continuar</button>
             <div class="xp-confetti-container">${confettiHtml}</div>
-            <div class="xp-coins-container">${coinsHtml}</div>
+            <div class="xp-floating-stars-container">${floatingStarsHtml}</div>
             <div class="xp-stars-container">${starsHtml}</div>
-            <div class="xp-sparkles-container">${sparklesHtml}</div>
         </div>
     `;
 
@@ -1888,40 +1877,29 @@ function showXPLoss(amount, reason = '') {
     const overlay = document.createElement('div');
     overlay.className = 'xp-loss-overlay';
 
-    // Generate glass shards (breaking effect)
-    const shardsHtml = Array.from({ length: 20 }, (_, i) => {
-        const angle = (i / 20) * 360;
-        const distance = 60 + Math.random() * 100;
-        const delay = Math.random() * 0.3;
-        const size = 0.4 + Math.random() * 0.8;
-        const rotation = Math.random() * 360;
-        return `<div class="xp-shard" style="--angle: ${angle}deg; --distance: ${distance}px; animation-delay: ${delay}s; --rotation: ${rotation}deg; transform: scale(${size});">💥</div>`;
+    // Generate falling broken stars (reduced for mobile)
+    const fallingStarsHtml = Array.from({ length: 8 }, (_, i) => {
+        const left = 15 + Math.random() * 70;
+        const delay = Math.random() * 0.4;
+        return `<div class="xp-falling-star" style="left: ${left}%; animation-delay: ${delay}s;">⭐</div>`;
     }).join('');
 
     // Generate falling XP numbers
-    const fallingHtml = Array.from({ length: 10 }, (_, i) => {
-        const left = 10 + Math.random() * 80;
-        const delay = Math.random() * 0.5;
-        const smallAmount = Math.floor(amount / 5);
+    const fallingHtml = Array.from({ length: 6 }, (_, i) => {
+        const left = 15 + Math.random() * 70;
+        const delay = Math.random() * 0.4;
+        const smallAmount = Math.floor(amount / 3);
         return `<div class="xp-falling-number" style="left: ${left}%; animation-delay: ${delay}s;">-${smallAmount}</div>`;
     }).join('');
 
-    // Generate crack lines
-    const cracksHtml = Array.from({ length: 8 }, (_, i) => {
-        const angle = (i / 8) * 360;
-        const length = 50 + Math.random() * 100;
+    // Generate crack lines (reduced for mobile)
+    const cracksHtml = Array.from({ length: 6 }, (_, i) => {
+        const angle = (i / 6) * 360;
+        const length = 40 + Math.random() * 60;
         return `<div class="xp-crack" style="--angle: ${angle}deg; --length: ${length}px;"></div>`;
     }).join('');
 
-    // Generate smoke/dust particles
-    const dustHtml = Array.from({ length: 15 }, (_, i) => {
-        const left = 30 + Math.random() * 40;
-        const delay = 0.2 + Math.random() * 0.5;
-        const size = 0.5 + Math.random() * 1;
-        return `<div class="xp-dust" style="left: ${left}%; animation-delay: ${delay}s; transform: scale(${size});">💨</div>`;
-    }).join('');
-
-    // Create content
+    // Create content - Mobile optimized
     overlay.innerHTML = `
         <div class="xp-loss-container">
             <div class="xp-loss-vignette"></div>
@@ -1929,18 +1907,18 @@ function showXPLoss(amount, reason = '') {
             <div class="xp-cracks-container">${cracksHtml}</div>
             <div class="xp-loss-icon-container">
                 <div class="xp-loss-icon-bg"></div>
-                <div class="xp-loss-icon-main">😰</div>
+                <div class="xp-loss-icon-main">😢</div>
+                <div class="xp-loss-icon-star">⭐</div>
                 <div class="xp-loss-icon-crack"></div>
             </div>
             <div class="xp-loss-amount-container">
-                <div class="xp-loss-label">XP PERDIDO!</div>
                 <div class="xp-loss-value">-${amount}</div>
+                <div class="xp-loss-label">XP</div>
             </div>
             ${reason ? `<div class="xp-loss-reason-new">${reason}</div>` : ''}
             <button class="xp-loss-continue-btn">Continuar</button>
-            <div class="xp-shards-container">${shardsHtml}</div>
+            <div class="xp-falling-stars-container">${fallingStarsHtml}</div>
             <div class="xp-falling-container">${fallingHtml}</div>
-            <div class="xp-dust-container">${dustHtml}</div>
         </div>
     `;
 
