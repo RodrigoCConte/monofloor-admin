@@ -1778,33 +1778,70 @@ function showXPGain(amount, reason = '') {
     const overlay = document.createElement('div');
     overlay.className = 'xp-gain-overlay';
 
-    // Generate floating XP numbers
-    const floatersHtml = Array.from({ length: 6 }, (_, i) => {
-        const left = 20 + Math.random() * 60;
-        const delay = Math.random() * 0.5;
-        const smallAmount = Math.floor(amount / 6);
-        return `<div class="xp-floater" style="left: ${left}%; animation-delay: ${delay}s;">+${smallAmount}</div>`;
+    // Generate confetti particles (colorful celebration)
+    const confettiColors = ['#fbbf24', '#f59e0b', '#22c55e', '#3b82f6', '#ef4444', '#a855f7', '#ec4899'];
+    const confettiHtml = Array.from({ length: 50 }, (_, i) => {
+        const left = Math.random() * 100;
+        const delay = Math.random() * 0.8;
+        const duration = 2 + Math.random() * 2;
+        const color = confettiColors[Math.floor(Math.random() * confettiColors.length)];
+        const size = 6 + Math.random() * 8;
+        const rotation = Math.random() * 360;
+        const type = Math.random() > 0.5 ? 'confetti-rect' : 'confetti-circle';
+        return `<div class="xp-confetti ${type}" style="left: ${left}%; background: ${color}; width: ${size}px; height: ${size * (type === 'confetti-rect' ? 0.4 : 1)}px; animation-delay: ${delay}s; animation-duration: ${duration}s; --rotation: ${rotation}deg;"></div>`;
     }).join('');
 
-    // Generate sparkles
-    const sparklesHtml = Array.from({ length: 12 }, (_, i) => {
+    // Generate floating coins
+    const coinsHtml = Array.from({ length: 8 }, (_, i) => {
+        const left = 10 + Math.random() * 80;
+        const delay = Math.random() * 0.6;
+        return `<div class="xp-coin" style="left: ${left}%; animation-delay: ${delay}s;">🪙</div>`;
+    }).join('');
+
+    // Generate star bursts
+    const starsHtml = Array.from({ length: 15 }, (_, i) => {
+        const angle = (i / 15) * 360;
+        const distance = 80 + Math.random() * 60;
+        const delay = Math.random() * 0.3;
+        const size = 0.6 + Math.random() * 0.8;
+        return `<div class="xp-star-burst" style="--angle: ${angle}deg; --distance: ${distance}px; animation-delay: ${delay}s; transform: scale(${size});">✨</div>`;
+    }).join('');
+
+    // Generate expanding rings
+    const ringsHtml = Array.from({ length: 3 }, (_, i) => {
+        return `<div class="xp-ring" style="animation-delay: ${i * 0.2}s;"></div>`;
+    }).join('');
+
+    // Generate sparkle trail
+    const sparklesHtml = Array.from({ length: 20 }, (_, i) => {
         const left = Math.random() * 100;
         const top = Math.random() * 100;
-        const delay = Math.random() * 1;
-        const size = 0.5 + Math.random() * 1;
-        return `<div class="xp-sparkle" style="left: ${left}%; top: ${top}%; animation-delay: ${delay}s; transform: scale(${size});"></div>`;
+        const delay = Math.random() * 1.5;
+        const size = 0.3 + Math.random() * 0.7;
+        return `<div class="xp-sparkle-new" style="left: ${left}%; top: ${top}%; animation-delay: ${delay}s; transform: scale(${size});">⭐</div>`;
     }).join('');
 
     // Create content
     overlay.innerHTML = `
         <div class="xp-gain-container">
-            <div class="xp-rays"></div>
-            <div class="xp-icon">⭐</div>
-            <div class="xp-amount">+${amount} XP</div>
-            ${reason ? `<div class="xp-reason">${reason}</div>` : ''}
+            <div class="xp-rings-container">${ringsHtml}</div>
+            <div class="xp-rays-new"></div>
+            <div class="xp-glow-burst"></div>
+            <div class="xp-icon-container">
+                <div class="xp-icon-bg"></div>
+                <div class="xp-icon-main">🏆</div>
+                <div class="xp-icon-shine"></div>
+            </div>
+            <div class="xp-amount-container">
+                <div class="xp-amount-label">XP GANHO!</div>
+                <div class="xp-amount-value">+${amount}</div>
+            </div>
+            ${reason ? `<div class="xp-reason-new">${reason}</div>` : ''}
             <button class="xp-gain-continue-btn">Continuar</button>
-            <div class="xp-floaters">${floatersHtml}</div>
-            <div class="xp-sparkles">${sparklesHtml}</div>
+            <div class="xp-confetti-container">${confettiHtml}</div>
+            <div class="xp-coins-container">${coinsHtml}</div>
+            <div class="xp-stars-container">${starsHtml}</div>
+            <div class="xp-sparkles-container">${sparklesHtml}</div>
         </div>
     `;
 
@@ -1819,15 +1856,16 @@ function showXPGain(amount, reason = '') {
 
     overlay.querySelector('.xp-gain-continue-btn').addEventListener('click', closeOverlay);
 
-    // Vibrate if supported (mobile)
+    // Vibrate celebration pattern (mobile)
     if ('vibrate' in navigator) {
-        navigator.vibrate([50, 30, 50, 30, 100]);
+        navigator.vibrate([50, 30, 50, 30, 100, 50, 150]);
     }
 
-    // Play sound effect (if available)
+    // Play celebration sound
     try {
         const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleVwvYKHcvnhPIzRXltzQn2k+MFGb3tKtf09ALGul4NSwhVRBKWai39WyildGJ2Wh3tWvg1VHJ2Wh3tWwg1VHKGag3dOuglVGJ2ah3dOuglZHJ2ag3dOug1ZHJ2ag3dOug1ZH');
-        audio.volume = 0.3;
+        audio.volume = 0.4;
+        audio.playbackRate = 1.2;
         audio.play().catch(() => {});
     } catch (e) {}
 
@@ -1850,33 +1888,59 @@ function showXPLoss(amount, reason = '') {
     const overlay = document.createElement('div');
     overlay.className = 'xp-loss-overlay';
 
-    // Generate floating XP numbers (falling down)
-    const floatersHtml = Array.from({ length: 6 }, (_, i) => {
-        const left = 20 + Math.random() * 60;
-        const delay = Math.random() * 0.5;
-        const smallAmount = Math.floor(amount / 6);
-        return `<div class="xp-loss-floater" style="left: ${left}%; animation-delay: ${delay}s;">-${smallAmount}</div>`;
+    // Generate glass shards (breaking effect)
+    const shardsHtml = Array.from({ length: 20 }, (_, i) => {
+        const angle = (i / 20) * 360;
+        const distance = 60 + Math.random() * 100;
+        const delay = Math.random() * 0.3;
+        const size = 0.4 + Math.random() * 0.8;
+        const rotation = Math.random() * 360;
+        return `<div class="xp-shard" style="--angle: ${angle}deg; --distance: ${distance}px; animation-delay: ${delay}s; --rotation: ${rotation}deg; transform: scale(${size});">💥</div>`;
     }).join('');
 
-    // Generate particles (breaking effect)
-    const particlesHtml = Array.from({ length: 12 }, (_, i) => {
-        const left = Math.random() * 100;
-        const top = Math.random() * 100;
-        const delay = Math.random() * 1;
+    // Generate falling XP numbers
+    const fallingHtml = Array.from({ length: 10 }, (_, i) => {
+        const left = 10 + Math.random() * 80;
+        const delay = Math.random() * 0.5;
+        const smallAmount = Math.floor(amount / 5);
+        return `<div class="xp-falling-number" style="left: ${left}%; animation-delay: ${delay}s;">-${smallAmount}</div>`;
+    }).join('');
+
+    // Generate crack lines
+    const cracksHtml = Array.from({ length: 8 }, (_, i) => {
+        const angle = (i / 8) * 360;
+        const length = 50 + Math.random() * 100;
+        return `<div class="xp-crack" style="--angle: ${angle}deg; --length: ${length}px;"></div>`;
+    }).join('');
+
+    // Generate smoke/dust particles
+    const dustHtml = Array.from({ length: 15 }, (_, i) => {
+        const left = 30 + Math.random() * 40;
+        const delay = 0.2 + Math.random() * 0.5;
         const size = 0.5 + Math.random() * 1;
-        return `<div class="xp-loss-particle" style="left: ${left}%; top: ${top}%; animation-delay: ${delay}s; transform: scale(${size});"></div>`;
+        return `<div class="xp-dust" style="left: ${left}%; animation-delay: ${delay}s; transform: scale(${size});">💨</div>`;
     }).join('');
 
     // Create content
     overlay.innerHTML = `
         <div class="xp-loss-container">
-            <div class="xp-loss-flash"></div>
-            <div class="xp-loss-icon">💔</div>
-            <div class="xp-loss-amount">-${amount} XP</div>
-            ${reason ? `<div class="xp-loss-reason">${reason}</div>` : ''}
+            <div class="xp-loss-vignette"></div>
+            <div class="xp-loss-flash-new"></div>
+            <div class="xp-cracks-container">${cracksHtml}</div>
+            <div class="xp-loss-icon-container">
+                <div class="xp-loss-icon-bg"></div>
+                <div class="xp-loss-icon-main">😰</div>
+                <div class="xp-loss-icon-crack"></div>
+            </div>
+            <div class="xp-loss-amount-container">
+                <div class="xp-loss-label">XP PERDIDO!</div>
+                <div class="xp-loss-value">-${amount}</div>
+            </div>
+            ${reason ? `<div class="xp-loss-reason-new">${reason}</div>` : ''}
             <button class="xp-loss-continue-btn">Continuar</button>
-            <div class="xp-loss-floaters">${floatersHtml}</div>
-            <div class="xp-loss-particles">${particlesHtml}</div>
+            <div class="xp-shards-container">${shardsHtml}</div>
+            <div class="xp-falling-container">${fallingHtml}</div>
+            <div class="xp-dust-container">${dustHtml}</div>
         </div>
     `;
 
@@ -1891,16 +1955,16 @@ function showXPLoss(amount, reason = '') {
 
     overlay.querySelector('.xp-loss-continue-btn').addEventListener('click', closeOverlay);
 
-    // Intense vibration for loss (mobile)
+    // Intense vibration pattern for loss (mobile)
     if ('vibrate' in navigator) {
-        navigator.vibrate([100, 50, 100, 50, 200, 50, 300]);
+        navigator.vibrate([200, 100, 200, 100, 300, 100, 400]);
     }
 
-    // Play error/loss sound effect
+    // Play dramatic loss sound
     try {
         const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleVwvYKHcvnhPIzRXltzQn2k+MFGb3tKtf09ALGul4NSwhVRBKWai39WyildGJ2Wh3tWvg1VHJ2Wh3tWwg1VHKGag3dOuglVGJ2ah3dOuglZHJ2ag3dOug1ZHJ2ag3dOug1ZH');
-        audio.volume = 0.4;
-        audio.playbackRate = 0.7;  // Lower pitch for loss
+        audio.volume = 0.5;
+        audio.playbackRate = 0.5;
         audio.play().catch(() => {});
     } catch (e) {}
 
