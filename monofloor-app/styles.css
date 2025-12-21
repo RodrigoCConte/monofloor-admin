@@ -12644,3 +12644,187 @@ body {
     font-size: 14px;
 }
 
+/* ====================================== */
+/* GPS WARNING MODAL (3 strikes checkout) */
+/* ====================================== */
+
+.gps-warning-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.95);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10002;
+    padding: 20px;
+    animation: fadeIn 0.3s ease;
+}
+
+.gps-warning-content {
+    background: linear-gradient(180deg, #2a1a1a 0%, #1a1a1a 100%);
+    border: 2px solid #ef4444;
+    border-radius: 24px;
+    padding: 28px 24px;
+    max-width: 340px;
+    width: 100%;
+    text-align: center;
+    animation: shakeIn 0.5s ease;
+    box-shadow: 0 0 40px rgba(239, 68, 68, 0.4);
+}
+
+@keyframes shakeIn {
+    0% { transform: scale(0.9) translateX(0); opacity: 0; }
+    20% { transform: scale(1.02) translateX(-10px); }
+    40% { transform: scale(1) translateX(10px); }
+    60% { transform: scale(1) translateX(-5px); }
+    80% { transform: scale(1) translateX(5px); }
+    100% { transform: scale(1) translateX(0); opacity: 1; }
+}
+
+.gps-warning-icon {
+    font-size: 56px;
+    margin-bottom: 16px;
+    animation: pulse 1.5s infinite;
+}
+
+.gps-warning-content h2 {
+    color: #ef4444;
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.gps-warning-text {
+    color: var(--text-primary);
+    font-size: 15px;
+    line-height: 1.6;
+    margin-bottom: 16px;
+}
+
+.gps-warning-text strong {
+    color: #ef4444;
+}
+
+.gps-warning-counter {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    padding: 10px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.gps-warning-urgent {
+    background: linear-gradient(135deg, #7f1d1d, #991b1b);
+    color: #fff;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    margin-bottom: 16px;
+    animation: pulseUrgent 1s infinite;
+}
+
+@keyframes pulseUrgent {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+    50% { box-shadow: 0 0 20px 5px rgba(239, 68, 68, 0.3); }
+}
+
+.gps-warning-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.btn-enable-gps {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    padding: 16px 20px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(34, 197, 94, 0.4);
+}
+
+.btn-enable-gps:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(34, 197, 94, 0.5);
+}
+
+.btn-enable-gps:active {
+    transform: scale(0.98);
+}
+
+.btn-enable-gps span {
+    font-size: 20px;
+}
+
+.btn-dismiss-gps {
+    background: transparent;
+    color: var(--text-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-dismiss-gps:hover {
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+/* GPS Instructions Modal */
+.gps-warning-content.gps-instructions {
+    border-color: #3b82f6;
+    box-shadow: 0 0 40px rgba(59, 130, 246, 0.3);
+}
+
+.gps-warning-content.gps-instructions h2 {
+    color: #3b82f6;
+}
+
+.gps-instructions-text {
+    text-align: left;
+    background: var(--bg-primary);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.gps-instructions-text p {
+    color: var(--text-primary);
+    font-size: 14px;
+    margin-bottom: 12px;
+}
+
+.gps-instructions-text ol {
+    color: var(--text-secondary);
+    font-size: 14px;
+    padding-left: 20px;
+    margin: 0;
+}
+
+.gps-instructions-text ol li {
+    margin-bottom: 8px;
+    line-height: 1.5;
+}
+
+.gps-instructions-text strong {
+    color: var(--accent-primary);
+}
+

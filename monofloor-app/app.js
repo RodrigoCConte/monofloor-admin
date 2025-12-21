@@ -582,6 +582,8 @@ const TIMELINE_STORE_NAME = 'timelineEvents'; // New: stores 24h movement timeli
 let locationDB = null;
 let gpsOffStartTime = null; // Track when GPS was turned off
 let gpsAlertShown = false; // Track if persistent alert is shown
+let gpsWarningDismissCount = 0; // Counter for GPS warning dismissals (max 3 before auto-checkout)
+const GPS_MAX_WARNINGS = 3; // Maximum warnings before forced checkout
 
 // =============================================
 // ACCELEROMETER & MOVEMENT TRACKING (when NOT checked-in)
@@ -3634,6 +3636,7 @@ async function doCheckin() {
             isCheckedIn = true;
             activeCheckinId = data.data.id;
             currentProjectForCheckin = selectedProject.id;
+            gpsWarningDismissCount = 0; // Reset GPS warning counter on new check-in
             updateCheckinUI(true);
 
             // Mostrar XP ganho se disponível
@@ -10431,22 +10434,66 @@ async function syncGPSOffLogs() {
 // =============================================
 
 /**
- * Show persistent GPS off alert during check-in
+ * Show GPS off warning modal during check-in
+ * Shows warning with button to enable GPS
+ * After 3 dismissals without enabling, forces checkout
  */
 function showGPSOffAlert() {
     if (gpsAlertShown) return;
-    gpsAlertShown = true;
+    if (!activeCheckinId) return; // Only show during active check-in
 
+    gpsAlertShown = true;
+    const remainingWarnings = GPS_MAX_WARNINGS - gpsWarningDismissCount;
+
+    // Create or update the GPS warning modal
+    let modal = document.getElementById('gps-warning-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'gps-warning-modal';
+        modal.className = 'gps-warning-modal';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="gps-warning-content">
+            <div class="gps-warning-icon">📍</div>
+            <h2>Localização Desativada!</h2>
+            <p class="gps-warning-text">
+                Seu GPS está <strong>desligado</strong>. Isso afetará diretamente suas <strong>horas de trabalho</strong>.
+            </p>
+            <p class="gps-warning-counter">
+                ${remainingWarnings > 0
+                    ? `⚠️ Aviso ${gpsWarningDismissCount + 1} de ${GPS_MAX_WARNINGS}`
+                    : '🚨 Último aviso!'}
+            </p>
+            ${remainingWarnings <= 1 ? `
+                <p class="gps-warning-urgent">
+                    Se você ignorar este aviso, será feito <strong>checkout automático</strong> do projeto.
+                </p>
+            ` : ''}
+            <div class="gps-warning-actions">
+                <button class="btn-enable-gps" onclick="openLocationSettings()">
+                    <span>📍</span> Ativar Localização
+                </button>
+                <button class="btn-dismiss-gps" onclick="dismissGPSWarning()">
+                    Ignorar ${remainingWarnings > 1 ? `(${remainingWarnings - 1} restantes)` : '(Fazer Checkout)'}
+                </button>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+
+    // Vibrate intensely to get attention
+    if (navigator.vibrate) {
+        navigator.vibrate([500, 200, 500, 200, 500]);
+    }
+
+    // Also show the banner
     const banner = document.getElementById('gps-off-alert-banner');
     if (banner) {
         banner.style.display = 'block';
-        // Add animation
         banner.classList.add('pulse-alert');
-    }
-
-    // Vibrate to get attention
-    if (navigator.vibrate) {
-        navigator.vibrate([300, 100, 300, 100, 300]);
     }
 }
 
@@ -10456,6 +10503,11 @@ function showGPSOffAlert() {
 function hideGPSOffAlert() {
     gpsAlertShown = false;
 
+    const modal = document.getElementById('gps-warning-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+
     const banner = document.getElementById('gps-off-alert-banner');
     if (banner) {
         banner.style.display = 'none';
@@ -10464,37 +10516,181 @@ function hideGPSOffAlert() {
 }
 
 /**
- * User clicked to enable GPS from alert
+ * User dismissed the GPS warning without enabling
  */
-async function requestGPSFromAlert() {
+async function dismissGPSWarning() {
+    gpsWarningDismissCount++;
     hideGPSOffAlert();
 
-    // Try to request permission again
-    try {
-        const position = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-                enableHighAccuracy: true,
-                timeout: 10000
-            });
-        });
+    console.log(`[GPS Warning] Dismissed ${gpsWarningDismissCount}/${GPS_MAX_WARNINGS}`);
 
-        // Success! GPS is back on
-        locationPermissionStatus = 'granted';
-        await logGPSOffEnd();
-        startLocationTracking();
-        showToast('GPS ativado! Localização restaurada.', 'success');
+    // Log timeline event
+    await logTimelineEvent('GPS_WARNING_DISMISSED', {
+        dismissCount: gpsWarningDismissCount,
+        maxWarnings: GPS_MAX_WARNINGS
+    });
 
-    } catch (error) {
-        if (error.code === error.PERMISSION_DENIED) {
-            showToast('Ative o GPS nas configurações do dispositivo', 'warning');
-            // Show alert again after delay
-            setTimeout(() => {
-                if (activeCheckinId && locationPermissionStatus !== 'granted') {
-                    showGPSOffAlert();
-                }
-            }, 5000);
-        }
+    if (gpsWarningDismissCount >= GPS_MAX_WARNINGS) {
+        // Force checkout after 3 dismissals
+        console.log('[GPS Warning] Max dismissals reached, forcing checkout');
+        showToast('Checkout automático - GPS desativado por muito tempo', 'warning');
+
+        // Do checkout with reason
+        await doCheckoutWithReason('GPS desativado - checkout automático após 3 avisos ignorados');
+
+        // Reset counter
+        gpsWarningDismissCount = 0;
+    } else {
+        // Show warning again after delay
+        setTimeout(() => {
+            if (activeCheckinId && locationPermissionStatus !== 'granted') {
+                gpsAlertShown = false; // Reset to allow showing again
+                showGPSOffAlert();
+            }
+        }, 30000); // 30 seconds between warnings
     }
+}
+
+/**
+ * Open device location settings
+ * Works on most mobile browsers
+ */
+function openLocationSettings() {
+    hideGPSOffAlert();
+
+    // Try to open location settings
+    // Different approaches for different platforms
+
+    // First, try requesting permission again (this will prompt the user)
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                // Success! GPS is back on
+                console.log('[GPS] Location enabled successfully');
+                locationPermissionStatus = 'granted';
+                gpsWarningDismissCount = 0; // Reset counter
+                await logGPSOffEnd();
+                hideLocationDeniedBanner();
+                startLocationTracking();
+                showToast('✅ GPS ativado! Localização restaurada.', 'success');
+            },
+            (error) => {
+                console.log('[GPS] Still denied, showing instructions');
+                // Show instructions for manual enabling
+                showLocationSettingsInstructions();
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            }
+        );
+    } else {
+        showLocationSettingsInstructions();
+    }
+}
+
+/**
+ * Show instructions on how to enable GPS manually
+ */
+function showLocationSettingsInstructions() {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isAndroid = /Android/.test(navigator.userAgent);
+
+    let instructions = '';
+    if (isIOS) {
+        instructions = `
+            <p><strong>No iPhone/iPad:</strong></p>
+            <ol>
+                <li>Abra <strong>Ajustes</strong></li>
+                <li>Toque em <strong>Privacidade e Segurança</strong></li>
+                <li>Toque em <strong>Serviços de Localização</strong></li>
+                <li>Ative a <strong>Localização</strong></li>
+                <li>Encontre o Safari/navegador e permita</li>
+            </ol>
+        `;
+    } else if (isAndroid) {
+        instructions = `
+            <p><strong>No Android:</strong></p>
+            <ol>
+                <li>Abra <strong>Configurações</strong></li>
+                <li>Toque em <strong>Localização</strong></li>
+                <li>Ative a <strong>Localização</strong></li>
+                <li>Volte para o app e recarregue</li>
+            </ol>
+        `;
+    } else {
+        instructions = `
+            <p>Abra as configurações do seu dispositivo e ative a localização para este site.</p>
+        `;
+    }
+
+    // Show modal with instructions
+    let modal = document.getElementById('gps-instructions-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'gps-instructions-modal';
+        modal.className = 'gps-warning-modal';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="gps-warning-content gps-instructions">
+            <div class="gps-warning-icon">⚙️</div>
+            <h2>Como Ativar o GPS</h2>
+            <div class="gps-instructions-text">
+                ${instructions}
+            </div>
+            <div class="gps-warning-actions">
+                <button class="btn-enable-gps" onclick="closeInstructionsAndRetry()">
+                    <span>🔄</span> Já Ativei, Verificar
+                </button>
+                <button class="btn-dismiss-gps" onclick="closeInstructionsModal()">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+}
+
+/**
+ * Close instructions modal and retry GPS
+ */
+function closeInstructionsAndRetry() {
+    const modal = document.getElementById('gps-instructions-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+
+    // Try to get location again
+    openLocationSettings();
+}
+
+/**
+ * Close instructions modal
+ */
+function closeInstructionsModal() {
+    const modal = document.getElementById('gps-instructions-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+
+    // Show warning again after delay if still no GPS
+    setTimeout(() => {
+        if (activeCheckinId && locationPermissionStatus !== 'granted') {
+            gpsAlertShown = false;
+            showGPSOffAlert();
+        }
+    }, 10000);
+}
+
+/**
+ * User clicked to enable GPS from alert (legacy function)
+ */
+async function requestGPSFromAlert() {
+    openLocationSettings();
 }
 
 // =============================================
