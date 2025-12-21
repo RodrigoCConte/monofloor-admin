@@ -73,6 +73,11 @@ model User {
   xpTotal         Int        @default(0) @map("xp_total")
   level           Int        @default(1)
 
+  // Punctuality System
+  punctualityStreak     Int      @default(0) @map("punctuality_streak")      // Dias consecutivos pontuais
+  punctualityMultiplier Decimal  @default(1.0) @map("punctuality_multiplier") @db.Decimal(3, 1)  // Multiplicador atual (1.0 - 5.0)
+  lastPunctualDate      DateTime? @map("last_punctual_date")  // Última data que foi pontual
+
   // Statistics (denormalized for performance)
   totalHoursWorked  Decimal  @default(0) @map("total_hours_worked") @db.Decimal(10, 2)
   totalM2Applied    Decimal  @default(0) @map("total_m2_applied") @db.Decimal(10, 2)
@@ -345,6 +350,12 @@ model Checkin {
   isValid         Boolean   @default(true) @map("is_valid")
   isIrregular     Boolean   @default(false) @map("is_irregular") // No location after 3 attempts
   validationNotes String?   @map("validation_notes")
+
+  // Punctuality tracking
+  isFirstOfDay    Boolean   @default(false) @map("is_first_of_day")  // É o primeiro check-in do dia
+  isPunctual      Boolean?  @map("is_punctual")                       // Foi pontual? (null se não é primeiro do dia)
+  minutesLate     Int?      @map("minutes_late")                      // Minutos de atraso (0 se pontual)
+  expectedTime    String?   @map("expected_time")                     // Horário esperado (ex: "08:00")
 
   createdAt       DateTime  @default(now()) @map("created_at")
 

@@ -638,6 +638,12 @@ router.post(
       const { cancelLunchBreakAlerts } = await import('../../services/lunch-alert.service');
       await cancelLunchBreakAlerts(req.user!.sub);
 
+      // =============================================
+      // PUNCTUALITY PROCESSING
+      // =============================================
+      const { processPunctuality } = await import('../../services/punctuality.service');
+      const punctualityResult = await processPunctuality(req.user!.sub, projectId, new Date());
+
       const checkin = await prisma.checkin.create({
         data: {
           userId: req.user!.sub,
@@ -647,6 +653,11 @@ router.post(
           checkinDistance,
           isDistantCheckin,
           isIrregular,
+          // Punctuality tracking
+          isFirstOfDay: punctualityResult.isFirstOfDay,
+          isPunctual: punctualityResult.isPunctual,
+          minutesLate: punctualityResult.minutesLate,
+          expectedTime: punctualityResult.expectedTime,
         },
         include: {
           project: {
@@ -658,13 +669,17 @@ router.post(
       // Get user info for socket events
       const user = await prisma.user.findUnique({
         where: { id: req.user!.sub },
-        select: { name: true, photoUrl: true, xpTotal: true },
+        select: { name: true, photoUrl: true, xpTotal: true, punctualityStreak: true, punctualityMultiplier: true },
       });
 
       // =============================================
-      // XP REWARD: 100 XP por check-in
+      // XP REWARD: 100 XP por check-in (com multiplicador de pontualidade)
       // =============================================
-      const XP_CHECKIN = 100;
+      const XP_CHECKIN_BASE = 100;
+
+      // Apply punctuality multiplier to check-in XP
+      const currentMultiplier = punctualityResult.newMultiplier;
+      const XP_CHECKIN = Math.round(XP_CHECKIN_BASE * currentMultiplier);
 
       // Criar transação de XP
       await prisma.xpTransaction.create({
@@ -672,7 +687,9 @@ router.post(
           userId: req.user!.sub,
           amount: XP_CHECKIN,
           type: 'CHECKIN',
-          reason: `Check-in na obra ${checkin.project.cliente || checkin.project.title}`,
+          reason: currentMultiplier > 1
+            ? `Check-in na obra ${checkin.project.cliente || checkin.project.title} (${currentMultiplier}x)`
+            : `Check-in na obra ${checkin.project.cliente || checkin.project.title}`,
           checkinId: checkin.id,
           projectId,
         },
@@ -684,7 +701,7 @@ router.post(
         data: {
           xpTotal: { increment: XP_CHECKIN },
         },
-        select: { xpTotal: true, level: true },
+        select: { xpTotal: true, level: true, punctualityStreak: true, punctualityMultiplier: true },
       });
 
       // Update UserLocation to sync with checkin (for map)
@@ -726,10 +743,23 @@ router.post(
         success: true,
         data: checkin,
         xp: {
-          earned: XP_CHECKIN,
-          reason: 'Check-in na obra',
+          earned: XP_CHECKIN + punctualityResult.xpAwarded,
+          checkinXp: XP_CHECKIN,
+          punctualityXp: punctualityResult.xpAwarded,
+          reason: punctualityResult.xpAwarded > 0
+            ? `Check-in na obra + Bônus pontualidade (${punctualityResult.newStreak} dias)`
+            : 'Check-in na obra',
           total: updatedUser.xpTotal,
           level: updatedUser.level,
+        },
+        punctuality: {
+          isFirstOfDay: punctualityResult.isFirstOfDay,
+          isPunctual: punctualityResult.isPunctual,
+          minutesLate: punctualityResult.minutesLate,
+          expectedTime: punctualityResult.expectedTime,
+          streak: punctualityResult.newStreak,
+          multiplier: punctualityResult.newMultiplier,
+          streakBroken: punctualityResult.streakBroken,
         },
       });
     } catch (error) {
@@ -1108,10 +1138,16 @@ router.get(
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0, 23, 59, 59);
 
-      // Get user's current role
+      // Get user's current role and punctuality data
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { role: true, xpTotal: true },
+        select: {
+          role: true,
+          xpTotal: true,
+          punctualityStreak: true,
+          punctualityMultiplier: true,
+          lastPunctualDate: true,
+        },
       });
 
       if (!user) {
@@ -1365,6 +1401,11 @@ router.get(
             earnedThisMonth: totalXpEarned,
             penaltyThisMonth: totalXpPenalty,
             lunchPenalty: totalLunchPenaltyXP,
+          },
+          punctuality: {
+            streak: user.punctualityStreak,
+            multiplier: Number(user.punctualityMultiplier),
+            lastPunctualDate: user.lastPunctualDate,
           },
           byProject,
           dailySummaries: dailySummaries.map((s) => ({
