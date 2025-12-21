@@ -836,6 +836,9 @@ async function sendLocationWithBattery() {
             trigger: activeCheckinId ? 'checkin_tracking' : 'background_tracking'
         });
 
+        // Sync timeline events to server immediately
+        syncTimelineEvents();
+
         console.log('Location sent with battery:', batteryInfo.level + '%', 'checkin:', !!activeCheckinId);
         updateLocationBanner(true);
     } catch (error) {
