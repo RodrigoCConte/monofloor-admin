@@ -6785,15 +6785,19 @@ async function submitReport() {
             });
 
             // Se o usuário ainda está checado, fazer checkout automático
+            console.log('[REPORT] Verificando checkout automático - isCheckedIn:', isCheckedIn, 'activeCheckinId:', activeCheckinId);
             if (isCheckedIn && activeCheckinId) {
+                console.log('[REPORT] Iniciando checkout automático após relatório...');
                 try {
                     await doCheckoutWithTasksAndReminder('REPORT_SENT');
+                    console.log('[REPORT] Checkout automático concluído com sucesso!');
                     showSuccessModal('Relatório Enviado!', 'Relatório enviado e checkout realizado com sucesso.');
                 } catch (checkoutError) {
-                    console.error('Erro no checkout após relatório:', checkoutError);
+                    console.error('[REPORT] Erro no checkout após relatório:', checkoutError);
                     showSuccessModal('Relatório Enviado!', 'Relatório enviado. Checkout pendente.');
                 }
             } else {
+                console.log('[REPORT] Usuário não está checado, pulando checkout automático');
                 showSuccessModal('Relatório Enviado!', 'O relatório foi enviado para o time do projeto.');
             }
 
@@ -9285,8 +9289,12 @@ async function skipReportReminder() {
  * Complete checkout with task completion and report reminder option
  */
 async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
+    console.log('[CHECKOUT] doCheckoutWithTasksAndReminder chamado com reportOption:', reportOption);
+    console.log('[CHECKOUT] activeCheckinId:', activeCheckinId);
+    console.log('[CHECKOUT] selectedTaskIds:', selectedTaskIds);
+
     if (!activeCheckinId) {
-        console.error('No active checkin');
+        console.error('[CHECKOUT] No active checkin - abortando');
         return;
     }
 
@@ -9337,8 +9345,10 @@ async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
         });
 
         const data = await response.json();
+        console.log('[CHECKOUT] Resposta da API:', data.success ? 'SUCCESS' : 'FAILED', data);
 
         if (data.success) {
+            console.log('[CHECKOUT] Checkout realizado com sucesso, resetando estado...');
             // Reset state
             isCheckedIn = false;
             activeCheckinId = null;
@@ -9367,10 +9377,18 @@ async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
                 return;
             }
 
-            // Show XP notification if earned
+            // Show XP notification if earned (skip if report was just sent - caller handles notification)
             if (data.xp) {
                 updateUserXP(data.xp.total, data.xp.level);
-                showXPNotification(data.xp.totalEarned, 'Checkout + Tarefas', data.xp.total);
+                if (reportOption !== 'REPORT_SENT') {
+                    showXPNotification(data.xp.totalEarned, 'Checkout + Tarefas', data.xp.total);
+                }
+            }
+
+            // Skip showing success modal if report was just sent (caller handles it)
+            if (reportOption === 'REPORT_SENT') {
+                console.log('[CHECKOUT] reportOption=REPORT_SENT, pulando showSuccessModal (caller vai exibir)');
+                return;
             }
 
             // Show success message
