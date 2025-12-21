@@ -418,7 +418,7 @@ export async function sendGPSAutoCheckoutPush(
     data: {
       type: 'gps:auto-checkout',
       projectName,
-      reason: 'GPS desativado por mais de 60 segundos',
+      reason: 'GPS desativado por mais de 5 minutos',
       url: '/#projects',
     },
   };

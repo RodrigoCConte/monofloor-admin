@@ -2,10 +2,11 @@
  * GPS Auto-Checkout Service
  * Monitors users who stop sending location updates and auto-checkouts after confirmations
  *
- * NEW APPROACH:
- * - Instead of relying on frontend GPS status, check if user is sending location updates
- * - Require 3 consecutive confirmations (90 seconds total) before auto-checkout
+ * APPROACH:
+ * - Check gpsStatus field reported by frontend (not location staleness)
+ * - Require 10 consecutive confirmations (5 minutes total) before auto-checkout
  * - Only applies to users with active check-ins
+ * - Cron runs every 30 seconds
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -16,7 +17,7 @@ const prisma = new PrismaClient();
 
 // Configuration
 const LOCATION_STALE_THRESHOLD_MS = 30 * 1000; // 30 seconds without location update = stale
-const REQUIRED_CONFIRMATIONS = 3; // Need 3 confirmations (90 seconds total)
+const REQUIRED_CONFIRMATIONS = 10; // Need 10 confirmations (5 minutes total = 10 x 30s)
 const CHECK_INTERVAL_SECONDS = 30; // Cron runs every 30 seconds
 
 /**
@@ -112,7 +113,7 @@ export async function updateGPSStatus(
  * 1. Find users with active check-ins
  * 2. Check if their gpsStatus is 'denied' (reported by frontend)
  * 3. Increment confirmations counter
- * 4. After 3 confirmations, perform auto-checkout
+ * 4. After 10 confirmations (5 minutes), perform auto-checkout
  *
  * NOTE: We check gpsStatus, NOT location staleness, because cached locations
  * from IndexedDB can be synced even when GPS is off.
@@ -221,7 +222,7 @@ export async function processGPSAutoCheckouts(): Promise<{
           projectId: checkin.projectId,
           projectName,
           hoursWorked,
-          reason: 'GPS desativado por mais de 90 segundos',
+          reason: 'GPS desativado por mais de 5 minutos',
           timestamp: checkoutAt,
         });
 

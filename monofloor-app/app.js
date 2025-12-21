@@ -584,11 +584,13 @@ let gpsOffStartTime = null; // Track when GPS was turned off
 let gpsAlertShown = false; // Track if persistent alert is shown
 let gpsCheckoutInProgress = false; // Prevent multiple checkout attempts
 
-// GPS Auto-Checkout: 1 minute with GPS off = automatic checkout
-// SIMPLIFIED RULE: No warnings, just immediate checkout after 1 minute
+// GPS Auto-Checkout: 5 minutes with GPS off = automatic checkout
+// Backend does checkout after 10 confirmations (5 min = 10 x 30s)
+// Frontend shows warning only after 60 seconds of GPS off
 let gpsVerificationInterval = null;
 const GPS_VERIFICATION_INTERVAL = 10 * 1000; // Check every 10 seconds for responsiveness
-const GPS_MAX_OFF_DURATION = 60 * 1000; // 1 minute - force checkout after this (no exceptions)
+const GPS_WARNING_THRESHOLD = 60 * 1000; // 60 seconds - show warning after this
+const GPS_MAX_OFF_DURATION = 5 * 60 * 1000; // 5 minutes - checkout happens after this
 
 // =============================================
 // ACCELEROMETER & MOVEMENT TRACKING (when NOT checked-in)
@@ -10474,6 +10476,12 @@ function showGPSWarningModal(secondsRemaining) {
     modal.className = 'gps-mobile-modal active';
     modal.innerHTML = `
         <div class="gps-mobile-content warning">
+            <button class="gps-modal-close" onclick="hideGPSWarningModal()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
             <div class="gps-mobile-header">
                 <div class="gps-mobile-icon-wrapper warning">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -10491,6 +10499,16 @@ function showGPSWarningModal(secondsRemaining) {
                 </div>
                 <p class="gps-mobile-message">Seu check-out será realizado automaticamente</p>
                 <p class="gps-mobile-hint">Ative o GPS para continuar trabalhando</p>
+            </div>
+            <div class="gps-modal-actions">
+                <button class="gps-modal-btn primary" onclick="requestLocationPermissionFromModal()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                        <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                    Ativar Localização
+                </button>
+                <button class="gps-modal-btn secondary" onclick="hideGPSWarningModal()">Fechar</button>
             </div>
         </div>
     `;
@@ -10530,6 +10548,69 @@ function hideGPSWarningModal() {
 }
 
 /**
+ * Request location permission from GPS warning modal
+ * Tries to re-request geolocation permission
+ */
+function requestLocationPermissionFromModal() {
+    if (!navigator.geolocation) {
+        showToast('Seu dispositivo não suporta GPS', 'error');
+        return;
+    }
+
+    // Show loading state on button
+    const btn = document.querySelector('.gps-modal-btn.primary');
+    if (btn) {
+        btn.innerHTML = '<span class="spinner"></span> Solicitando...';
+        btn.disabled = true;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            // Success! GPS is back on
+            console.log('[GPS] Localização reativada com sucesso');
+            locationPermissionStatus = 'granted';
+            gpsOffStartTime = null;
+
+            // Notify backend
+            notifyBackendGPSStatus('granted');
+
+            // Hide modal and show success
+            hideGPSWarningModal();
+            hideLocationDeniedBanner();
+            showToast('Localização ativada com sucesso!', 'success');
+
+            // Restart location tracking
+            startLocationTracking();
+        },
+        (error) => {
+            console.log('[GPS] Erro ao solicitar localização:', error);
+
+            // Reset button
+            if (btn) {
+                btn.innerHTML = `
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                        <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                    Ativar Localização
+                `;
+                btn.disabled = false;
+            }
+
+            if (error.code === error.PERMISSION_DENIED) {
+                showToast('Permissão negada. Ative nas configurações do navegador.', 'error');
+            } else {
+                showToast('Não foi possível obter localização. Tente novamente.', 'warning');
+            }
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000
+        }
+    );
+}
+
+/**
  * Show GPS auto-checkout notification
  * Displayed when backend performs auto-checkout due to GPS off 60+ seconds
  */
@@ -10566,7 +10647,7 @@ function showGPSAutoCheckoutNotification(projectName) {
                 </div>
                 <p class="gps-mobile-message-checkout">Seu check-out automático foi realizado</p>
                 <p class="gps-mobile-warning">Suas horas não serão computadas</p>
-                <p class="gps-mobile-reason">GPS desativado por mais de 60 segundos</p>
+                <p class="gps-mobile-reason">GPS desativado por mais de 5 minutos</p>
             </div>
             <button class="gps-mobile-btn" onclick="closeGPSAutoCheckoutModal()">
                 <span>Entendi</span>
@@ -11015,7 +11096,7 @@ function startForcedCheckoutRetry() {
 
 /**
  * Start GPS background verification - SIMPLIFIED RULE
- * Checks every 10 seconds. If GPS is off for 1 minute = automatic checkout
+ * Checks every 10 seconds. If GPS is off for 5 minutes = automatic checkout (backend handles via 10 confirmations)
  * NO WARNINGS - Just immediate checkout with notification
  */
 function startGPSBackgroundVerification() {
@@ -11024,7 +11105,7 @@ function startGPSBackgroundVerification() {
         clearInterval(gpsVerificationInterval);
     }
 
-    console.log('[GPS Verification] Starting - 1 minute rule active');
+    console.log('[GPS Verification] Starting - 5 minute rule active (warning after 60s)');
     gpsCheckoutInProgress = false;
 
     gpsVerificationInterval = setInterval(async () => {
@@ -11039,12 +11120,13 @@ function startGPSBackgroundVerification() {
         if (currentStatus !== 'granted') {
             // GPS is not available
             if (!gpsOffStartTime) {
-                // Just turned off - start the 1 minute countdown
+                // Just turned off - start the countdown
                 gpsOffStartTime = Date.now();
-                console.log('[GPS] Localização DESLIGADA - iniciando contagem de 1 minuto');
+                console.log('[GPS] Localização DESLIGADA - iniciando contagem de 5 minutos');
 
-                // Show immediate warning
-                showToast('⚠️ Localização desligada! Checkout automático em 1 minuto.', 'warning');
+                // CRITICAL: Notify backend about GPS status change
+                // This is what triggers the auto-checkout confirmation system
+                notifyBackendGPSStatus('denied');
             } else {
                 // Calculate how long GPS has been off
                 const offDuration = Date.now() - gpsOffStartTime;
@@ -11052,16 +11134,22 @@ function startGPSBackgroundVerification() {
 
                 console.log(`[GPS] Localização off há ${Math.round(offDuration / 1000)}s (${secondsLeft}s restantes)`);
 
+                // Only show warning modal after 60 seconds (GPS_WARNING_THRESHOLD)
+                if (offDuration >= GPS_WARNING_THRESHOLD && offDuration < GPS_MAX_OFF_DURATION) {
+                    // Show warning modal with countdown
+                    showGPSWarningModal(secondsLeft);
+                }
+
                 if (offDuration >= GPS_MAX_OFF_DURATION && !gpsCheckoutInProgress) {
                     // BACKEND HANDLES CHECKOUT - Frontend only shows warning
                     // The backend monitors location updates and triggers checkout via socket
-                    // after 3 confirmations (90 seconds of no location updates)
-                    console.log('[GPS] ⚠️ 1 MINUTO ATINGIDO - aguardando backend fazer checkout via socket');
+                    // after 10 confirmations (5 minutes of GPS off)
+                    console.log('[GPS] ⚠️ 5 MINUTOS ATINGIDO - aguardando backend fazer checkout via socket');
 
                     // Log critical event
                     await logTimelineEvent('GPS_WAITING_BACKEND_CHECKOUT', {
                         offDuration: offDuration,
-                        rule: 'Backend handles checkout via 3 confirmations (90s)'
+                        rule: 'Backend handles checkout via 10 confirmations (5 min)'
                     });
 
                     // Show warning that checkout is imminent (backend will trigger it)
@@ -11073,6 +11161,10 @@ function startGPSBackgroundVerification() {
             if (gpsOffStartTime) {
                 console.log('[GPS] Localização RESTAURADA - timer resetado');
                 gpsOffStartTime = null;
+
+                // Notify backend that GPS is back on (cancels auto-checkout)
+                notifyBackendGPSStatus('granted');
+
                 showToast('✅ Localização ativada!', 'success');
             }
         }
@@ -11080,14 +11172,14 @@ function startGPSBackgroundVerification() {
 }
 
 /**
- * Execute automatic checkout due to GPS being off for 1 minute
+ * Execute automatic checkout due to GPS being off for 5 minutes
  * Uses INTERNET-ONLY checkout (no GPS dependency)
  * Shows prominent notification and does checkout
  */
 async function executeGPSAutoCheckout() {
     const checkoutMessage = 'Seu check-out automático foi realizado e suas horas no projeto não serão computadas.';
 
-    console.log('[GPS Auto-Checkout] EXECUTING - 1 minute GPS off reached');
+    console.log('[GPS Auto-Checkout] EXECUTING - 5 minutes GPS off reached');
 
     // Show in-app modal FIRST (prominent, can't be missed)
     showGPSCheckoutModal(checkoutMessage);
@@ -11365,6 +11457,19 @@ async function initGPSMonitoring() {
     try {
         const status = await navigator.permissions.query({ name: 'geolocation' });
 
+        // Check INITIAL status and notify backend
+        console.log('[GPS Monitor] Status inicial:', status.state);
+        locationPermissionStatus = status.state;
+
+        // Notify backend about initial GPS status (important for auto-checkout)
+        if (status.state === 'denied') {
+            logGPSOffStart();
+            showLocationDeniedBanner();
+        } else if (status.state === 'granted') {
+            notifyBackendGPSStatus('granted');
+        }
+
+        // Listen for changes
         status.addEventListener('change', () => {
             console.log('[GPS Monitor] Permissão mudou para:', status.state);
 
