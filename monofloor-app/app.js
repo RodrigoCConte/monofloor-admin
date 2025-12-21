@@ -828,6 +828,14 @@ async function sendLocationWithBattery() {
             body: JSON.stringify(payload)
         });
 
+        // Log to timeline for history tracking (syncs to locationHistory table)
+        await logTimelineEvent('LOCATION_UPDATE', {
+            latitude: payload.latitude,
+            longitude: payload.longitude,
+            accuracy: payload.accuracy,
+            trigger: activeCheckinId ? 'checkin_tracking' : 'background_tracking'
+        });
+
         console.log('Location sent with battery:', batteryInfo.level + '%', 'checkin:', !!activeCheckinId);
         updateLocationBanner(true);
     } catch (error) {
