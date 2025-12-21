@@ -12907,3 +12907,40 @@ body {
     transform: scale(0.98);
 }
 
+.gps-checkout-btn {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    padding: 16px 40px;
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 16px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+}
+
+.gps-checkout-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(239, 68, 68, 0.5);
+}
+
+.gps-checkout-btn:active {
+    transform: scale(0.98);
+}
+
+.gps-subtitle {
+    color: #888 !important;
+    font-size: 14px !important;
+    margin-bottom: 8px !important;
+}
+
+.gps-checkout-content h3 {
+    color: #ef4444;
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+

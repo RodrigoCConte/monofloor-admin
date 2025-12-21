@@ -18,6 +18,7 @@ import { isLunchTime } from '../../services/lunch-scheduler.service';
 import { sendRequestNotification } from '../../services/whatsapp.service';
 import { whisperService } from '../../services/ai/whisper.service';
 import { saveFile, deleteFile, UploadType } from '../../services/db-storage.service';
+import { updateGPSStatus, getGPSStatus } from '../../services/gps-autocheckout.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1807,6 +1808,55 @@ router.put('/location/offline', mobileAuth, async (req, res, next) => {
     res.json({
       success: true,
       message: 'Marked as offline',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/mobile/location/gps-status - Update GPS permission status
+// Used for backend-controlled auto-checkout after 60 seconds with GPS off
+router.post(
+  '/location/gps-status',
+  mobileAuth,
+  [body('status').isIn(['granted', 'denied', 'prompt'])],
+  validate,
+  async (req, res, next) => {
+    try {
+      const userId = req.user!.sub;
+      const { status } = req.body;
+
+      const result = await updateGPSStatus(userId, status);
+
+      // Get current GPS status info
+      const gpsInfo = await getGPSStatus(userId);
+
+      res.json({
+        success: true,
+        gpsStatus: status,
+        gpsOffAt: result.gpsOffAt,
+        secondsOff: gpsInfo.secondsOff,
+        message:
+          status === 'granted'
+            ? 'GPS ativado'
+            : `GPS desativado. Checkout automatico em ${Math.max(0, 60 - gpsInfo.secondsOff)} segundos.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/mobile/location/gps-status - Get current GPS status
+router.get('/location/gps-status', mobileAuth, async (req, res, next) => {
+  try {
+    const userId = req.user!.sub;
+    const gpsInfo = await getGPSStatus(userId);
+
+    res.json({
+      success: true,
+      ...gpsInfo,
+      timeToAutoCheckout: gpsInfo.isGPSOff ? Math.max(0, 60 - gpsInfo.secondsOff) : null,
     });
   } catch (error) {
     next(error);

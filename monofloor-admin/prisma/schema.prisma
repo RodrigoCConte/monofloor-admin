@@ -377,6 +377,7 @@ enum CheckoutReason {
   COMPRA_INSUMOS
   ALMOCO_INTERVALO
   AUTO_DISTANTE      // Auto-checkout por sair da área do projeto (>100m)
+  GPS_DESATIVADO     // Auto-checkout por GPS desligado por 60+ segundos
 }
 
 // =============================================
@@ -576,6 +577,10 @@ model UserLocation {
   // Current project (if checked in)
   currentProjectId String? @map("current_project_id")
   currentProject   Project? @relation(fields: [currentProjectId], references: [id])
+
+  // GPS Status for auto-checkout (1 minute rule)
+  gpsStatus     String?   @map("gps_status") // 'granted', 'denied', 'prompt'
+  gpsOffAt      DateTime? @map("gps_off_at") // When GPS was turned off (null = GPS is on)
 
   updatedAt     DateTime  @updatedAt @map("updated_at")
 

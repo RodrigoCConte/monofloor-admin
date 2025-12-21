@@ -9,6 +9,7 @@ import { videoJobWorker, cleanupOldJobs } from './services/video-job-worker.serv
 import { processScheduledReminders } from './services/report-reminder.service';
 import { processScheduledLunchAlerts, cleanupOldLunchAlerts } from './services/lunch-alert.service';
 import { processAllDailyWorktime } from './services/worktime.service';
+import { processGPSAutoCheckouts } from './services/gps-autocheckout.service';
 
 const prisma = new PrismaClient();
 
@@ -112,6 +113,17 @@ async function main() {
           console.error('❌ Error cleaning up lunch alerts:', error);
         }
       }, 60 * 60 * 1000);
+
+      // Process GPS auto-checkouts every 30 seconds
+      // Rule: GPS off for 60 seconds = automatic checkout
+      setInterval(async () => {
+        try {
+          await processGPSAutoCheckouts();
+        } catch (error) {
+          console.error('❌ Error processing GPS auto-checkouts:', error);
+        }
+      }, 30 * 1000);
+      console.log('📍 GPS auto-checkout scheduler started (every 30s)');
 
       // Schedule daily worktime calculation at 23:59
       const scheduleDailyWorktimeProcessing = () => {

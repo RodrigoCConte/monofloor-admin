@@ -1181,6 +1181,34 @@ function initSocketConnection() {
             { type: 'notification:new', notificationId: data.id }
         );
     });
+
+    // Listen for GPS auto-checkout event (backend did auto-checkout due to GPS off 60s)
+    socket.on('gps:autoCheckout', (data) => {
+        console.log('[Socket] GPS Auto-Checkout received:', data);
+
+        // Update local state
+        isCheckedIn = false;
+        activeCheckinId = null;
+        currentProjectForCheckin = null;
+        pendingCheckoutReason = null;
+
+        // Update UI
+        updateCheckinUI(false);
+
+        // Hide any GPS warning modals
+        hideGPSWarningModal();
+        hideGPSOffAlert();
+
+        // Show checkout notification modal
+        showGPSAutoCheckoutNotification(data.projectName);
+
+        // Show browser notification
+        showBrowserNotification(
+            'Check-out Automático Realizado',
+            `${data.projectName}: Seu check-out foi realizado automaticamente. Suas horas não serão computadas.`,
+            { type: 'gps:autoCheckout', projectId: data.projectId }
+        );
+    });
 }
 
 // =============================================
@@ -10385,6 +10413,143 @@ async function syncPendingLocations() {
 // =============================================
 
 /**
+ * Notify backend about GPS status change
+ * Backend will auto-checkout after 60 seconds with GPS off
+ */
+async function notifyBackendGPSStatus(status) {
+    const token = getAuthToken();
+    if (!token) {
+        console.log('[GPS Backend] Sem token, não notificando');
+        return null;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/mobile/location/gps-status`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ status })
+        });
+
+        const data = await response.json();
+        console.log('[GPS Backend] Status atualizado:', data);
+
+        if (data.success && status !== 'granted' && activeCheckinId) {
+            const timeRemaining = Math.max(0, 60 - (data.secondsOff || 0));
+            console.log(`[GPS Backend] Checkout automático em ${timeRemaining} segundos`);
+
+            // Show warning modal if checked in
+            if (timeRemaining > 0) {
+                showGPSWarningModal(timeRemaining);
+            }
+        }
+
+        return data;
+    } catch (error) {
+        console.error('[GPS Backend] Erro ao notificar:', error);
+        return null;
+    }
+}
+
+/**
+ * Show GPS warning modal with countdown
+ */
+function showGPSWarningModal(secondsRemaining) {
+    // Remove existing modal if any
+    const existingModal = document.getElementById('gps-warning-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'gps-warning-modal';
+    modal.className = 'gps-checkout-modal active';
+    modal.innerHTML = `
+        <div class="gps-checkout-content">
+            <div class="gps-checkout-icon">⚠️</div>
+            <h3>GPS Desativado</h3>
+            <p>Seu check-out será feito automaticamente em <strong id="gps-countdown">${secondsRemaining}</strong> segundos.</p>
+            <p class="gps-subtitle">Ative o GPS para continuar trabalhando.</p>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Countdown
+    let remaining = secondsRemaining;
+    const countdownInterval = setInterval(() => {
+        remaining--;
+        const countdownEl = document.getElementById('gps-countdown');
+        if (countdownEl) {
+            countdownEl.textContent = remaining;
+        }
+        if (remaining <= 0) {
+            clearInterval(countdownInterval);
+        }
+    }, 1000);
+
+    // Store interval ID for cleanup
+    modal.dataset.intervalId = countdownInterval;
+}
+
+/**
+ * Hide GPS warning modal
+ */
+function hideGPSWarningModal() {
+    const modal = document.getElementById('gps-warning-modal');
+    if (modal) {
+        const intervalId = modal.dataset.intervalId;
+        if (intervalId) {
+            clearInterval(parseInt(intervalId));
+        }
+        modal.remove();
+    }
+}
+
+/**
+ * Show GPS auto-checkout notification
+ * Displayed when backend performs auto-checkout due to GPS off 60+ seconds
+ */
+function showGPSAutoCheckoutNotification(projectName) {
+    // Remove existing modals
+    hideGPSWarningModal();
+    const existingModal = document.getElementById('gps-autocheckout-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'gps-autocheckout-modal';
+    modal.className = 'gps-checkout-modal active';
+    modal.innerHTML = `
+        <div class="gps-checkout-content">
+            <div class="gps-checkout-icon">🚫</div>
+            <h3>Check-out Automático Realizado</h3>
+            <p>${projectName}: <strong>Seu check-out automático foi realizado e suas horas no projeto não serão computadas.</strong></p>
+            <p class="gps-subtitle">GPS desativado por mais de 60 segundos.</p>
+            <button class="gps-checkout-btn" onclick="closeGPSAutoCheckoutModal()">Entendi</button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Auto-close after 10 seconds
+    setTimeout(() => {
+        closeGPSAutoCheckoutModal();
+    }, 10000);
+}
+
+/**
+ * Close GPS auto-checkout notification modal
+ */
+function closeGPSAutoCheckoutModal() {
+    const modal = document.getElementById('gps-autocheckout-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+/**
  * Log when GPS is turned off during active check-in
  */
 async function logGPSOffStart() {
@@ -10393,6 +10558,10 @@ async function logGPSOffStart() {
     gpsOffStartTime = new Date().toISOString();
 
     console.log('[GPS Log] GPS desligado às', gpsOffStartTime);
+
+    // Notify backend about GPS status change
+    // Backend will auto-checkout after 60 seconds
+    notifyBackendGPSStatus('denied');
 
     // Show persistent alert if checked in
     if (activeCheckinId) {
@@ -10416,8 +10585,12 @@ async function logGPSOffEnd() {
 
     console.log(`[GPS Log] GPS ligado após ${durationMinutes} minutos`);
 
-    // Hide persistent alert
+    // Hide persistent alert and warning modal
     hideGPSOffAlert();
+    hideGPSWarningModal();
+
+    // Notify backend that GPS is back on (cancels auto-checkout)
+    notifyBackendGPSStatus('granted');
 
     // Save log to IndexedDB
     await saveGPSOffLog({

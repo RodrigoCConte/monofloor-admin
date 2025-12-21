@@ -401,6 +401,32 @@ export async function sendXPAdjustmentPush(
 }
 
 /**
+ * Send GPS auto-checkout push notification
+ * Sent when a user is auto-checked-out due to GPS being off for 60+ seconds
+ */
+export async function sendGPSAutoCheckoutPush(
+  userId: string,
+  projectName: string
+): Promise<{ sent: number; failed: number }> {
+  const payload: PushPayload = {
+    title: 'Check-out Automatico Realizado',
+    body: `${projectName}: Seu check-out automatico foi realizado e suas horas no projeto nao serao computadas.`,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/badge-72.png',
+    tag: 'gps-auto-checkout',
+    requireInteraction: true,
+    data: {
+      type: 'gps:auto-checkout',
+      projectName,
+      reason: 'GPS desativado por mais de 60 segundos',
+      url: '/#projects',
+    },
+  };
+
+  return await sendPushToUser(userId, payload);
+}
+
+/**
  * Get VAPID public key (for client-side subscription)
  */
 export function getVapidPublicKey(): string {

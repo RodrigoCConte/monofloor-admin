@@ -338,3 +338,25 @@ export function emitNotificationToUser(userId: string, data: {
     console.log(`[Socket] Emitted notification:new to user:${userId} - "${data.title}"`);
   }
 }
+
+/**
+ * Emit GPS auto-checkout event to a user
+ * Triggered when user has GPS off for 60+ seconds
+ */
+export function emitGPSAutoCheckout(data: {
+  userId: string;
+  userName: string;
+  projectId: string;
+  projectName: string;
+  hoursWorked: number;
+  reason: string;
+  timestamp: Date;
+}): void {
+  if (io) {
+    // Send to the specific user's room
+    io.to(`user:${data.userId}`).emit('gps:autoCheckout', data);
+    // Also notify admin
+    io.to('admin').emit('gps:autoCheckout', data);
+    console.log(`[Socket] Emitted gps:autoCheckout to user:${data.userId} - GPS off for 60+ seconds`);
+  }
+}
