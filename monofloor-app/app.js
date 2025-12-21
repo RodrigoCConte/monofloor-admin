@@ -585,6 +585,11 @@ let gpsAlertShown = false; // Track if persistent alert is shown
 let gpsWarningDismissCount = 0; // Counter for GPS warning dismissals (max 3 before auto-checkout)
 const GPS_MAX_WARNINGS = 3; // Maximum warnings before forced checkout
 
+// GPS Background Verification - Double check system
+let gpsVerificationInterval = null;
+const GPS_VERIFICATION_INTERVAL = 60 * 1000; // Check every 1 minute
+const GPS_MAX_OFF_DURATION = 5 * 60 * 1000; // 5 minutes - force checkout after this
+
 // =============================================
 // ACCELEROMETER & MOVEMENT TRACKING (when NOT checked-in)
 // =============================================
@@ -2398,14 +2403,17 @@ function dismissLeavingModal() {
 }
 
 // Do checkout with a specific reason (bypassing modal)
-async function doCheckoutWithReason(reason) {
+// Returns true if checkout was successful, false otherwise
+async function doCheckoutWithReason(reason, showMessages = true) {
     if (!activeCheckinId) {
         console.error('No active checkin');
-        return;
+        return false;
     }
 
+    const checkinIdToCheckout = activeCheckinId; // Save before clearing
+
     try {
-        // Get current location
+        // Get current location (if available)
         let latitude = null;
         let longitude = null;
 
@@ -2424,7 +2432,9 @@ async function doCheckoutWithReason(reason) {
             }
         }
 
-        const response = await fetch(`${API_URL}/api/mobile/checkins/${activeCheckinId}/checkout`, {
+        console.log(`[Checkout] Attempting checkout for checkin ${checkinIdToCheckout} with reason: ${reason}`);
+
+        const response = await fetch(`${API_URL}/api/mobile/checkins/${checkinIdToCheckout}/checkout`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -2438,6 +2448,7 @@ async function doCheckoutWithReason(reason) {
         });
 
         const data = await response.json();
+        console.log('[Checkout] API response:', data);
 
         if (data.success) {
             isCheckedIn = false;
@@ -2445,44 +2456,62 @@ async function doCheckoutWithReason(reason) {
             currentProjectForCheckin = null;
             updateCheckinUI(false);
 
+            // Stop GPS background verification
+            stopGPSBackgroundVerification();
+
             // Restart tracking with new interval
             restartLocationTracking();
 
             const hoursWorked = data.data.hoursWorked ? data.data.hoursWorked.toFixed(1) : '0';
 
-            // Mostrar XP ganho se disponível
-            if (data.xp) {
-                // Atualizar XP na tela de perfil se existir
-                updateUserXP(data.xp.total, data.xp.level);
-                // Mostrar modal de XP (fullscreen mobile) - usa razão da API
-                showXPNotification(data.xp.earned, data.xp.reason, data.xp.total);
-            } else {
-                // Se não tiver XP, mostrar modal de sucesso normal
-                let message = '';
-                switch(reason) {
-                    case 'ALMOCO_INTERVALO':
-                        message = `Pausa para almoco registrada. Voce trabalhou ${hoursWorked}h neste periodo.`;
-                        break;
-                    case 'COMPRA_INSUMOS':
-                        message = `Compra de insumos registrada. Voce trabalhou ${hoursWorked}h neste periodo.`;
-                        break;
-                    case 'OUTRO_PROJETO':
-                        message = `Check-out realizado. Voce trabalhou ${hoursWorked}h. Pode fazer check-in em outro projeto.`;
-                        break;
-                    case 'FIM_EXPEDIENTE':
-                        message = `Expediente encerrado. Voce trabalhou ${hoursWorked}h hoje. Bom descanso!`;
-                        break;
-                    default:
-                        message = `Check-out realizado. Voce trabalhou ${hoursWorked}h.`;
+            if (showMessages) {
+                // Mostrar XP ganho se disponível
+                if (data.xp) {
+                    // Atualizar XP na tela de perfil se existir
+                    updateUserXP(data.xp.total, data.xp.level);
+                    // Mostrar modal de XP (fullscreen mobile) - usa razão da API
+                    showXPNotification(data.xp.earned, data.xp.reason, data.xp.total);
+                } else {
+                    // Se não tiver XP, mostrar modal de sucesso normal
+                    let message = '';
+                    switch(reason) {
+                        case 'ALMOCO_INTERVALO':
+                            message = `Pausa para almoco registrada. Voce trabalhou ${hoursWorked}h neste periodo.`;
+                            break;
+                        case 'COMPRA_INSUMOS':
+                            message = `Compra de insumos registrada. Voce trabalhou ${hoursWorked}h neste periodo.`;
+                            break;
+                        case 'OUTRO_PROJETO':
+                            message = `Check-out realizado. Voce trabalhou ${hoursWorked}h. Pode fazer check-in em outro projeto.`;
+                            break;
+                        case 'FIM_EXPEDIENTE':
+                            message = `Expediente encerrado. Voce trabalhou ${hoursWorked}h hoje. Bom descanso!`;
+                            break;
+                        case 'GPS_DESATIVADO':
+                            message = `Checkout automático por GPS desativado. Voce trabalhou ${hoursWorked}h.`;
+                            break;
+                        default:
+                            message = `Check-out realizado. Voce trabalhou ${hoursWorked}h.`;
+                    }
+                    showSuccessModal('Check-out Realizado', message);
                 }
-                showSuccessModal('Check-out Realizado', message);
             }
+
+            console.log('[Checkout] SUCCESS - checkout completed');
+            return true;
         } else {
-            showSuccessModal('Erro', 'Nao foi possivel fazer o check-out. Tente novamente.');
+            console.error('[Checkout] FAILED - API returned error:', data.error);
+            if (showMessages) {
+                showSuccessModal('Erro', 'Nao foi possivel fazer o check-out. Tente novamente.');
+            }
+            return false;
         }
     } catch (error) {
-        console.error('Checkout error:', error);
-        showSuccessModal('Erro', 'Erro de conexao. Tente novamente.');
+        console.error('[Checkout] FAILED - Exception:', error);
+        if (showMessages) {
+            showSuccessModal('Erro', 'Erro de conexao. Tente novamente.');
+        }
+        return false;
     }
 }
 
@@ -3383,6 +3412,9 @@ async function executeAutoCheckout() {
             activeCheckinId = null;
             currentProjectForCheckin = null;
 
+            // Stop GPS background verification
+            stopGPSBackgroundVerification();
+
             // Atualizar UI
             updateCheckInButton();
             stopActiveCheckinTimer();
@@ -3430,6 +3462,9 @@ async function doCheckoutWithReason(reason, isAutoCheckout = false) {
             isCheckedIn = false;
             activeCheckinId = null;
             currentProjectForCheckin = null;
+
+            // Stop GPS background verification
+            stopGPSBackgroundVerification();
 
             // Atualizar UI
             updateCheckInButton();
@@ -3637,6 +3672,7 @@ async function doCheckin() {
             activeCheckinId = data.data.id;
             currentProjectForCheckin = selectedProject.id;
             gpsWarningDismissCount = 0; // Reset GPS warning counter on new check-in
+            gpsOffStartTime = null; // Reset GPS off timer on new check-in
             updateCheckinUI(true);
 
             // Mostrar XP ganho se disponível
@@ -3653,6 +3689,9 @@ async function doCheckin() {
 
             // Iniciar envio de localização periódico
             startLocationTracking();
+
+            // Start GPS background verification (double check system)
+            startGPSBackgroundVerification();
 
             // Load tasks for the project after check-in
             if (selectedProject && selectedProject.id) {
@@ -3834,6 +3873,9 @@ async function confirmCheckout(reason) {
             currentProjectForCheckin = null;
             updateCheckinUI(false);
 
+            // Stop GPS background verification
+            stopGPSBackgroundVerification();
+
             // Reiniciar tracking com intervalo menor (2min sem checkin)
             restartLocationTracking();
 
@@ -3905,8 +3947,13 @@ async function checkActiveCheckin() {
             isCheckedIn = true;
             activeCheckinId = data.data.id;
             currentProjectForCheckin = data.data.projectId;
+            gpsWarningDismissCount = 0; // Reset GPS warning counter
+            gpsOffStartTime = null; // Reset GPS off timer
             updateCheckinUI(true);
             startLocationTracking();
+
+            // Start GPS background verification (double check system)
+            startGPSBackgroundVerification();
         }
     } catch (error) {
         console.error('Erro ao verificar check-in ativo:', error);
@@ -9388,6 +9435,9 @@ async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
 
             updateCheckinUI(false);
 
+            // Stop GPS background verification
+            stopGPSBackgroundVerification();
+
             // Hide task block section
             const taskSection = document.getElementById('taskBlockSection');
             if (taskSection) taskSection.style.display = 'none';
@@ -10528,6 +10578,7 @@ function hideGPSOffAlert() {
 
 /**
  * User dismissed the GPS warning without enabling
+ * After 3 dismissals, forces automatic checkout with retry mechanism
  */
 async function dismissGPSWarning() {
     gpsWarningDismissCount++;
@@ -10542,15 +10593,21 @@ async function dismissGPSWarning() {
     });
 
     if (gpsWarningDismissCount >= GPS_MAX_WARNINGS) {
-        // Force checkout after 3 dismissals
-        console.log('[GPS Warning] Max dismissals reached, forcing checkout');
+        // Force checkout after 3 dismissals with retry mechanism
+        console.log('[GPS Warning] Max dismissals reached, FORCING checkout with retry');
         showToast('Checkout automático - GPS desativado por muito tempo', 'warning');
 
-        // Do checkout with reason
-        await doCheckoutWithReason('GPS desativado - checkout automático após 3 avisos ignorados');
+        // Try checkout with retry mechanism
+        const checkoutSuccess = await forceGPSCheckout();
 
-        // Reset counter
-        gpsWarningDismissCount = 0;
+        if (checkoutSuccess) {
+            console.log('[GPS Warning] Forced checkout SUCCESSFUL');
+            gpsWarningDismissCount = 0;
+        } else {
+            // Checkout failed - keep trying every 10 seconds
+            console.error('[GPS Warning] Forced checkout FAILED - starting retry loop');
+            startForcedCheckoutRetry();
+        }
     } else {
         // Show warning again after delay
         setTimeout(() => {
@@ -10559,6 +10616,189 @@ async function dismissGPSWarning() {
                 showGPSOffAlert();
             }
         }, 30000); // 30 seconds between warnings
+    }
+}
+
+// Retry interval for forced checkout
+let forcedCheckoutRetryInterval = null;
+let forcedCheckoutRetryCount = 0;
+const FORCED_CHECKOUT_MAX_RETRIES = 10;
+
+/**
+ * Force checkout due to GPS being disabled
+ * Returns true if successful, false otherwise
+ */
+async function forceGPSCheckout() {
+    if (!activeCheckinId) {
+        console.log('[GPS Checkout] No active checkin to checkout');
+        return true; // Consider success if no checkin
+    }
+
+    console.log('[GPS Checkout] Attempting forced checkout...');
+
+    // Use GPS_DESATIVADO as reason (valid reason)
+    const success = await doCheckoutWithReason('GPS_DESATIVADO', true);
+
+    if (success) {
+        // Double verification - check state after checkout
+        if (!activeCheckinId && !isCheckedIn) {
+            console.log('[GPS Checkout] VERIFIED - No active checkin after checkout');
+            return true;
+        } else {
+            console.error('[GPS Checkout] State mismatch - still has active checkin');
+            // Force clear local state
+            isCheckedIn = false;
+            activeCheckinId = null;
+            currentProjectForCheckin = null;
+            updateCheckinUI(false);
+            stopGPSBackgroundVerification();
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Start retry loop for forced checkout
+ * Keeps trying until checkout succeeds or max retries reached
+ */
+function startForcedCheckoutRetry() {
+    // Clear any existing retry interval
+    if (forcedCheckoutRetryInterval) {
+        clearInterval(forcedCheckoutRetryInterval);
+    }
+
+    forcedCheckoutRetryCount = 0;
+
+    forcedCheckoutRetryInterval = setInterval(async () => {
+        forcedCheckoutRetryCount++;
+        console.log(`[GPS Checkout] Retry ${forcedCheckoutRetryCount}/${FORCED_CHECKOUT_MAX_RETRIES}`);
+
+        // Check if still need to checkout
+        if (!activeCheckinId) {
+            console.log('[GPS Checkout] No active checkin - stopping retry');
+            clearInterval(forcedCheckoutRetryInterval);
+            forcedCheckoutRetryInterval = null;
+            gpsWarningDismissCount = 0;
+            return;
+        }
+
+        const success = await forceGPSCheckout();
+
+        if (success) {
+            console.log('[GPS Checkout] Retry SUCCESSFUL');
+            clearInterval(forcedCheckoutRetryInterval);
+            forcedCheckoutRetryInterval = null;
+            gpsWarningDismissCount = 0;
+            showToast('Checkout automático realizado com sucesso', 'success');
+        } else if (forcedCheckoutRetryCount >= FORCED_CHECKOUT_MAX_RETRIES) {
+            console.error('[GPS Checkout] Max retries reached - forcing local clear');
+            clearInterval(forcedCheckoutRetryInterval);
+            forcedCheckoutRetryInterval = null;
+
+            // Force clear local state regardless
+            isCheckedIn = false;
+            const oldCheckinId = activeCheckinId;
+            activeCheckinId = null;
+            currentProjectForCheckin = null;
+            updateCheckinUI(false);
+            stopGPSBackgroundVerification();
+            gpsWarningDismissCount = 0;
+
+            // Log this critical event
+            await logTimelineEvent('FORCED_CHECKOUT_FAILED', {
+                checkinId: oldCheckinId,
+                retryCount: forcedCheckoutRetryCount,
+                reason: 'Max retries exceeded - local state cleared'
+            });
+
+            showToast('Sessão encerrada localmente. Contate suporte se necessário.', 'warning');
+        }
+    }, 10000); // Retry every 10 seconds
+}
+
+/**
+ * Start GPS background verification - DOUBLE CHECK SYSTEM
+ * Runs every minute to ensure GPS status is monitored
+ * Forces checkout if GPS is off for more than 5 minutes with active checkin
+ */
+function startGPSBackgroundVerification() {
+    // Clear existing interval if any
+    if (gpsVerificationInterval) {
+        clearInterval(gpsVerificationInterval);
+    }
+
+    console.log('[GPS Verification] Starting background verification');
+
+    gpsVerificationInterval = setInterval(async () => {
+        // Only verify if user has active check-in
+        if (!activeCheckinId || !isCheckedIn) {
+            return;
+        }
+
+        // Check current GPS permission status
+        const currentStatus = await checkLocationPermission();
+        console.log(`[GPS Verification] Status: ${currentStatus}, gpsOffStartTime: ${gpsOffStartTime}`);
+
+        if (currentStatus !== 'granted') {
+            // GPS is not available
+            if (!gpsOffStartTime) {
+                // Just turned off - record start time
+                gpsOffStartTime = Date.now();
+                console.log('[GPS Verification] GPS just turned off, recording start time');
+            } else {
+                // Calculate how long GPS has been off
+                const offDuration = Date.now() - gpsOffStartTime;
+                console.log(`[GPS Verification] GPS off for ${Math.round(offDuration / 1000)}s`);
+
+                if (offDuration >= GPS_MAX_OFF_DURATION) {
+                    // GPS has been off too long - force checkout
+                    console.log('[GPS Verification] GPS off too long - FORCING checkout');
+
+                    // Log critical event
+                    await logTimelineEvent('GPS_TIMEOUT_CHECKOUT', {
+                        offDuration: offDuration,
+                        maxDuration: GPS_MAX_OFF_DURATION,
+                        warningsDismissed: gpsWarningDismissCount
+                    });
+
+                    // Show notification
+                    showToast('GPS desativado por muito tempo. Realizando checkout automático.', 'warning');
+
+                    // Force checkout with retry
+                    const success = await forceGPSCheckout();
+
+                    if (success) {
+                        console.log('[GPS Verification] Forced checkout SUCCESS');
+                        gpsOffStartTime = null;
+                        gpsWarningDismissCount = 0;
+                    } else {
+                        // Start retry loop
+                        console.log('[GPS Verification] Forced checkout FAILED - starting retry');
+                        startForcedCheckoutRetry();
+                    }
+                }
+            }
+        } else {
+            // GPS is back on - reset timer
+            if (gpsOffStartTime) {
+                console.log('[GPS Verification] GPS restored - resetting timer');
+                gpsOffStartTime = null;
+                gpsWarningDismissCount = 0;
+            }
+        }
+    }, GPS_VERIFICATION_INTERVAL);
+}
+
+/**
+ * Stop GPS background verification
+ */
+function stopGPSBackgroundVerification() {
+    if (gpsVerificationInterval) {
+        clearInterval(gpsVerificationInterval);
+        gpsVerificationInterval = null;
+        console.log('[GPS Verification] Stopped background verification');
     }
 }
 
@@ -11336,6 +11576,9 @@ async function doCheckoutWithReason(reason) {
             isCheckedIn = false;
             activeCheckinId = null;
             updateCheckinUI(false);
+
+            // Stop GPS background verification
+            stopGPSBackgroundVerification();
 
             // Log timeline event
             await logTimelineEvent('CHECKOUT', {
