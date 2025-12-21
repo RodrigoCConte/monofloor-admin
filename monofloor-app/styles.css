@@ -12834,7 +12834,7 @@ body {
 /* ====================================== */
 
 .gps-checkout-modal {
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 0;
     right: 0;
@@ -12846,6 +12846,7 @@ body {
     z-index: 10003;
     padding: 20px;
     animation: fadeIn 0.3s ease;
+    border-radius: 32px; /* Match phone-frame inner radius */
 }
 
 .gps-checkout-content {

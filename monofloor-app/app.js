@@ -586,11 +586,13 @@ let gpsCheckoutInProgress = false; // Prevent multiple checkout attempts
 let gpsWarningModalShown = false; // Track if GPS warning modal is already showing
 
 // GPS Auto-Checkout: 5 minutes with GPS off = automatic checkout
-// Backend does checkout after 10 confirmations (5 min = 10 x 30s)
-// Frontend shows warning only after 60 seconds of GPS off
+// FRONTEND-CONTROLLED: Uses position staleness detection (no new position = GPS off)
+// Backend is just a backup - frontend does the checkout
 let gpsVerificationInterval = null;
-const GPS_VERIFICATION_INTERVAL = 10 * 1000; // Check every 10 seconds for responsiveness
-const GPS_WARNING_THRESHOLD = 60 * 1000; // 60 seconds - show warning after this
+let lastPositionTimestamp = null; // Track when we last received a position
+const GPS_VERIFICATION_INTERVAL = 5 * 1000; // Check every 5 seconds for faster detection
+const GPS_STALE_THRESHOLD = 30 * 1000; // 30 seconds without position = consider GPS off
+const GPS_WARNING_THRESHOLD = 60 * 1000; // 60 seconds - show warning modal
 const GPS_MAX_OFF_DURATION = 5 * 60 * 1000; // 5 minutes - checkout happens after this
 
 // =============================================
@@ -3221,6 +3223,9 @@ function updateLocationUI() {
 
 // Callback de sucesso do watchPosition
 function onGeolocationSuccess(position) {
+    // CRITICAL: Record timestamp of this position for staleness detection
+    lastPositionTimestamp = Date.now();
+
     currentUserLocation = {
         lat: position.coords.latitude,
         lon: position.coords.longitude,
@@ -11130,9 +11135,18 @@ function startForcedCheckoutRetry() {
 }
 
 /**
- * Start GPS background verification - SIMPLIFIED RULE
- * Checks every 10 seconds. If GPS is off for 5 minutes = automatic checkout (backend handles via 10 confirmations)
- * NO WARNINGS - Just immediate checkout with notification
+ * Start GPS background verification - FRONTEND-CONTROLLED
+ *
+ * DETECTION METHOD:
+ * 1. Permission explicitly denied (geolocationState === 'permission_denied')
+ * 2. Position staleness: No new position received for 30+ seconds
+ *
+ * TIMELINE:
+ * - 0-60s: GPS off detected, tracking silently
+ * - 60s+: Show warning modal with countdown
+ * - 5 min (300s): Execute automatic checkout
+ *
+ * FRONTEND CONTROLS THE CHECKOUT - Backend is just a backup
  */
 function startGPSBackgroundVerification() {
     // Clear existing interval if any
@@ -11140,70 +11154,92 @@ function startGPSBackgroundVerification() {
         clearInterval(gpsVerificationInterval);
     }
 
-    console.log('[GPS Verification] Starting - Using geolocationState from watchPosition');
+    // Initialize position timestamp when starting (if we have a position)
+    if (!lastPositionTimestamp && currentUserLocation) {
+        lastPositionTimestamp = Date.now();
+    }
+
+    console.log('[GPS Verification] Starting - FRONTEND-CONTROLLED with staleness detection');
+    console.log(`[GPS Verification] Thresholds: stale=${GPS_STALE_THRESHOLD/1000}s, warning=${GPS_WARNING_THRESHOLD/1000}s, checkout=${GPS_MAX_OFF_DURATION/1000}s`);
+
     gpsCheckoutInProgress = false;
+    gpsWarningModalShown = false;
 
     gpsVerificationInterval = setInterval(async () => {
-        // Only verify if user has active check-in and not already processing
+        // Only verify if user has active check-in and not already processing checkout
         if (!activeCheckinId || !isCheckedIn || gpsCheckoutInProgress) {
             return;
         }
 
-        // USE geolocationState - the same variable that shows "Localização não permitida"
-        // This is updated in real-time by watchPosition and is 100% reliable
-        const isGPSOff = geolocationState === 'permission_denied';
+        const now = Date.now();
 
-        console.log(`[GPS Check] geolocationState = "${geolocationState}", isGPSOff = ${isGPSOff}`);
+        // DETECT GPS OFF using two methods:
+        // 1. Explicit permission denied
+        const isPermissionDenied = geolocationState === 'permission_denied';
+
+        // 2. Position is stale (no new position for GPS_STALE_THRESHOLD)
+        const positionAge = lastPositionTimestamp ? (now - lastPositionTimestamp) : 0;
+        const isPositionStale = lastPositionTimestamp && positionAge > GPS_STALE_THRESHOLD;
+
+        // GPS is considered OFF if either condition is true
+        const isGPSOff = isPermissionDenied || isPositionStale;
+
+        // Log status
+        if (isGPSOff) {
+            const reason = isPermissionDenied ? 'permission_denied' : `stale (${Math.round(positionAge/1000)}s)`;
+            console.log(`[GPS Check] GPS OFF - reason: ${reason}`);
+        } else {
+            console.log(`[GPS Check] GPS OK - state: ${geolocationState}, position age: ${Math.round(positionAge/1000)}s`);
+        }
 
         if (isGPSOff) {
-            // GPS is explicitly denied - notify backend and get confirmation status
-            const backendResponse = await notifyBackendGPSStatus('denied');
-
-            if (backendResponse && backendResponse.success) {
-                const confirmations = backendResponse.confirmations || 0;
-                const confirmationsRequired = backendResponse.confirmationsRequired || 10;
-                const secondsOff = backendResponse.secondsOff || 0;
-
-                // Calculate seconds remaining until checkout (based on backend confirmations)
-                const confirmationsLeft = confirmationsRequired - confirmations;
-                const secondsLeft = confirmationsLeft * 30; // Each confirmation is 30 seconds
-
-                console.log(`[GPS] Backend confirmations: ${confirmations}/${confirmationsRequired} (${secondsOff}s off, ${secondsLeft}s remaining)`);
-
-                // Only show warning modal after 2+ backend confirmations (60+ seconds confirmed)
-                // This ensures the backend has truly detected GPS is off
-                if (confirmations >= 2 && confirmations < confirmationsRequired) {
-                    showGPSWarningModal(secondsLeft);
-                }
-
-                // Track locally for logs
-                if (!gpsOffStartTime) {
-                    gpsOffStartTime = Date.now();
-                    console.log('[GPS] Localização DESLIGADA (permission_denied) - backend rastreando confirmações');
-                }
+            // GPS is OFF - start or continue tracking
+            if (!gpsOffStartTime) {
+                gpsOffStartTime = now;
+                console.log('[GPS] ⚠️ GPS OFF detected - starting 5 minute countdown');
             }
+
+            const secondsOff = Math.round((now - gpsOffStartTime) / 1000);
+            const secondsRemaining = Math.max(0, Math.round((GPS_MAX_OFF_DURATION - (now - gpsOffStartTime)) / 1000));
+
+            console.log(`[GPS] Off for ${secondsOff}s, checkout in ${secondsRemaining}s`);
+
+            // After 60 seconds: Show warning modal
+            if (secondsOff >= 60 && secondsRemaining > 0) {
+                showGPSWarningModal(secondsRemaining);
+            }
+
+            // After 5 minutes (300 seconds): Execute checkout
+            if (secondsOff >= 300) {
+                console.log('[GPS] ⏰ 5 MINUTES REACHED - EXECUTING AUTO-CHECKOUT');
+                gpsCheckoutInProgress = true;
+                await executeGPSAutoCheckout();
+                return; // Stop processing after checkout
+            }
+
+            // Notify backend (as backup) - but don't rely on it
+            notifyBackendGPSStatus('denied').catch(err => {
+                console.log('[GPS] Backend notification failed (non-critical):', err.message);
+            });
+
         } else {
-            // GPS is working (valid, invalid, loading, or error but not permission_denied)
-            // Notify backend to reset any stale confirmations
-            const backendResponse = await notifyBackendGPSStatus('granted');
+            // GPS is WORKING - reset everything
 
-            if (backendResponse && backendResponse.success) {
-                const confirmations = backendResponse.confirmations || 0;
-
-                // If backend still has confirmations, log it (they should be reset)
-                if (confirmations > 0) {
-                    console.log(`[GPS] ⚠️ Backend still has ${confirmations} confirmations - should be 0`);
-                }
-            }
-
-            // Hide any warning modal that might be showing
+            // Hide warning modal if showing
             hideGPSWarningModal();
 
-            // Only show toast if we were tracking GPS off before
+            // If we were tracking GPS off, show recovery message
             if (gpsOffStartTime) {
-                console.log('[GPS] Localização RESTAURADA - backend notificado');
+                const wasOffFor = Math.round((now - gpsOffStartTime) / 1000);
+                console.log(`[GPS] ✅ GPS RESTORED after ${wasOffFor}s`);
                 gpsOffStartTime = null;
+                gpsWarningModalShown = false;
                 showToast('✅ Localização ativada!', 'success');
+
+                // Notify backend to reset confirmations
+                notifyBackendGPSStatus('granted').catch(err => {
+                    console.log('[GPS] Backend reset notification failed (non-critical):', err.message);
+                });
             }
         }
     }, GPS_VERIFICATION_INTERVAL);
@@ -11265,6 +11301,9 @@ async function executeGPSAutoCheckout() {
  * Show prominent modal for GPS auto-checkout
  */
 function showGPSCheckoutModal(message) {
+    // Hide warning modal first
+    hideGPSWarningModal();
+
     // Create modal if it doesn't exist
     let modal = document.getElementById('gps-checkout-modal');
     if (!modal) {
@@ -11279,7 +11318,13 @@ function showGPSCheckoutModal(message) {
                 <button onclick="closeGPSCheckoutModal()" class="btn-gps-checkout-ok">Entendi</button>
             </div>
         `;
-        document.body.appendChild(modal);
+        // Add modal inside phone-frame, not document.body
+        const phoneFrame = document.querySelector('.phone-frame');
+        if (phoneFrame) {
+            phoneFrame.appendChild(modal);
+        } else {
+            document.body.appendChild(modal);
+        }
     }
 
     document.getElementById('gps-checkout-message').textContent = message;
