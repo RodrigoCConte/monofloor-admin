@@ -2053,8 +2053,6 @@ router.post(
       // Check if OpenAI API key is configured
       const openaiKey = process.env.OPENAI_API_KEY;
       if (!openaiKey) {
-        // Clean up the file
-        fs.unlinkSync(audioFile.path);
         return res.status(500).json({
           success: false,
           error: { code: 'NO_API_KEY', message: 'API de transcricao nao configurada.' },
@@ -2062,47 +2060,16 @@ router.post(
       }
 
       try {
-        // Use fetch to call OpenAI Whisper API
-        const FormData = require('form-data');
-        const formData = new FormData();
-        formData.append('file', fs.createReadStream(audioFile.path));
-        formData.append('model', 'whisper-1');
-        formData.append('language', 'pt');
-
-        const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openaiKey}`,
-            ...formData.getHeaders(),
-          },
-          body: formData,
-        });
-
-        // Clean up the temp file
-        fs.unlinkSync(audioFile.path);
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error('Whisper API error:', errorData);
-          return res.status(500).json({
-            success: false,
-            error: { code: 'TRANSCRIPTION_ERROR', message: 'Erro ao transcrever audio.' },
-          });
-        }
-
-        const data = await response.json() as { text: string };
+        // Use whisper service with buffer (memoryStorage)
+        const result = await whisperService.transcribeFromBuffer(audioFile.buffer, audioFile.originalname);
 
         res.json({
           success: true,
           data: {
-            transcription: data.text,
+            transcription: result.text,
           },
         });
       } catch (apiError) {
-        // Clean up the temp file on error
-        if (fs.existsSync(audioFile.path)) {
-          fs.unlinkSync(audioFile.path);
-        }
         console.error('Transcription API error:', apiError);
         return res.status(500).json({
           success: false,
