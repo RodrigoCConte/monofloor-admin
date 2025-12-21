@@ -10559,7 +10559,10 @@ function showGPSWarningModal(secondsRemaining) {
 }
 
 /**
- * Hide GPS warning modal and reset flag
+ * Hide GPS warning modal
+ * NOTE: Does NOT reset gpsWarningModalShown flag!
+ * The flag is only reset when GPS is restored or checkout happens.
+ * This prevents the modal from reappearing every 5 seconds.
  */
 function hideGPSWarningModal() {
     const modal = document.getElementById('gps-warning-modal');
@@ -10570,8 +10573,8 @@ function hideGPSWarningModal() {
         }
         modal.remove();
     }
-    // Reset flag so modal can show again next time GPS goes off
-    gpsWarningModalShown = false;
+    // DO NOT reset gpsWarningModalShown here!
+    // It's reset only in startGPSBackgroundVerification when GPS is restored
 }
 
 /**
@@ -11071,6 +11074,9 @@ function forceLocalCheckoutClear() {
     activeCheckinId = null;
     currentProjectForCheckin = null;
     pendingCheckoutReason = null;
+    gpsOffStartTime = null;
+    gpsWarningModalShown = false;
+    gpsCheckoutInProgress = false;
     updateCheckinUI(false);
     stopGPSBackgroundVerification();
 }
@@ -11255,6 +11261,10 @@ async function executeGPSAutoCheckout() {
 
     console.log('[GPS Auto-Checkout] EXECUTING - 5 minutes GPS off reached');
 
+    // Reset all GPS tracking flags
+    gpsWarningModalShown = false;
+    gpsOffStartTime = null;
+
     // Show in-app modal FIRST (prominent, can't be missed)
     showGPSCheckoutModal(checkoutMessage);
 
@@ -11268,7 +11278,6 @@ async function executeGPSAutoCheckout() {
 
         if (success) {
             console.log('[GPS Auto-Checkout] ✅ SUCCESS - checkout completed via API');
-            gpsOffStartTime = null;
             gpsCheckoutInProgress = false;
         } else {
             // Retry once
@@ -11285,14 +11294,12 @@ async function executeGPSAutoCheckout() {
                 forceLocalCheckoutClear();
             }
 
-            gpsOffStartTime = null;
             gpsCheckoutInProgress = false;
         }
     } catch (error) {
         console.error('[GPS Auto-Checkout] ❌ Error:', error);
         // Force local clear on any error
         forceLocalCheckoutClear();
-        gpsOffStartTime = null;
         gpsCheckoutInProgress = false;
     }
 }
