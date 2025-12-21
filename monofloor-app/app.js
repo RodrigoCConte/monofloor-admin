@@ -6580,21 +6580,32 @@ async function sendLocation() {
             });
         });
 
+        const locationPayload = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            heading: position.coords.heading,
+            speed: position.coords.speed,
+            isOnline: true
+        };
+
         await fetch(`${API_URL}/api/mobile/location`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${getAuthToken()}`
             },
-            body: JSON.stringify({
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy,
-                heading: position.coords.heading,
-                speed: position.coords.speed,
-                isOnline: true
-            })
+            body: JSON.stringify(locationPayload)
         });
+
+        // Log to timeline for history tracking
+        await logTimelineEvent('LOCATION_UPDATE', {
+            latitude: locationPayload.latitude,
+            longitude: locationPayload.longitude,
+            accuracy: locationPayload.accuracy,
+            trigger: 'sendLocation'
+        });
+        syncTimelineEvents();
 
         // Atualizar UI do banner de localização
         updateLocationBanner(true);
@@ -10414,6 +10425,15 @@ async function syncPendingLocations() {
 
             if (response.ok) {
                 successCount++;
+                // Log to timeline for history tracking
+                if (location.latitude && location.longitude) {
+                    await logTimelineEvent('LOCATION_UPDATE', {
+                        latitude: location.latitude,
+                        longitude: location.longitude,
+                        accuracy: location.accuracy,
+                        trigger: 'queued_sync'
+                    });
+                }
             } else {
                 failedLocations.push(location);
             }
@@ -10421,6 +10441,11 @@ async function syncPendingLocations() {
             console.log('[LocationSync] Erro ao enviar:', error);
             failedLocations.push(location);
         }
+    }
+
+    // Sync all timeline events at once
+    if (successCount > 0) {
+        syncTimelineEvents();
     }
 
     // Clear successful syncs
@@ -11803,6 +11828,8 @@ async function sendMovementLocation() {
                     body: JSON.stringify(locationData)
                 });
                 console.log('[Movement] Localização enviada:', position.coords.latitude.toFixed(4), position.coords.longitude.toFixed(4));
+                // Sync timeline events to server
+                syncTimelineEvents();
             }
         } else {
             // Save for later sync
