@@ -1927,8 +1927,8 @@ const getRoleLabel = (role: string) => {
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://devoted-wholeness-production.up.railway.app';
 
-const getPhotoUrl = (photoUrl: string | null | undefined) => {
-  if (!photoUrl) return null;
+const getPhotoUrl = (photoUrl: string | null | undefined): string | undefined => {
+  if (!photoUrl) return undefined;
   if (photoUrl.startsWith('http')) return photoUrl;
   return `${API_URL}${photoUrl}`;
 };

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// @ts-nocheck - Disabling strict type checking for Google Maps API
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';

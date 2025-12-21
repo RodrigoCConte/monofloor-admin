@@ -3,7 +3,7 @@
  * Handles push notifications and background sync
  */
 
-const CACHE_NAME = 'monofloor-v1';
+const CACHE_NAME = 'monofloor-v2'; // Updated to force SW refresh
 
 // Install event
 self.addEventListener('install', (event) => {

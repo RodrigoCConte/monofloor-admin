@@ -9753,3 +9753,140 @@ document.getElementById('absenceReason')?.addEventListener('input', updateConfir
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(checkPendingAbsenceInquiry, 2000);
 });
+
+// =============================================
+// DEBUG: Push Notification Testing
+// =============================================
+
+/**
+ * Debug function to test push notifications
+ * Call from browser console: window.testPush()
+ */
+window.testPush = async function() {
+    console.log('===== TESTE DE PUSH NOTIFICATIONS =====\n');
+
+    // 1. Check Service Worker support
+    console.log('1. Service Worker support:', 'serviceWorker' in navigator ? '✅ OK' : '❌ Não suportado');
+
+    // 2. Check Push support
+    console.log('2. Push Manager support:', 'PushManager' in window ? '✅ OK' : '❌ Não suportado');
+
+    // 3. Check Notification support
+    console.log('3. Notification support:', 'Notification' in window ? '✅ OK' : '❌ Não suportado');
+
+    // 4. Check Notification permission
+    console.log('4. Notification permission:', Notification.permission);
+
+    // 5. Check Service Worker registration
+    if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (registration) {
+            console.log('5. Service Worker registrado:');
+            console.log('   - Scope:', registration.scope);
+            console.log('   - Active:', registration.active ? '✅ Sim' : '❌ Não');
+            console.log('   - Waiting:', registration.waiting ? '⚠️ Sim (pendente update)' : 'Não');
+            console.log('   - Installing:', registration.installing ? '⚠️ Instalando...' : 'Não');
+
+            // 6. Check push subscription
+            try {
+                const subscription = await registration.pushManager.getSubscription();
+                if (subscription) {
+                    console.log('6. Push Subscription: ✅ Ativa');
+                    console.log('   - Endpoint:', subscription.endpoint.substring(0, 60) + '...');
+                } else {
+                    console.log('6. Push Subscription: ❌ Não existe');
+                }
+            } catch (e) {
+                console.log('6. Push Subscription: ❌ Erro:', e.message);
+            }
+        } else {
+            console.log('5. Service Worker: ❌ Não registrado');
+        }
+    }
+
+    console.log('\n===== FIM DO DIAGNÓSTICO =====');
+    return 'Diagnóstico completo. Veja os logs acima.';
+};
+
+/**
+ * Force update Service Worker
+ * Call from browser console: window.updateSW()
+ */
+window.updateSW = async function() {
+    console.log('Forçando atualização do Service Worker...');
+
+    if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (registration) {
+            await registration.update();
+            console.log('✅ Service Worker atualizado. Recarregue a página.');
+
+            if (registration.waiting) {
+                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                console.log('✅ SKIP_WAITING enviado. Recarregando...');
+                setTimeout(() => window.location.reload(), 1000);
+            }
+        } else {
+            console.log('❌ Nenhum Service Worker registrado');
+        }
+    }
+};
+
+/**
+ * Test local notification (not push)
+ * Call from browser console: window.testLocalNotification()
+ */
+window.testLocalNotification = async function() {
+    console.log('Testando notificação local...');
+
+    if (Notification.permission !== 'granted') {
+        console.log('Solicitando permissão...');
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+            console.log('❌ Permissão negada');
+            return;
+        }
+    }
+
+    const registration = await navigator.serviceWorker.getRegistration();
+    if (registration) {
+        await registration.showNotification('TESTE LOCAL', {
+            body: 'Esta é uma notificação de teste local',
+            icon: '/icons/icon-192.png',
+            badge: '/icons/badge-72.png',
+            tag: 'test-local',
+            vibrate: [200, 100, 200],
+            data: { type: 'test' }
+        });
+        console.log('✅ Notificação local enviada! Olhe na tela.');
+    } else {
+        console.log('❌ Service Worker não registrado');
+    }
+};
+
+/**
+ * Simulate receiving XP gain notification
+ * Call from browser console: window.simulateXPGain(500, 'Elogio do Admin')
+ */
+window.simulateXPGain = function(amount = 100, reason = 'Teste') {
+    console.log('Simulando recebimento de XP Gain...');
+    showXPGain(amount, reason);
+    console.log('✅ Animação de XP Gain exibida!');
+};
+
+/**
+ * Simulate receiving XP loss notification
+ * Call from browser console: window.simulateXPLoss(100, 'Penalidade do Admin')
+ */
+window.simulateXPLoss = function(amount = 100, reason = 'Teste') {
+    console.log('Simulando recebimento de XP Loss...');
+    showXPLossNotification(amount, `Teste: ${reason}`);
+    console.log('✅ Animação de XP Loss exibida!');
+};
+
+console.log('[DEBUG] Funções de teste disponíveis:');
+console.log('  - window.testPush() - Diagnóstico de push notifications');
+console.log('  - window.updateSW() - Forçar atualização do Service Worker');
+console.log('  - window.testLocalNotification() - Testar notificação local');
+console.log('  - window.simulateXPGain(100, "razão") - Simular XP Gain');
+console.log('  - window.simulateXPLoss(100, "razão") - Simular XP Loss');

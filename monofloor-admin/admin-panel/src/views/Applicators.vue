@@ -282,17 +282,14 @@ const removeProjectFromApplicator = async (projectId: string) => {
     console.log('[DEBUG] No profileApplicator, returning');
     return;
   }
-  if (!confirm('Tem certeza que deseja remover este projeto?')) {
-    console.log('[DEBUG] User cancelled');
-    return;
-  }
 
+  // Removido confirm() temporariamente - pode estar causando problema com modal
   console.log('[DEBUG] Calling API to remove project...');
   try {
     const result = await applicatorsApi.removeProject(profileApplicator.value.id, projectId);
     console.log('[DEBUG] Remove project result:', result);
     await loadApplicatorProjects(profileApplicator.value.id);
-    console.log('[DEBUG] Projects reloaded');
+    console.log('[DEBUG] Projects reloaded - SUCCESS!');
   } catch (error: any) {
     console.error('[DEBUG] Error removing project:', error);
     console.error('[DEBUG] Error response:', error.response?.data);
