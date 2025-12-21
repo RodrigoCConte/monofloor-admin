@@ -1888,11 +1888,17 @@ const savePeopleAssignment = async () => {
 
     if (replicateToBelow.value) {
       // Find the index of current task and get all tasks from this one onwards
+      // Only include tasks that consume resources and have valid IDs
       const taskIndex = tasks.value.findIndex((t: any) => t.id === taskId);
       if (taskIndex !== -1) {
-        const taskIdsToUpdate = tasks.value.slice(taskIndex).map((t: any) => t.id);
-        console.log('[DEBUG] Bulk update:', { taskIdsToUpdate, validUserIds });
-        await projectsApi.bulkUpdateTaskAssignments(projectId, taskIdsToUpdate, validUserIds);
+        const taskIdsToUpdate = tasks.value
+          .slice(taskIndex)
+          .filter((t: any) => t.consumesResources && t.id)
+          .map((t: any) => t.id);
+        console.log('[DEBUG] Bulk update:', { taskIdsToUpdate, validUserIds, totalTasksFromIndex: tasks.value.slice(taskIndex).length });
+        if (taskIdsToUpdate.length > 0) {
+          await projectsApi.bulkUpdateTaskAssignments(projectId, taskIdsToUpdate, validUserIds);
+        }
       }
     } else {
       // Update only this task
@@ -3397,7 +3403,7 @@ onMounted(async () => {
                             class="mini-avatar"
                             :title="person?.name || 'Aplicador'"
                           >
-                            <img v-if="person?.photoUrl" :src="person.photoUrl" :alt="person?.name || ''" />
+                            <img v-if="person?.photoUrl" :src="getPhotoUrl(person.photoUrl)" :alt="person?.name || ''" />
                             <span v-else>{{ (person?.name || '?')[0]?.toUpperCase() || '?' }}</span>
                           </div>
                           <span v-if="getTaskAssignedUsers(task).length > 3" class="more-count">
@@ -4312,7 +4318,7 @@ onMounted(async () => {
               @change="togglePersonSelection(member.id)"
             />
             <div class="person-avatar">
-              <img v-if="member.photoUrl" :src="member.photoUrl" :alt="member.name" />
+              <img v-if="member.photoUrl" :src="getPhotoUrl(member.photoUrl)" :alt="member.name" />
               <span v-else>{{ (member.name || '?')[0].toUpperCase() }}</span>
             </div>
             <div class="person-info">

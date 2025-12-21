@@ -791,6 +791,79 @@ router.get(
 );
 
 // =============================================
+// PUT /api/admin/projects/:projectId/tasks/bulk-assignments - Bulk update assignments for multiple tasks
+// IMPORTANT: This route must be defined BEFORE /:projectId/tasks/:id to avoid matching :id as "bulk-assignments"
+// =============================================
+router.put(
+  '/:projectId/tasks/bulk-assignments',
+  adminAuth,
+  [
+    param('projectId').isUUID(),
+    body('taskIds').isArray({ min: 1 }),
+    body('taskIds.*').isUUID(),
+    body('userIds').isArray(),
+    body('userIds.*').optional().isUUID(),  // Optional to allow empty array
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { projectId } = req.params;
+      const { taskIds, userIds } = req.body;
+
+      // Verify all tasks exist and belong to this project
+      const tasks = await prisma.projectTask.findMany({
+        where: {
+          id: { in: taskIds },
+          projectId,
+        },
+      });
+
+      if (tasks.length !== taskIds.length) {
+        throw new AppError('Uma ou mais tarefas nao encontradas', 404, 'TASKS_NOT_FOUND');
+      }
+
+      // Delete existing assignments for all tasks
+      await prisma.taskAssignment.deleteMany({
+        where: { projectTaskId: { in: taskIds } },
+      });
+
+      // Create new assignments for all tasks
+      if (userIds && userIds.length > 0) {
+        const assignmentsToCreate: { projectTaskId: string; userId: string }[] = [];
+        for (const taskId of taskIds) {
+          for (const userId of userIds) {
+            assignmentsToCreate.push({
+              projectTaskId: taskId,
+              userId,
+            });
+          }
+        }
+        await prisma.taskAssignment.createMany({
+          data: assignmentsToCreate,
+        });
+      }
+
+      // Update inputPeople for all tasks
+      await prisma.projectTask.updateMany({
+        where: { id: { in: taskIds } },
+        data: { inputPeople: userIds?.length || 0 },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          updatedTasks: taskIds.length,
+          assignedUsers: userIds?.length || 0,
+        },
+        message: `${userIds?.length || 0} pessoa(s) atribuida(s) a ${taskIds.length} tarefa(s)`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================
 // GET /api/admin/projects/:projectId/tasks/:id - Get single task
 // =============================================
 router.get(
@@ -1192,78 +1265,6 @@ router.put(
           inputPeople: userIds.length,
         },
         message: `${userIds.length} pessoa(s) atribuida(s) a tarefa`,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-// =============================================
-// PUT /api/admin/projects/:projectId/tasks/bulk-assignments - Bulk update assignments for multiple tasks
-// =============================================
-router.put(
-  '/:projectId/tasks/bulk-assignments',
-  adminAuth,
-  [
-    param('projectId').isUUID(),
-    body('taskIds').isArray({ min: 1 }),
-    body('taskIds.*').isUUID(),
-    body('userIds').isArray(),
-    body('userIds.*').isUUID(),
-  ],
-  validate,
-  async (req, res, next) => {
-    try {
-      const { projectId } = req.params;
-      const { taskIds, userIds } = req.body;
-
-      // Verify all tasks exist and belong to this project
-      const tasks = await prisma.projectTask.findMany({
-        where: {
-          id: { in: taskIds },
-          projectId,
-        },
-      });
-
-      if (tasks.length !== taskIds.length) {
-        throw new AppError('Uma ou mais tarefas nao encontradas', 404, 'TASKS_NOT_FOUND');
-      }
-
-      // Delete existing assignments for all tasks
-      await prisma.taskAssignment.deleteMany({
-        where: { projectTaskId: { in: taskIds } },
-      });
-
-      // Create new assignments for all tasks
-      if (userIds.length > 0) {
-        const assignmentsToCreate: { projectTaskId: string; userId: string }[] = [];
-        for (const taskId of taskIds) {
-          for (const userId of userIds) {
-            assignmentsToCreate.push({
-              projectTaskId: taskId,
-              userId,
-            });
-          }
-        }
-        await prisma.taskAssignment.createMany({
-          data: assignmentsToCreate,
-        });
-      }
-
-      // Update inputPeople for all tasks
-      await prisma.projectTask.updateMany({
-        where: { id: { in: taskIds } },
-        data: { inputPeople: userIds.length },
-      });
-
-      res.json({
-        success: true,
-        data: {
-          updatedTasks: taskIds.length,
-          assignedUsers: userIds.length,
-        },
-        message: `${userIds.length} pessoa(s) atribuida(s) a ${taskIds.length} tarefa(s)`,
       });
     } catch (error) {
       next(error);
