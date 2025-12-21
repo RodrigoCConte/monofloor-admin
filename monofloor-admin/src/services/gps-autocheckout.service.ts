@@ -16,8 +16,8 @@ import { emitGPSAutoCheckout } from './socket.service';
 const prisma = new PrismaClient();
 
 // Configuration
-const LOCATION_STALE_THRESHOLD_MS = 30 * 1000; // 30 seconds without location update = stale
-const REQUIRED_CONFIRMATIONS = 10; // Need 10 confirmations (5 minutes total = 10 x 30s)
+const LOCATION_STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes without location update = stale
+const REQUIRED_CONFIRMATIONS = 20; // Need 20 confirmations (10 minutes total = 20 x 30s)
 const CHECK_INTERVAL_SECONDS = 30; // Cron runs every 30 seconds
 const INACTIVITY_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes without ANY location update = auto-checkout
 
@@ -281,7 +281,7 @@ export async function processGPSAutoCheckouts(): Promise<{
           projectId: checkin.projectId,
           projectName,
           hoursWorked,
-          reason: 'GPS desativado por mais de 5 minutos',
+          reason: 'GPS desativado por mais de 10 minutos',
           timestamp: checkoutAt,
         });
 

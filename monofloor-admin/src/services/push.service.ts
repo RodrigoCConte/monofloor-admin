@@ -402,7 +402,7 @@ export async function sendXPAdjustmentPush(
 
 /**
  * Send GPS auto-checkout push notification
- * Sent when a user is auto-checked-out due to GPS being off for 60+ seconds
+ * Sent when a user is auto-checked-out due to GPS being off for 10+ minutes
  */
 export async function sendGPSAutoCheckoutPush(
   userId: string,
@@ -418,7 +418,7 @@ export async function sendGPSAutoCheckoutPush(
     data: {
       type: 'gps:auto-checkout',
       projectName,
-      reason: 'GPS desativado por mais de 5 minutos',
+      reason: 'GPS desativado por mais de 10 minutos',
       url: '/#projects',
     },
   };

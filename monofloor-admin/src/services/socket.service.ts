@@ -357,6 +357,6 @@ export function emitGPSAutoCheckout(data: {
     io.to(`user:${data.userId}`).emit('gps:autoCheckout', data);
     // Also notify admin
     io.to('admin').emit('gps:autoCheckout', data);
-    console.log(`[Socket] Emitted gps:autoCheckout to user:${data.userId} - GPS off for 5+ minutes`);
+    console.log(`[Socket] Emitted gps:autoCheckout to user:${data.userId} - GPS off for 10+ minutes`);
   }
 }

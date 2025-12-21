@@ -585,15 +585,15 @@ let gpsAlertShown = false; // Track if persistent alert is shown
 let gpsCheckoutInProgress = false; // Prevent multiple checkout attempts
 let gpsWarningModalShown = false; // Track if GPS warning modal is already showing
 
-// GPS Auto-Checkout: 5 minutes with GPS off = automatic checkout
+// GPS Auto-Checkout: 10 minutes with GPS off = automatic checkout
 // FRONTEND-CONTROLLED: Uses position staleness detection (no new position = GPS off)
 // Backend is just a backup - frontend does the checkout
 let gpsVerificationInterval = null;
 let lastPositionTimestamp = null; // Track when we last received a position
-const GPS_VERIFICATION_INTERVAL = 5 * 1000; // Check every 5 seconds for faster detection
-const GPS_STALE_THRESHOLD = 30 * 1000; // 30 seconds without position = consider GPS off
-const GPS_WARNING_THRESHOLD = 60 * 1000; // 60 seconds - show warning modal
-const GPS_MAX_OFF_DURATION = 5 * 60 * 1000; // 5 minutes - checkout happens after this
+const GPS_VERIFICATION_INTERVAL = 30 * 1000; // Check every 30 seconds (less aggressive)
+const GPS_STALE_THRESHOLD = 5 * 60 * 1000; // 5 minutes without position = consider GPS off
+const GPS_WARNING_THRESHOLD = 6 * 60 * 1000; // 6 minutes - show warning modal (1 min after stale)
+const GPS_MAX_OFF_DURATION = 10 * 60 * 1000; // 10 minutes - checkout happens after this
 
 // =============================================
 // ACCELEROMETER & MOVEMENT TRACKING (when NOT checked-in)
@@ -10469,7 +10469,7 @@ async function syncPendingLocations() {
 
 /**
  * Notify backend about GPS status change
- * Backend will auto-checkout after 5 minutes (10 confirmations) with GPS off
+ * Backend will auto-checkout after 10 minutes (20 confirmations) with GPS off
  * Returns confirmation data from backend
  */
 async function notifyBackendGPSStatus(status) {
@@ -10713,7 +10713,7 @@ function showGPSAutoCheckoutNotification(projectName) {
                 </div>
                 <p class="gps-mobile-message-checkout">Seu check-out automático foi realizado</p>
                 <p class="gps-mobile-warning">Suas horas não serão computadas</p>
-                <p class="gps-mobile-reason">GPS desativado por mais de 5 minutos</p>
+                <p class="gps-mobile-reason">GPS desativado por mais de 10 minutos</p>
             </div>
             <button class="gps-mobile-btn" onclick="closeGPSAutoCheckoutModal()">
                 <span>Entendi</span>
@@ -11238,7 +11238,7 @@ function startGPSBackgroundVerification() {
             // GPS is OFF - start or continue tracking
             if (!gpsOffStartTime) {
                 gpsOffStartTime = now;
-                console.log('[GPS] ⚠️ GPS OFF detected - starting 5 minute countdown');
+                console.log('[GPS] ⚠️ GPS OFF detected - starting 10 minute countdown');
             }
 
             const secondsOff = Math.round((now - gpsOffStartTime) / 1000);
@@ -11246,14 +11246,14 @@ function startGPSBackgroundVerification() {
 
             console.log(`[GPS] Off for ${secondsOff}s, checkout in ${secondsRemaining}s`);
 
-            // After 60 seconds: Show warning modal
+            // After 1 minute of GPS OFF: Show warning modal (6 min total since last position)
             if (secondsOff >= 60 && secondsRemaining > 0) {
                 showGPSWarningModal(secondsRemaining);
             }
 
-            // After 5 minutes (300 seconds): Execute checkout
-            if (secondsOff >= 300) {
-                console.log('[GPS] ⏰ 5 MINUTES REACHED - EXECUTING AUTO-CHECKOUT');
+            // After 10 minutes (600 seconds): Execute checkout
+            if (secondsOff >= 600) {
+                console.log('[GPS] ⏰ 10 MINUTES REACHED - EXECUTING AUTO-CHECKOUT');
                 gpsCheckoutInProgress = true;
                 await executeGPSAutoCheckout();
                 return; // Stop processing after checkout
@@ -11288,14 +11288,14 @@ function startGPSBackgroundVerification() {
 }
 
 /**
- * Execute automatic checkout due to GPS being off for 5 minutes
+ * Execute automatic checkout due to GPS being off for 10 minutes
  * Uses INTERNET-ONLY checkout (no GPS dependency)
  * Shows prominent notification and does checkout
  */
 async function executeGPSAutoCheckout() {
     const checkoutMessage = 'Seu check-out automático foi realizado e suas horas no projeto não serão computadas.';
 
-    console.log('[GPS Auto-Checkout] EXECUTING - 5 minutes GPS off reached');
+    console.log('[GPS Auto-Checkout] EXECUTING - 10 minutes GPS off reached');
 
     // Reset all GPS tracking flags
     gpsWarningModalShown = false;
