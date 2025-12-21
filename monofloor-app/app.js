@@ -9400,10 +9400,13 @@ if ('serviceWorker' in navigator) {
         } else if (event.data?.type === 'SHOW_XP_GAIN') {
             // Show XP gain animation from push notification (admin praise)
             // Using showXPGain for full-screen celebration effect
+            console.log('[APP] SHOW_XP_GAIN received from Service Worker:', event.data);
             const { amount, reason, totalXP } = event.data;
+            console.log('[APP] Calling showXPGain with amount:', amount, 'reason:', reason);
             showXPGain(Math.abs(amount), `Elogio: ${reason}`);
             // Update profile XP display if totalXP is provided
             if (totalXP !== undefined && totalXP !== null) {
+                console.log('[APP] Updating currentUser.xpTotal to:', totalXP);
                 currentUser.xpTotal = totalXP;
                 updateProfileXP();
             }

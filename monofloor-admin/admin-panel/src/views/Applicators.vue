@@ -275,14 +275,28 @@ const addProjectToApplicator = async () => {
 };
 
 const removeProjectFromApplicator = async (projectId: string) => {
-  if (!profileApplicator.value) return;
-  if (!confirm('Tem certeza que deseja remover este projeto?')) return;
+  console.log('[DEBUG] removeProjectFromApplicator called with projectId:', projectId);
+  console.log('[DEBUG] profileApplicator.value:', profileApplicator.value?.id);
+
+  if (!profileApplicator.value) {
+    console.log('[DEBUG] No profileApplicator, returning');
+    return;
+  }
+  if (!confirm('Tem certeza que deseja remover este projeto?')) {
+    console.log('[DEBUG] User cancelled');
+    return;
+  }
+
+  console.log('[DEBUG] Calling API to remove project...');
   try {
-    await applicatorsApi.removeProject(profileApplicator.value.id, projectId);
+    const result = await applicatorsApi.removeProject(profileApplicator.value.id, projectId);
+    console.log('[DEBUG] Remove project result:', result);
     await loadApplicatorProjects(profileApplicator.value.id);
-  } catch (error) {
-    console.error('Error removing project:', error);
-    alert('Erro ao remover projeto');
+    console.log('[DEBUG] Projects reloaded');
+  } catch (error: any) {
+    console.error('[DEBUG] Error removing project:', error);
+    console.error('[DEBUG] Error response:', error.response?.data);
+    alert('Erro ao remover projeto: ' + (error.response?.data?.error?.message || error.message));
   }
 };
 

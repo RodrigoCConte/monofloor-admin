@@ -19,7 +19,8 @@ self.addEventListener('activate', (event) => {
 
 // Push event - handle incoming push notifications
 self.addEventListener('push', (event) => {
-    console.log('[SW] Push received:', event);
+    console.log('[SW] ========== PUSH RECEIVED ==========');
+    console.log('[SW] event.data:', event.data);
 
     let data = {
         title: 'Monofloor Equipes',
@@ -33,11 +34,15 @@ self.addEventListener('push', (event) => {
     if (event.data) {
         try {
             const payload = event.data.json();
+            console.log('[SW] Payload parsed:', JSON.stringify(payload));
             data = { ...data, ...payload };
         } catch (e) {
+            console.log('[SW] Error parsing payload:', e);
             data.body = event.data.text();
         }
     }
+
+    console.log('[SW] Final notification data:', JSON.stringify(data));
 
     // Use different vibration pattern based on notification type
     let vibrate = [200, 100, 200];
@@ -105,13 +110,17 @@ self.addEventListener('notificationclick', (event) => {
         );
     } else if (data.type === 'xp:bonus') {
         // XP bonus notification - show gain animation and go to profile
+        console.log('[SW] XP:BONUS notification clicked - sending SHOW_XP_GAIN message');
         targetUrl = '/#profile';
         // Send message to client to show XP gain animation
         event.waitUntil(
             clients.matchAll({ type: 'window', includeUncontrolled: true })
                 .then((clientList) => {
+                    console.log('[SW] Found clients:', clientList.length);
                     for (const client of clientList) {
+                        console.log('[SW] Client URL:', client.url);
                         if (client.url.includes(self.location.origin)) {
+                            console.log('[SW] Sending SHOW_XP_GAIN to client');
                             client.postMessage({
                                 type: 'SHOW_XP_GAIN',
                                 amount: data.amount,
