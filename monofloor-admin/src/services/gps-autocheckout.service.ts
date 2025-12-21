@@ -110,9 +110,12 @@ export async function updateGPSStatus(
  *
  * Logic:
  * 1. Find users with active check-ins
- * 2. Check if their location hasn't been updated in 30+ seconds
+ * 2. Check if their gpsStatus is 'denied' (reported by frontend)
  * 3. Increment confirmations counter
  * 4. After 3 confirmations, perform auto-checkout
+ *
+ * NOTE: We check gpsStatus, NOT location staleness, because cached locations
+ * from IndexedDB can be synced even when GPS is off.
  */
 export async function processGPSAutoCheckouts(): Promise<{
   processed: number;
@@ -125,7 +128,6 @@ export async function processGPSAutoCheckouts(): Promise<{
 
   try {
     const now = new Date();
-    const staleThreshold = new Date(now.getTime() - LOCATION_STALE_THRESHOLD_MS);
 
     // Find all users with active check-ins
     const activeCheckins = await prisma.checkin.findMany({
@@ -155,11 +157,12 @@ export async function processGPSAutoCheckouts(): Promise<{
         continue;
       }
 
-      // Check if location is stale (not updated in 30+ seconds)
-      const isLocationStale = location.updatedAt < staleThreshold;
+      // Check if GPS is off (gpsStatus is 'denied' or 'prompt', not 'granted')
+      // This is reported by the frontend via /api/mobile/location/gps-status
+      const isGPSOff = location.gpsStatus && location.gpsStatus !== 'granted';
 
-      if (!isLocationStale) {
-        // Location is fresh - reset confirmations if any
+      if (!isGPSOff) {
+        // GPS is on - reset confirmations if any
         if (location.gpsOffConfirmations > 0) {
           await prisma.userLocation.update({
             where: { userId: checkin.userId },
@@ -168,17 +171,17 @@ export async function processGPSAutoCheckouts(): Promise<{
               gpsOffConfirmations: 0,
             },
           });
-          console.log(`[GPS] User ${checkin.user?.name} is sending locations, reset confirmations`);
+          console.log(`[GPS] User ${checkin.user?.name} has GPS on, reset confirmations`);
         }
         continue;
       }
 
-      // Location is stale - increment confirmations
+      // GPS is off - increment confirmations
       const newConfirmations = location.gpsOffConfirmations + 1;
       const gpsOffAt = location.gpsOffAt || now;
 
       console.log(
-        `[GPS] User ${checkin.user?.name} stale location. Confirmation ${newConfirmations}/${REQUIRED_CONFIRMATIONS}`
+        `[GPS] User ${checkin.user?.name} GPS OFF (status: ${location.gpsStatus}). Confirmation ${newConfirmations}/${REQUIRED_CONFIRMATIONS}`
       );
 
       // Check if we have enough confirmations

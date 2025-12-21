@@ -1658,7 +1658,11 @@ router.post(
         );
       }
 
-      // Upsert user location - also reset GPS confirmations since user is sending location
+      // Upsert user location
+      // NOTE: We do NOT reset GPS confirmations here because cached locations
+      // from IndexedDB can be synced even when GPS is off.
+      // GPS confirmations are only reset when gpsStatus changes to 'granted'
+      // via the /location/gps-status endpoint.
       const location = await prisma.userLocation.upsert({
         where: { userId },
         update: {
@@ -1673,9 +1677,6 @@ router.post(
           currentProjectId: activeCheckin?.projectId || null,
           isOutOfArea: geofenceStatus.isOutOfArea,
           distanceFromProject: geofenceStatus.distance,
-          // Reset GPS confirmations - user is sending location, so GPS is working
-          gpsOffAt: null,
-          gpsOffConfirmations: 0,
         },
         create: {
           userId,
@@ -1690,9 +1691,6 @@ router.post(
           currentProjectId: activeCheckin?.projectId || null,
           isOutOfArea: geofenceStatus.isOutOfArea,
           distanceFromProject: geofenceStatus.distance,
-          // New record starts with no GPS confirmations
-          gpsOffAt: null,
-          gpsOffConfirmations: 0,
         },
       });
 

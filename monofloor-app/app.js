@@ -1183,19 +1183,10 @@ function initSocketConnection() {
     });
 
     // Listen for GPS auto-checkout event (backend did auto-checkout due to GPS off 60s)
-    socket.on('gps:autoCheckout', (data) => {
+    socket.on('gps:autoCheckout', async (data) => {
         console.log('[Socket] GPS Auto-Checkout received:', data);
 
-        // Update local state
-        isCheckedIn = false;
-        activeCheckinId = null;
-        currentProjectForCheckin = null;
-        pendingCheckoutReason = null;
-
-        // Update UI
-        updateCheckinUI(false);
-
-        // Hide any GPS warning modals
+        // Hide any GPS warning modals immediately
         hideGPSWarningModal();
         hideGPSOffAlert();
 
@@ -1208,6 +1199,21 @@ function initSocketConnection() {
             `${data.projectName}: Seu check-out foi realizado automaticamente. Suas horas não serão computadas.`,
             { type: 'gps:autoCheckout', projectId: data.projectId }
         );
+
+        // IMPORTANT: Verify state with backend (source of truth)
+        // This ensures frontend state matches backend after auto-checkout
+        try {
+            await checkActiveCheckin();
+            console.log('[GPS] State verified with backend after auto-checkout');
+        } catch (error) {
+            console.error('[GPS] Error verifying state with backend:', error);
+            // Fallback: update local state manually if backend check fails
+            isCheckedIn = false;
+            activeCheckinId = null;
+            currentProjectForCheckin = null;
+            pendingCheckoutReason = null;
+            updateCheckinUI(false);
+        }
     });
 }
 
@@ -11047,18 +11053,19 @@ function startGPSBackgroundVerification() {
                 console.log(`[GPS] Localização off há ${Math.round(offDuration / 1000)}s (${secondsLeft}s restantes)`);
 
                 if (offDuration >= GPS_MAX_OFF_DURATION && !gpsCheckoutInProgress) {
-                    // 1 MINUTE REACHED - FORCE CHECKOUT IMMEDIATELY
-                    gpsCheckoutInProgress = true;
-                    console.log('[GPS] ⚠️ 1 MINUTO ATINGIDO - CHECKOUT AUTOMÁTICO AGORA');
+                    // BACKEND HANDLES CHECKOUT - Frontend only shows warning
+                    // The backend monitors location updates and triggers checkout via socket
+                    // after 3 confirmations (90 seconds of no location updates)
+                    console.log('[GPS] ⚠️ 1 MINUTO ATINGIDO - aguardando backend fazer checkout via socket');
 
                     // Log critical event
-                    await logTimelineEvent('GPS_AUTO_CHECKOUT', {
+                    await logTimelineEvent('GPS_WAITING_BACKEND_CHECKOUT', {
                         offDuration: offDuration,
-                        rule: '1 minute GPS off = auto checkout'
+                        rule: 'Backend handles checkout via 3 confirmations (90s)'
                     });
 
-                    // Execute checkout with full notification
-                    await executeGPSAutoCheckout();
+                    // Show warning that checkout is imminent (backend will trigger it)
+                    showToast('⚠️ GPS desligado! Checkout automático em breve...', 'error');
                 }
             }
         } else {
