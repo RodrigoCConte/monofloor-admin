@@ -12649,7 +12649,7 @@ body {
 /* ====================================== */
 
 .gps-warning-modal {
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 0;
     right: 0;
@@ -12661,6 +12661,7 @@ body {
     z-index: 10002;
     padding: 20px;
     animation: fadeIn 0.3s ease;
+    border-radius: 32px; /* Match phone-frame inner radius */
 }
 
 .gps-warning-content {
@@ -12949,7 +12950,7 @@ body {
 /* ====================================== */
 
 .gps-mobile-modal {
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 0;
     right: 0;
@@ -12961,6 +12962,7 @@ body {
     z-index: 10003;
     padding: 0;
     animation: fadeIn 0.2s ease;
+    border-radius: 32px; /* Match phone-frame inner radius */
 }
 
 .gps-mobile-modal.active {

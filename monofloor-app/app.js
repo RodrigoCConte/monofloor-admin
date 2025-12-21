@@ -10525,7 +10525,14 @@ function showGPSWarningModal(secondsRemaining) {
             </div>
         </div>
     `;
-    document.body.appendChild(modal);
+
+    // Add modal inside phone-frame, not document.body
+    const phoneFrame = document.querySelector('.phone-frame');
+    if (phoneFrame) {
+        phoneFrame.appendChild(modal);
+    } else {
+        document.body.appendChild(modal);
+    }
 
     // Countdown with animation
     let remaining = secondsRemaining;
@@ -10669,7 +10676,14 @@ function showGPSAutoCheckoutNotification(projectName) {
             </button>
         </div>
     `;
-    document.body.appendChild(modal);
+
+    // Add modal inside phone-frame, not document.body
+    const phoneFrame = document.querySelector('.phone-frame');
+    if (phoneFrame) {
+        phoneFrame.appendChild(modal);
+    } else {
+        document.body.appendChild(modal);
+    }
 
     // Vibrate if available
     if (navigator.vibrate) {
@@ -10840,7 +10854,13 @@ function showGPSOffAlert() {
         modal = document.createElement('div');
         modal.id = 'gps-warning-modal';
         modal.className = 'gps-warning-modal';
-        document.body.appendChild(modal);
+        // Add modal inside phone-frame, not document.body
+        const phoneFrame = document.querySelector('.phone-frame');
+        if (phoneFrame) {
+            phoneFrame.appendChild(modal);
+        } else {
+            document.body.appendChild(modal);
+        }
     }
 
     modal.innerHTML = `
