@@ -1102,8 +1102,8 @@ function initSocketConnection() {
     socket.on('xp:lost', (data) => {
         console.log('[Socket] XP lost:', data);
 
-        // Show XP loss animation
-        showXPLossNotification(data.amount, data.reason || 'Penalidade');
+        // Show XP loss animation (same style as XP gain but red)
+        showXPLoss(data.amount, data.reason || 'Penalidade');
     });
 
     // Listen for campaign winner notification
@@ -1829,6 +1829,76 @@ function showXPGain(amount, reason = '') {
     }, 2500);
 
     console.log(`[XP Animation] +${amount} XP${reason ? ` - ${reason}` : ''}`);
+}
+
+/**
+ * Show XP loss animation (same style as showXPGain but red theme)
+ * @param {number} amount - Amount of XP lost (positive number)
+ * @param {string} reason - Reason for the loss
+ */
+function showXPLoss(amount, reason = '') {
+    // Remove any existing XP overlay
+    const existingOverlay = document.querySelector('.xp-loss-overlay');
+    if (existingOverlay) {
+        existingOverlay.remove();
+    }
+
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'xp-loss-overlay';
+
+    // Generate floating XP numbers (falling down)
+    const floatersHtml = Array.from({ length: 6 }, (_, i) => {
+        const left = 20 + Math.random() * 60;
+        const delay = Math.random() * 0.5;
+        const smallAmount = Math.floor(amount / 6);
+        return `<div class="xp-loss-floater" style="left: ${left}%; animation-delay: ${delay}s;">-${smallAmount}</div>`;
+    }).join('');
+
+    // Generate particles (breaking effect)
+    const particlesHtml = Array.from({ length: 12 }, (_, i) => {
+        const left = Math.random() * 100;
+        const top = Math.random() * 100;
+        const delay = Math.random() * 1;
+        const size = 0.5 + Math.random() * 1;
+        return `<div class="xp-loss-particle" style="left: ${left}%; top: ${top}%; animation-delay: ${delay}s; transform: scale(${size});"></div>`;
+    }).join('');
+
+    // Create content
+    overlay.innerHTML = `
+        <div class="xp-loss-container">
+            <div class="xp-loss-flash"></div>
+            <div class="xp-loss-icon">💔</div>
+            <div class="xp-loss-amount">-${amount} XP</div>
+            ${reason ? `<div class="xp-loss-reason">${reason}</div>` : ''}
+            <div class="xp-loss-floaters">${floatersHtml}</div>
+            <div class="xp-loss-particles">${particlesHtml}</div>
+        </div>
+    `;
+
+    // Add to body
+    document.body.appendChild(overlay);
+
+    // Intense vibration for loss (mobile)
+    if ('vibrate' in navigator) {
+        navigator.vibrate([100, 50, 100, 50, 200, 50, 300]);
+    }
+
+    // Play error/loss sound effect
+    try {
+        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleVwvYKHcvnhPIzRXltzQn2k+MFGb3tKtf09ALGul4NSwhVRBKWai39WyildGJ2Wh3tWvg1VHJ2Wh3tWwg1VHKGag3dOuglVGJ2ah3dOuglZHJ2ag3dOug1ZHJ2ag3dOug1ZH');
+        audio.volume = 0.4;
+        audio.playbackRate = 0.7;  // Lower pitch for loss
+        audio.play().catch(() => {});
+    } catch (e) {}
+
+    // Auto-close after animation
+    setTimeout(() => {
+        overlay.style.animation = 'fadeOut 0.5s ease forwards';
+        setTimeout(() => overlay.remove(), 500);
+    }, 2500);
+
+    console.log(`[XP Animation] -${amount} XP${reason ? ` - ${reason}` : ''}`);
 }
 
 // =============================================
@@ -9888,7 +9958,7 @@ window.simulateXPGain = function(amount = 100, reason = 'Teste') {
  */
 window.simulateXPLoss = function(amount = 100, reason = 'Teste') {
     console.log('Simulando recebimento de XP Loss...');
-    showXPLossNotification(amount, `Teste: ${reason}`);
+    showXPLoss(amount, `Penalidade: ${reason}`);
     console.log('✅ Animação de XP Loss exibida!');
 };
 
