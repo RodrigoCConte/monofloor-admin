@@ -9332,8 +9332,12 @@ async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
             }
         }
 
+        // For REPORT_SENT, we skip task selection (user already sent report, just checkout)
+        const isReportSent = reportOption === 'REPORT_SENT';
+        const taskIdsToSend = isReportSent ? [] : (selectedTaskIds || []);
+
         // Build task completions array with type and progress
-        const taskCompletionsArray = selectedTaskIds.map(taskId => {
+        const taskCompletionsArray = taskIdsToSend.map(taskId => {
             const completion = taskCompletions[taskId];
             return {
                 taskId,
@@ -9343,7 +9347,14 @@ async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
         });
 
         // Map REPORT_SENT to SKIP since report was already sent (API only accepts NOW, LATER_60MIN, SKIP)
-        const apiReportOption = reportOption === 'REPORT_SENT' ? 'SKIP' : reportOption;
+        const apiReportOption = isReportSent ? 'SKIP' : reportOption;
+
+        console.log('[CHECKOUT] Enviando para API:', {
+            completedTaskIds: taskIdsToSend,
+            taskCompletions: taskCompletionsArray.length,
+            checkoutReason: pendingCheckoutReason || 'FIM_EXPEDIENTE',
+            reportOption: apiReportOption
+        });
 
         const response = await fetch(`${API_URL}/api/mobile/checkins/${activeCheckinId}/complete-tasks`, {
             method: 'POST',
@@ -9352,7 +9363,7 @@ async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
                 'Authorization': `Bearer ${getAuthToken()}`
             },
             body: JSON.stringify({
-                completedTaskIds: selectedTaskIds,
+                completedTaskIds: taskIdsToSend,
                 taskCompletions: taskCompletionsArray,
                 checkoutReason: pendingCheckoutReason || 'FIM_EXPEDIENTE',
                 reportOption: apiReportOption,
