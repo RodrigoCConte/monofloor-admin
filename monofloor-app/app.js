@@ -11098,7 +11098,7 @@ function startGPSBackgroundVerification() {
         clearInterval(gpsVerificationInterval);
     }
 
-    console.log('[GPS Verification] Starting - Backend confirmation based (10 confirmations = 5 min)');
+    console.log('[GPS Verification] Starting - Using geolocationState from watchPosition');
     gpsCheckoutInProgress = false;
 
     gpsVerificationInterval = setInterval(async () => {
@@ -11107,12 +11107,11 @@ function startGPSBackgroundVerification() {
             return;
         }
 
-        // Check current GPS permission status
-        const currentStatus = await checkLocationPermission();
+        // USE geolocationState - the same variable that shows "Localização não permitida"
+        // This is updated in real-time by watchPosition and is 100% reliable
+        const isGPSOff = geolocationState === 'permission_denied';
 
-        // CRITICAL: Only treat as GPS off if status is explicitly 'denied'
-        // 'prompt' and 'unknown' should NOT trigger warnings
-        const isGPSOff = currentStatus === 'denied';
+        console.log(`[GPS Check] geolocationState = "${geolocationState}", isGPSOff = ${isGPSOff}`);
 
         if (isGPSOff) {
             // GPS is explicitly denied - notify backend and get confirmation status
@@ -11138,12 +11137,12 @@ function startGPSBackgroundVerification() {
                 // Track locally for logs
                 if (!gpsOffStartTime) {
                     gpsOffStartTime = Date.now();
-                    console.log('[GPS] Localização DESLIGADA - backend rastreando confirmações');
+                    console.log('[GPS] Localização DESLIGADA (permission_denied) - backend rastreando confirmações');
                 }
             }
         } else {
-            // GPS is on (granted, prompt, or unknown) - ALWAYS notify backend to reset confirmations
-            // This ensures any stale confirmations are cleared
+            // GPS is working (valid, invalid, loading, or error but not permission_denied)
+            // Notify backend to reset any stale confirmations
             const backendResponse = await notifyBackendGPSStatus('granted');
 
             if (backendResponse && backendResponse.success) {
