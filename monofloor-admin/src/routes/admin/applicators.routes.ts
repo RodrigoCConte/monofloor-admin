@@ -713,7 +713,7 @@ router.post(
   adminAuth,
   [
     param('id').isUUID(),
-    body('amount').isInt({ min: -10000, max: 10000 }),
+    body('amount').isInt(),
     body('reason').trim().isLength({ min: 1, max: 500 }),
     body('type').isIn(['PRAISE', 'PENALTY']),
   ],

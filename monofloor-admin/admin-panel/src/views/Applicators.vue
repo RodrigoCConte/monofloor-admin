@@ -1021,10 +1021,10 @@ onMounted(loadApplicators);
           </div>
           <div class="form-group">
             <label>Quantidade de XP</label>
-            <input type="number" v-model.number="xpAmount" min="1" max="10000" class="form-input" />
+            <input type="number" v-model.number="xpAmount" min="1" class="form-input" />
           </div>
           <div class="xp-presets">
-            <button v-for="preset in (xpType === 'PRAISE' ? [50, 100, 200, 500] : [25, 50, 100, 200])" :key="preset" @click="xpAmount = preset" class="preset-btn" :class="{ active: xpAmount === preset }">
+            <button v-for="preset in (xpType === 'PRAISE' ? [100, 500, 1000, 5000, 10000] : [50, 100, 500, 1000, 5000])" :key="preset" @click="xpAmount = preset" class="preset-btn" :class="{ active: xpAmount === preset }">
               {{ preset }} XP
             </button>
           </div>
