@@ -19,6 +19,7 @@ const prisma = new PrismaClient();
 const LOCATION_STALE_THRESHOLD_MS = 30 * 1000; // 30 seconds without location update = stale
 const REQUIRED_CONFIRMATIONS = 10; // Need 10 confirmations (5 minutes total = 10 x 30s)
 const CHECK_INTERVAL_SECONDS = 30; // Cron runs every 30 seconds
+const INACTIVITY_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes without ANY location update = auto-checkout
 
 /**
  * Update GPS status for a user
@@ -111,12 +112,14 @@ export async function updateGPSStatus(
  *
  * Logic:
  * 1. Find users with active check-ins
- * 2. Check if their gpsStatus is 'denied' (reported by frontend)
- * 3. Increment confirmations counter
- * 4. After 10 confirmations (5 minutes), perform auto-checkout
+ * 2. FIRST: Check for INACTIVITY (no location update for 30+ minutes) → auto-checkout
+ * 3. SECOND: Check if gpsStatus is 'denied' (reported by frontend)
+ * 4. Increment GPS off confirmations counter
+ * 5. After 10 confirmations (5 minutes with GPS off), perform auto-checkout
  *
- * NOTE: We check gpsStatus, NOT location staleness, because cached locations
- * from IndexedDB can be synced even when GPS is off.
+ * Two types of auto-checkout:
+ * - INATIVIDADE: User closed app or stopped sending location entirely (30+ min)
+ * - GPS_DESATIVADO: User has GPS off but app is still running (5+ min)
  */
 export async function processGPSAutoCheckouts(): Promise<{
   processed: number;
@@ -158,7 +161,63 @@ export async function processGPSAutoCheckouts(): Promise<{
         continue;
       }
 
-      // Check if GPS is off (gpsStatus is 'denied' or 'prompt', not 'granted')
+      // FIRST: Check for INACTIVITY (no location update for 30+ minutes)
+      // This catches users who closed the app entirely
+      const lastLocationUpdate = location.updatedAt;
+      const timeSinceLastUpdate = now.getTime() - lastLocationUpdate.getTime();
+      const isInactive = timeSinceLastUpdate > INACTIVITY_THRESHOLD_MS;
+
+      if (isInactive) {
+        // User hasn't sent ANY location for 30+ minutes - auto-checkout for inactivity
+        const checkoutAt = now;
+        const hoursWorked =
+          (checkoutAt.getTime() - checkin.checkinAt.getTime()) / (1000 * 60 * 60);
+
+        await prisma.checkin.update({
+          where: { id: checkin.id },
+          data: {
+            checkoutAt,
+            hoursWorked,
+            checkoutReason: 'INATIVIDADE',
+            isAutoCheckout: true,
+          },
+        });
+
+        // Clear GPS tracking data
+        await prisma.userLocation.update({
+          where: { userId: checkin.userId },
+          data: {
+            gpsOffAt: null,
+            gpsOffConfirmations: 0,
+            currentProjectId: null,
+            isOnline: false,
+          },
+        });
+
+        const projectName = checkin.project.title || checkin.project.cliente || 'Projeto';
+        const minutesInactive = Math.round(timeSinceLastUpdate / 60000);
+
+        // Send notifications
+        await sendGPSAutoCheckoutPush(checkin.userId, projectName);
+
+        emitGPSAutoCheckout({
+          userId: checkin.userId,
+          userName: checkin.user?.name || 'Usuário',
+          projectId: checkin.projectId,
+          projectName,
+          hoursWorked,
+          reason: `Inativo por ${minutesInactive} minutos`,
+          timestamp: checkoutAt,
+        });
+
+        checkedOut++;
+        console.log(
+          `[INACTIVITY] User ${checkin.user?.name} auto-checked-out from "${projectName}" - inactive for ${minutesInactive} minutes`
+        );
+        continue;
+      }
+
+      // SECOND: Check if GPS is off (gpsStatus is 'denied' or 'prompt', not 'granted')
       // This is reported by the frontend via /api/mobile/location/gps-status
       const isGPSOff = location.gpsStatus && location.gpsStatus !== 'granted';
 
