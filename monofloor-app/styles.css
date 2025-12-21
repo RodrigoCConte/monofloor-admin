@@ -3144,13 +3144,13 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 12px 0 16px;
+    margin: 8px 0 10px;
 }
 
 .profile-character-icon {
-    width: 32px;
+    width: 28px;
     height: auto;
-    margin-right: 8px;
+    margin-right: 6px;
     flex-shrink: 0;
 }
 
@@ -3171,29 +3171,29 @@ body {
 /* Spacer para balancear o ícone e centralizar o texto */
 .profile-role-badge::after {
     content: '';
-    width: 40px;
+    width: 34px;
     flex-shrink: 0;
 }
 
 .profile-header {
     text-align: center;
-    padding: 20px 0 30px;
+    padding: 16px 0 20px;
     border-bottom: 1px solid var(--border-color);
-    margin-bottom: 20px;
+    margin-bottom: 12px;
 }
 
 .profile-avatar-large {
-    width: 90px;
-    height: 90px;
+    width: 72px;
+    height: 72px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 700;
-    font-size: 28px;
+    font-size: 24px;
     color: #000;
-    margin: 0 auto 16px;
+    margin: 0 auto 12px;
     overflow: hidden;
 }
 
@@ -3205,29 +3205,29 @@ body {
 }
 
 .profile-header h2 {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .profile-username {
     display: block;
-    font-size: 14px;
+    font-size: 13px;
     color: var(--accent-primary);
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .profile-role {
-    font-size: 14px;
+    font-size: 13px;
     color: var(--text-secondary);
-    margin-bottom: 20px;
+    margin-bottom: 12px;
 }
 
 .profile-stats {
     display: flex;
     justify-content: center;
-    gap: 30px;
+    gap: 20px;
 }
 
 .stat {
@@ -3237,13 +3237,13 @@ body {
 }
 
 .stat-value {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 700;
     color: var(--text-primary);
 }
 
 .stat-label {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-secondary);
 }
 
@@ -3283,8 +3283,8 @@ body {
 
 /* Badges Section */
 .profile-badges-section {
-    margin-top: 20px;
-    padding: 16px;
+    margin-top: 12px;
+    padding: 12px;
     background-color: var(--bg-card);
     border-radius: var(--border-radius-lg);
 }
@@ -3292,9 +3292,9 @@ body {
 .badges-section-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 16px;
-    padding-bottom: 12px;
+    gap: 6px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
     border-bottom: 1px solid var(--border-color);
 }
 
@@ -3328,16 +3328,16 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 30px 20px;
+    padding: 20px 16px;
     text-align: center;
     grid-column: 1 / -1;
 }
 
 .badges-empty svg {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     color: var(--text-tertiary);
-    margin-bottom: 12px;
+    margin-bottom: 10px;
     opacity: 0.5;
 }
 
@@ -3489,14 +3489,14 @@ body {
 .profile-menu {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
 }
 
 .menu-item {
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 16px;
+    gap: 12px;
+    padding: 14px;
     background-color: var(--bg-card);
     border-radius: var(--border-radius);
     cursor: pointer;
@@ -3508,20 +3508,20 @@ body {
 }
 
 .menu-item svg {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     color: var(--text-secondary);
 }
 
 .menu-item span {
     flex: 1;
-    font-size: 15px;
+    font-size: 14px;
     color: var(--text-primary);
 }
 
 .menu-item .chevron {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     color: var(--text-tertiary);
 }
 
@@ -3532,11 +3532,11 @@ body {
 
 .app-version {
     text-align: center;
-    padding: 30px;
+    padding: 16px;
 }
 
 .app-version span {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-tertiary);
 }
 
@@ -3731,59 +3731,73 @@ body {
 
 /* Leaving Modal */
 .leaving-modal-content {
-    padding: 30px 24px;
+    padding: 20px 16px;
+}
+
+.leaving-modal-content h2 {
+    font-size: 18px;
+    margin-bottom: 6px;
+}
+
+.leaving-modal-content p {
+    font-size: 13px;
+    margin-bottom: 12px;
 }
 
 .leaving-icon {
-    width: 56px;
-    height: 56px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     background: rgba(249, 115, 22, 0.15);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 20px;
+    margin: 0 auto 12px;
 }
 
 .leaving-icon svg {
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     color: var(--accent-orange);
 }
 
 .leaving-options {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-bottom: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
 }
 
 .leaving-option {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 14px;
+    gap: 6px;
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
-    padding: 16px;
+    padding: 12px 8px;
     cursor: pointer;
-    text-align: left;
+    text-align: center;
     transition: all 0.2s;
 }
 
-.leaving-option:hover {
+.leaving-option:active {
     border-color: var(--accent-primary);
+    background: rgba(201, 169, 98, 0.1);
+    transform: scale(0.98);
 }
 
 .leaving-option svg {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     color: var(--text-secondary);
 }
 
 .leaving-option span {
-    font-size: 14px;
+    font-size: 12px;
     color: var(--text-primary);
+    line-height: 1.2;
 }
 
 /* Scrollbar */

@@ -1561,20 +1561,20 @@ onMounted(loadApplicators);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border-color);
 }
 
 .modal-header h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .close-btn {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: var(--bg-secondary);
   border: none;
@@ -1590,8 +1590,8 @@ onMounted(loadApplicators);
 }
 
 .close-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: var(--text-secondary);
 }
 
@@ -1862,8 +1862,17 @@ onMounted(loadApplicators);
 
 /* Profile Modal Styles */
 .profile-modal {
-  max-width: 600px;
-  width: 90%;
+  max-width: 560px;
+  width: 95%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-modal .modal-body {
+  overflow-y: auto;
+  max-height: calc(90vh - 70px);
+  padding: 16px;
 }
 
 .loading-profile {
@@ -1871,29 +1880,29 @@ onMounted(loadApplicators);
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 40px;
+  gap: 10px;
+  padding: 30px;
   color: var(--text-secondary);
 }
 
 .profile-header-modal {
   display: flex;
-  gap: 20px;
+  gap: 14px;
   align-items: center;
-  padding-bottom: 20px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--border-color);
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 .profile-avatar-modal {
-  width: 80px;
-  height: 80px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   background: var(--bg-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--text-secondary);
   overflow: hidden;
@@ -1913,72 +1922,72 @@ onMounted(loadApplicators);
 .profile-name-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .profile-name-row h4 {
   margin: 0;
-  font-size: 20px;
+  font-size: 17px;
   color: var(--text-primary);
 }
 
 .primary-badge-icon {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   object-fit: contain;
 }
 
 .profile-email-modal {
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 13px;
   display: block;
-  margin: 4px 0 8px;
+  margin: 2px 0 6px;
 }
 
 .profile-role-modal {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .role-badge-modal {
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 16px;
+  font-size: 11px;
   font-weight: 500;
 }
 
 .role-icon-modal {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
 }
 
 .profile-stats-modal {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  padding: 16px;
+  gap: 10px;
+  padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 12px;
-  margin-bottom: 20px;
+  border-radius: 10px;
+  margin-bottom: 14px;
 }
 
 .stat-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .stat-value {
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .stat-label {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-tertiary);
   text-transform: uppercase;
 }
@@ -1986,31 +1995,31 @@ onMounted(loadApplicators);
 .badges-section-modal h5 {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 16px;
-  font-size: 14px;
+  gap: 6px;
+  margin: 0 0 10px;
+  font-size: 13px;
   color: var(--text-primary);
 }
 
 .badges-section-modal h5 svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: var(--accent-primary);
 }
 
 .badges-grid-modal {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
 }
 
 .badge-item-modal {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12px;
+  padding: 8px;
   background: var(--bg-secondary);
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid var(--border-color);
   position: relative;
   transition: all 0.2s;
@@ -2018,7 +2027,7 @@ onMounted(loadApplicators);
 
 .badge-item-modal:hover {
   border-color: var(--accent-primary);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .badge-item-modal.is-primary {
@@ -2027,45 +2036,46 @@ onMounted(loadApplicators);
 }
 
 .badge-icon-modal {
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .badge-icon-modal img {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
 }
 
 .badge-name-modal {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 500;
   color: var(--text-primary);
   text-align: center;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  line-height: 1.2;
 }
 
 .badge-rarity-modal {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
 }
 
 .badge-primary-tag {
   position: absolute;
-  top: -6px;
-  right: -6px;
+  top: -4px;
+  right: -4px;
   background: var(--accent-primary);
   color: #000;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 10px;
+  padding: 2px 5px;
+  border-radius: 8px;
   text-transform: uppercase;
 }
 
@@ -2074,20 +2084,20 @@ onMounted(loadApplicators);
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 32px;
+  padding: 20px;
   color: var(--text-tertiary);
-  gap: 12px;
+  gap: 8px;
 }
 
 .no-badges svg {
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
   opacity: 0.5;
 }
 
 .no-badges p {
   margin: 0;
-  font-size: 14px;
+  font-size: 12px;
 }
 
 /* Profile Button Style */
@@ -2114,8 +2124,8 @@ onMounted(loadApplicators);
 /* XP Actions Section */
 .xp-actions-section {
   display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .btn-praise,
@@ -2124,10 +2134,10 @@ onMounted(loadApplicators);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-radius: 12px;
-  font-size: 14px;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -2158,48 +2168,48 @@ onMounted(loadApplicators);
 
 .btn-praise svg,
 .btn-penalty svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 /* Earnings Section */
 .earnings-section-modal {
-  margin-bottom: 20px;
-  padding: 16px;
+  margin-bottom: 14px;
+  padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid var(--border-color);
 }
 
 .earnings-section-modal h5 {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 12px;
-  font-size: 14px;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 13px;
   color: var(--text-primary);
 }
 
 .earnings-section-modal h5 svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: var(--accent-green);
 }
 
 .earnings-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .earnings-main {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: 10px;
 }
 
 .earnings-value {
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--accent-green);
 }
@@ -2309,10 +2319,10 @@ onMounted(loadApplicators);
 
 /* Projects Section */
 .projects-section-modal {
-  margin-bottom: 20px;
-  padding: 16px;
+  margin-bottom: 14px;
+  padding: 12px;
   background: var(--bg-secondary);
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid var(--border-color);
 }
 
@@ -2320,34 +2330,34 @@ onMounted(loadApplicators);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .section-header h5 {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-primary);
 }
 
 .section-header h5 svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: var(--accent-primary);
 }
 
 .btn-add-project {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 4px;
+  padding: 5px 10px;
   background: var(--accent-primary);
   color: #000;
   border: none;
-  border-radius: 8px;
-  font-size: 12px;
+  border-radius: 6px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -2359,15 +2369,15 @@ onMounted(loadApplicators);
 }
 
 .btn-add-project svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 
 .projects-list-modal {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 200px;
+  gap: 6px;
+  max-height: 150px;
   overflow-y: auto;
 }
 
@@ -2375,38 +2385,38 @@ onMounted(loadApplicators);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: var(--bg-card);
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid var(--border-color);
 }
 
 .project-info-modal {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .project-title-modal {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-primary);
 }
 
 .project-role-modal {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-tertiary);
 }
 
 .btn-remove-project {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: rgba(239, 68, 68, 0.1);
   border: none;
-  border-radius: 6px;
+  border-radius: 5px;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -2416,14 +2426,14 @@ onMounted(loadApplicators);
 }
 
 .btn-remove-project svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   color: var(--accent-red);
 }
 
 .no-projects {
   color: var(--text-tertiary);
-  font-size: 14px;
+  font-size: 12px;
   text-align: center;
   padding: 12px;
 }

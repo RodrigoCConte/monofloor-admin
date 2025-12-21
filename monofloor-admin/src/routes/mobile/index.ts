@@ -598,14 +598,47 @@ router.post(
         );
       }
 
-      // Check if this is an irregular check-in (no location provided)
-      const isIrregular = !latitude || !longitude;
-
-      // Get project coordinates for distance calculation
+      // Get project info including workStartTime
       const project = await prisma.project.findUnique({
         where: { id: projectId },
-        select: { id: true, title: true, cliente: true, latitude: true, longitude: true },
+        select: { id: true, title: true, cliente: true, latitude: true, longitude: true, workStartTime: true },
       });
+
+      if (!project) {
+        throw new AppError('Project not found', 404, 'PROJECT_NOT_FOUND');
+      }
+
+      // =============================================
+      // CHECK-IN TIME VALIDATION
+      // Only allow check-in 20 minutes before project start time
+      // =============================================
+      const CHECKIN_EARLY_MINUTES = 20;
+
+      if (project.workStartTime) {
+        const now = new Date();
+        const [hours, minutes] = project.workStartTime.split(':').map(Number);
+
+        // Create today's expected start time
+        const expectedStart = new Date(now);
+        expectedStart.setHours(hours, minutes, 0, 0);
+
+        // Calculate earliest allowed check-in time (20 min before start)
+        const earliestCheckin = new Date(expectedStart);
+        earliestCheckin.setMinutes(earliestCheckin.getMinutes() - CHECKIN_EARLY_MINUTES);
+
+        // If current time is before the earliest allowed time, reject
+        if (now < earliestCheckin) {
+          const earliestTimeStr = earliestCheckin.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          throw new AppError(
+            `Check-in permitido apenas a partir das ${earliestTimeStr} (20 minutos antes do inicio do expediente as ${project.workStartTime})`,
+            400,
+            'CHECKIN_TOO_EARLY'
+          );
+        }
+      }
+
+      // Check if this is an irregular check-in (no location provided)
+      const isIrregular = !latitude || !longitude;
 
       // Calculate distance from project pin
       let checkinDistance: number | null = null;

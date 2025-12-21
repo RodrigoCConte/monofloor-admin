@@ -3652,6 +3652,17 @@ async function doCheckin() {
                 updateTaskBlockVisibility(true);
             }
         } else {
+            // Check for CHECKIN_TOO_EARLY error - show friendly notification
+            if (data.error?.code === 'CHECKIN_TOO_EARLY') {
+                showGameAlert({
+                    type: 'warning',
+                    icon: '⏰',
+                    title: 'MUITO CEDO',
+                    message: 'Ainda está muito cedo para fazer seu check-in.\n\nAguarde o horário permitido.',
+                    buttonText: 'ENTENDI'
+                });
+                return;
+            }
             throw new Error(data.error?.message || 'Erro ao fazer check-in');
         }
     } catch (error) {
