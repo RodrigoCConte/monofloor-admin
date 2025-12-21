@@ -11110,8 +11110,12 @@ function startGPSBackgroundVerification() {
         // Check current GPS permission status
         const currentStatus = await checkLocationPermission();
 
-        if (currentStatus !== 'granted') {
-            // GPS is not available - notify backend and get confirmation status
+        // CRITICAL: Only treat as GPS off if status is explicitly 'denied'
+        // 'prompt' and 'unknown' should NOT trigger warnings
+        const isGPSOff = currentStatus === 'denied';
+
+        if (isGPSOff) {
+            // GPS is explicitly denied - notify backend and get confirmation status
             const backendResponse = await notifyBackendGPSStatus('denied');
 
             if (backendResponse && backendResponse.success) {
@@ -11138,17 +11142,26 @@ function startGPSBackgroundVerification() {
                 }
             }
         } else {
-            // GPS is back on - reset
+            // GPS is on (granted, prompt, or unknown) - ALWAYS notify backend to reset confirmations
+            // This ensures any stale confirmations are cleared
+            const backendResponse = await notifyBackendGPSStatus('granted');
+
+            if (backendResponse && backendResponse.success) {
+                const confirmations = backendResponse.confirmations || 0;
+
+                // If backend still has confirmations, log it (they should be reset)
+                if (confirmations > 0) {
+                    console.log(`[GPS] ⚠️ Backend still has ${confirmations} confirmations - should be 0`);
+                }
+            }
+
+            // Hide any warning modal that might be showing
+            hideGPSWarningModal();
+
+            // Only show toast if we were tracking GPS off before
             if (gpsOffStartTime) {
-                console.log('[GPS] Localização RESTAURADA - notificando backend');
+                console.log('[GPS] Localização RESTAURADA - backend notificado');
                 gpsOffStartTime = null;
-
-                // Notify backend that GPS is back on (cancels auto-checkout)
-                notifyBackendGPSStatus('granted');
-
-                // Hide any warning modal
-                hideGPSWarningModal();
-
                 showToast('✅ Localização ativada!', 'success');
             }
         }
