@@ -495,6 +495,7 @@ const infoWindow = ref<google.maps.InfoWindow | null>(null);
 const loading = ref(true);
 const error = ref('');
 const lastUpdate = ref<Date | null>(null);
+const isFirstLoad = ref(true); // Controls initial map centering - prevents recentering on updates
 const refreshInterval = ref<number | null>(null);
 
 // Socket.io unsubscribe functions
@@ -1027,12 +1028,10 @@ const loadLocations = async () => {
     // The clusterer will only show markers not in usersWithActiveCheckin
     setupMarkerClusterer();
 
-    // Center map on markers if first load and has markers
-    if (data.markers.length > 0 && data.center) {
-      // Only center on first load
-      if (markers.value.size === data.markers.length) {
-        map.value?.setCenter(data.center);
-      }
+    // Center map ONLY on first load - keep view fixed on subsequent updates
+    if (isFirstLoad.value && data.markers.length > 0 && data.center) {
+      map.value?.setCenter(data.center);
+      isFirstLoad.value = false; // Never recenter automatically after first load
     }
   } catch (err: any) {
     console.error('Error loading locations:', err);
