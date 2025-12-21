@@ -360,7 +360,8 @@ export async function sendXPPenaltyPush(
 export async function sendXPBonusPush(
   userId: string,
   xpAmount: number,
-  reason: string
+  reason: string,
+  totalXP?: number
 ): Promise<{ sent: number; failed: number }> {
   const payload: PushPayload = {
     title: 'Parabens! XP Recebido!',
@@ -373,6 +374,7 @@ export async function sendXPBonusPush(
       type: 'xp:bonus',
       amount: xpAmount,
       reason,
+      totalXP,
       url: '/#profile',
     },
   };
@@ -388,10 +390,11 @@ export async function sendXPAdjustmentPush(
   userId: string,
   xpAmount: number,
   reason: string,
-  type: 'PRAISE' | 'PENALTY'
+  type: 'PRAISE' | 'PENALTY',
+  totalXP?: number
 ): Promise<{ sent: number; failed: number }> {
   if (type === 'PRAISE') {
-    return sendXPBonusPush(userId, Math.abs(xpAmount), reason);
+    return sendXPBonusPush(userId, Math.abs(xpAmount), reason, totalXP);
   } else {
     return sendXPPenaltyPush(userId, Math.abs(xpAmount), 'Administrador', reason);
   }

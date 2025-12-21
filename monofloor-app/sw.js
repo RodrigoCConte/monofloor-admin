@@ -115,7 +115,8 @@ self.addEventListener('notificationclick', (event) => {
                             client.postMessage({
                                 type: 'SHOW_XP_GAIN',
                                 amount: data.amount,
-                                reason: data.reason
+                                reason: data.reason,
+                                totalXP: data.totalXP
                             });
                         }
                     }

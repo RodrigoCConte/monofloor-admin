@@ -9399,11 +9399,14 @@ if ('serviceWorker' in navigator) {
             );
         } else if (event.data?.type === 'SHOW_XP_GAIN') {
             // Show XP gain animation from push notification (admin praise)
-            const { amount, reason } = event.data;
-            showXPNotification(
-                Math.abs(amount),
-                `Elogio: ${reason}`
-            );
+            // Using showXPGain for full-screen celebration effect
+            const { amount, reason, totalXP } = event.data;
+            showXPGain(Math.abs(amount), `Elogio: ${reason}`);
+            // Update profile XP display if totalXP is provided
+            if (totalXP !== undefined && totalXP !== null) {
+                currentUser.xpTotal = totalXP;
+                updateProfileXP();
+            }
         } else if (event.data?.type === 'ABSENCE_INQUIRY') {
             // Show absence inquiry modal from push notification
             showAbsenceInquiryModal(event.data.unreportedAbsenceId, event.data.absenceDate);

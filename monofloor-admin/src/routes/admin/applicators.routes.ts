@@ -765,10 +765,10 @@ router.post(
         },
       });
 
-      // Send push notification
+      // Send push notification with updated XP total
       try {
         const { sendXPAdjustmentPush } = await import('../../services/push.service');
-        sendXPAdjustmentPush(userId, Math.abs(finalAmount), reason, type).catch((err) => {
+        sendXPAdjustmentPush(userId, Math.abs(finalAmount), reason, type, updatedUser.xpTotal).catch((err) => {
           console.error('[Push] Error sending XP adjustment push:', err);
         });
       } catch (pushError) {
