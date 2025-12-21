@@ -583,6 +583,7 @@ let locationDB = null;
 let gpsOffStartTime = null; // Track when GPS was turned off
 let gpsAlertShown = false; // Track if persistent alert is shown
 let gpsCheckoutInProgress = false; // Prevent multiple checkout attempts
+let gpsWarningModalShown = false; // Track if GPS warning modal is already showing
 
 // GPS Auto-Checkout: 5 minutes with GPS off = automatic checkout
 // Backend does checkout after 10 confirmations (5 min = 10 x 30s)
@@ -1184,13 +1185,31 @@ function initSocketConnection() {
         );
     });
 
-    // Listen for GPS auto-checkout event (backend did auto-checkout due to GPS off 60s)
+    // Listen for GPS auto-checkout event (backend did auto-checkout due to GPS off 5 minutes)
     socket.on('gps:autoCheckout', async (data) => {
         console.log('[Socket] GPS Auto-Checkout received:', data);
 
         // Hide any GPS warning modals immediately
         hideGPSWarningModal();
         hideGPSOffAlert();
+
+        // IMMEDIATELY update local state - don't wait for backend
+        isCheckedIn = false;
+        activeCheckinId = null;
+        currentProjectForCheckin = null;
+        pendingCheckoutReason = null;
+        gpsOffStartTime = null;
+        gpsCheckoutInProgress = false;
+        gpsWarningModalShown = false;
+
+        // Update UI immediately
+        updateCheckinUI(false);
+
+        // Stop GPS verification interval
+        if (gpsVerificationInterval) {
+            clearInterval(gpsVerificationInterval);
+            gpsVerificationInterval = null;
+        }
 
         // Show checkout notification modal
         showGPSAutoCheckoutNotification(data.projectName);
@@ -1202,20 +1221,7 @@ function initSocketConnection() {
             { type: 'gps:autoCheckout', projectId: data.projectId }
         );
 
-        // IMPORTANT: Verify state with backend (source of truth)
-        // This ensures frontend state matches backend after auto-checkout
-        try {
-            await checkActiveCheckin();
-            console.log('[GPS] State verified with backend after auto-checkout');
-        } catch (error) {
-            console.error('[GPS] Error verifying state with backend:', error);
-            // Fallback: update local state manually if backend check fails
-            isCheckedIn = false;
-            activeCheckinId = null;
-            currentProjectForCheckin = null;
-            pendingCheckoutReason = null;
-            updateCheckinUI(false);
-        }
+        console.log('[GPS] Auto-checkout complete - UI updated, state cleared');
     });
 }
 
@@ -10456,9 +10462,23 @@ async function notifyBackendGPSStatus(status) {
 
 /**
  * Show GPS warning modal with countdown
+ * Only shows ONCE until GPS is restored or checkout happens
  */
 function showGPSWarningModal(secondsRemaining) {
-    // Remove existing modal if any
+    // Only show modal once - don't spam the user
+    if (gpsWarningModalShown) {
+        // Just update the countdown if modal exists
+        const countdownEl = document.getElementById('gps-countdown');
+        if (countdownEl) {
+            countdownEl.textContent = secondsRemaining;
+        }
+        return;
+    }
+
+    // Mark as shown
+    gpsWarningModalShown = true;
+
+    // Remove existing modal if any (shouldn't happen, but just in case)
     const existingModal = document.getElementById('gps-warning-modal');
     if (existingModal) {
         existingModal.remove();
@@ -10527,7 +10547,7 @@ function showGPSWarningModal(secondsRemaining) {
 }
 
 /**
- * Hide GPS warning modal
+ * Hide GPS warning modal and reset flag
  */
 function hideGPSWarningModal() {
     const modal = document.getElementById('gps-warning-modal');
@@ -10538,6 +10558,8 @@ function hideGPSWarningModal() {
         }
         modal.remove();
     }
+    // Reset flag so modal can show again next time GPS goes off
+    gpsWarningModalShown = false;
 }
 
 /**
