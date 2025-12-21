@@ -1819,7 +1819,7 @@ router.put('/location/offline', mobileAuth, async (req, res, next) => {
 });
 
 // POST /api/mobile/location/gps-status - Update GPS permission status
-// Used for backend-controlled auto-checkout after 60 seconds with GPS off
+// Used for backend-controlled auto-checkout after 5 minutes (10 confirmations) with GPS off
 router.post(
   '/location/gps-status',
   mobileAuth,
@@ -1832,18 +1832,25 @@ router.post(
 
       const result = await updateGPSStatus(userId, status);
 
-      // Get current GPS status info
+      // Get current GPS status info with confirmations
       const gpsInfo = await getGPSStatus(userId);
+
+      // Calculate time remaining based on confirmations (each confirmation = 30 seconds)
+      const confirmationsLeft = gpsInfo.confirmationsRequired - gpsInfo.confirmations;
+      const secondsRemaining = confirmationsLeft * 30;
 
       res.json({
         success: true,
         gpsStatus: status,
         gpsOffAt: result.gpsOffAt,
         secondsOff: gpsInfo.secondsOff,
+        confirmations: gpsInfo.confirmations,
+        confirmationsRequired: gpsInfo.confirmationsRequired,
+        secondsRemaining,
         message:
           status === 'granted'
             ? 'GPS ativado'
-            : `GPS desativado. Checkout automatico em ${Math.max(0, 60 - gpsInfo.secondsOff)} segundos.`,
+            : `GPS desativado. Checkout automatico em ${secondsRemaining} segundos (${gpsInfo.confirmations}/${gpsInfo.confirmationsRequired} confirmações).`,
       });
     } catch (error) {
       next(error);
@@ -1857,10 +1864,15 @@ router.get('/location/gps-status', mobileAuth, async (req, res, next) => {
     const userId = req.user!.sub;
     const gpsInfo = await getGPSStatus(userId);
 
+    // Calculate time remaining based on confirmations
+    const confirmationsLeft = gpsInfo.confirmationsRequired - gpsInfo.confirmations;
+    const secondsRemaining = confirmationsLeft * 30;
+
     res.json({
       success: true,
       ...gpsInfo,
-      timeToAutoCheckout: gpsInfo.isGPSOff ? Math.max(0, 60 - gpsInfo.secondsOff) : null,
+      secondsRemaining,
+      timeToAutoCheckout: gpsInfo.isGPSOff ? secondsRemaining : null,
     });
   } catch (error) {
     next(error);

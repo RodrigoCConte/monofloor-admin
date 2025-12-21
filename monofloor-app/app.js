@@ -10422,7 +10422,8 @@ async function syncPendingLocations() {
 
 /**
  * Notify backend about GPS status change
- * Backend will auto-checkout after 60 seconds with GPS off
+ * Backend will auto-checkout after 5 minutes (10 confirmations) with GPS off
+ * Returns confirmation data from backend
  */
 async function notifyBackendGPSStatus(status) {
     const token = getAuthToken();
@@ -10444,16 +10445,8 @@ async function notifyBackendGPSStatus(status) {
         const data = await response.json();
         console.log('[GPS Backend] Status atualizado:', data);
 
-        if (data.success && status !== 'granted' && activeCheckinId) {
-            const timeRemaining = Math.max(0, 60 - (data.secondsOff || 0));
-            console.log(`[GPS Backend] Checkout automático em ${timeRemaining} segundos`);
-
-            // Show warning modal if checked in
-            if (timeRemaining > 0) {
-                showGPSWarningModal(timeRemaining);
-            }
-        }
-
+        // Return data for caller to decide what to do
+        // Modal is shown by the GPS verification loop based on backend confirmations
         return data;
     } catch (error) {
         console.error('[GPS Backend] Erro ao notificar:', error);
@@ -11105,7 +11098,7 @@ function startGPSBackgroundVerification() {
         clearInterval(gpsVerificationInterval);
     }
 
-    console.log('[GPS Verification] Starting - 5 minute rule active (warning after 60s)');
+    console.log('[GPS Verification] Starting - Backend confirmation based (10 confirmations = 5 min)');
     gpsCheckoutInProgress = false;
 
     gpsVerificationInterval = setInterval(async () => {
@@ -11118,52 +11111,43 @@ function startGPSBackgroundVerification() {
         const currentStatus = await checkLocationPermission();
 
         if (currentStatus !== 'granted') {
-            // GPS is not available
-            if (!gpsOffStartTime) {
-                // Just turned off - start the countdown
-                gpsOffStartTime = Date.now();
-                console.log('[GPS] Localização DESLIGADA - iniciando contagem de 5 minutos');
+            // GPS is not available - notify backend and get confirmation status
+            const backendResponse = await notifyBackendGPSStatus('denied');
 
-                // CRITICAL: Notify backend about GPS status change
-                // This is what triggers the auto-checkout confirmation system
-                notifyBackendGPSStatus('denied');
-            } else {
-                // Calculate how long GPS has been off
-                const offDuration = Date.now() - gpsOffStartTime;
-                const secondsLeft = Math.max(0, Math.ceil((GPS_MAX_OFF_DURATION - offDuration) / 1000));
+            if (backendResponse && backendResponse.success) {
+                const confirmations = backendResponse.confirmations || 0;
+                const confirmationsRequired = backendResponse.confirmationsRequired || 10;
+                const secondsOff = backendResponse.secondsOff || 0;
 
-                console.log(`[GPS] Localização off há ${Math.round(offDuration / 1000)}s (${secondsLeft}s restantes)`);
+                // Calculate seconds remaining until checkout (based on backend confirmations)
+                const confirmationsLeft = confirmationsRequired - confirmations;
+                const secondsLeft = confirmationsLeft * 30; // Each confirmation is 30 seconds
 
-                // Only show warning modal after 60 seconds (GPS_WARNING_THRESHOLD)
-                if (offDuration >= GPS_WARNING_THRESHOLD && offDuration < GPS_MAX_OFF_DURATION) {
-                    // Show warning modal with countdown
+                console.log(`[GPS] Backend confirmations: ${confirmations}/${confirmationsRequired} (${secondsOff}s off, ${secondsLeft}s remaining)`);
+
+                // Only show warning modal after 2+ backend confirmations (60+ seconds confirmed)
+                // This ensures the backend has truly detected GPS is off
+                if (confirmations >= 2 && confirmations < confirmationsRequired) {
                     showGPSWarningModal(secondsLeft);
                 }
 
-                if (offDuration >= GPS_MAX_OFF_DURATION && !gpsCheckoutInProgress) {
-                    // BACKEND HANDLES CHECKOUT - Frontend only shows warning
-                    // The backend monitors location updates and triggers checkout via socket
-                    // after 10 confirmations (5 minutes of GPS off)
-                    console.log('[GPS] ⚠️ 5 MINUTOS ATINGIDO - aguardando backend fazer checkout via socket');
-
-                    // Log critical event
-                    await logTimelineEvent('GPS_WAITING_BACKEND_CHECKOUT', {
-                        offDuration: offDuration,
-                        rule: 'Backend handles checkout via 10 confirmations (5 min)'
-                    });
-
-                    // Show warning that checkout is imminent (backend will trigger it)
-                    showToast('⚠️ GPS desligado! Checkout automático em breve...', 'error');
+                // Track locally for logs
+                if (!gpsOffStartTime) {
+                    gpsOffStartTime = Date.now();
+                    console.log('[GPS] Localização DESLIGADA - backend rastreando confirmações');
                 }
             }
         } else {
-            // GPS is back on - reset timer
+            // GPS is back on - reset
             if (gpsOffStartTime) {
-                console.log('[GPS] Localização RESTAURADA - timer resetado');
+                console.log('[GPS] Localização RESTAURADA - notificando backend');
                 gpsOffStartTime = null;
 
                 // Notify backend that GPS is back on (cancels auto-checkout)
                 notifyBackendGPSStatus('granted');
+
+                // Hide any warning modal
+                hideGPSWarningModal();
 
                 showToast('✅ Localização ativada!', 'success');
             }
