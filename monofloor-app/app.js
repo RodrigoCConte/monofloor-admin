@@ -9328,6 +9328,9 @@ async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
             };
         });
 
+        // Map REPORT_SENT to SKIP since report was already sent (API only accepts NOW, LATER_60MIN, SKIP)
+        const apiReportOption = reportOption === 'REPORT_SENT' ? 'SKIP' : reportOption;
+
         const response = await fetch(`${API_URL}/api/mobile/checkins/${activeCheckinId}/complete-tasks`, {
             method: 'POST',
             headers: {
@@ -9338,7 +9341,7 @@ async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
                 completedTaskIds: selectedTaskIds,
                 taskCompletions: taskCompletionsArray,
                 checkoutReason: pendingCheckoutReason || 'FIM_EXPEDIENTE',
-                reportOption: reportOption,
+                reportOption: apiReportOption,
                 latitude,
                 longitude
             })
@@ -9409,10 +9412,20 @@ async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
 
             showSuccessModal('Check-out Realizado', message);
         } else {
-            showSuccessModal('Erro', data.error?.message || 'Nao foi possivel completar o check-out.');
+            // If called from report submission, throw error so caller can handle
+            const errorMessage = data.error?.message || 'Nao foi possivel completar o check-out.';
+            console.error('[CHECKOUT] API retornou erro:', errorMessage);
+            if (reportOption === 'REPORT_SENT') {
+                throw new Error(errorMessage);
+            }
+            showSuccessModal('Erro', errorMessage);
         }
     } catch (error) {
-        console.error('Checkout with tasks error:', error);
+        console.error('[CHECKOUT] Checkout with tasks error:', error);
+        // Re-throw if called from report submission so caller can handle
+        if (reportOption === 'REPORT_SENT') {
+            throw error;
+        }
         showSuccessModal('Erro', 'Erro de conexao. Tente novamente.');
     }
 }
