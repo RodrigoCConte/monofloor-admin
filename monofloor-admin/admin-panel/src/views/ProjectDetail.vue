@@ -320,6 +320,38 @@ const totalGanttHours = computed(() => {
   return totalHours;
 });
 
+// Current stage = first non-completed task in sequence
+const currentStage = computed(() => {
+  if (tasks.value.length === 0) {
+    return { name: 'Sem etapas', completedCount: 0, totalCount: 0, currentIndex: 0 };
+  }
+
+  const completedCount = tasks.value.filter(t => t.status === 'COMPLETED').length;
+  const totalCount = tasks.value.length;
+
+  // Find the first non-completed task
+  const currentTask = tasks.value.find(t =>
+    t.status === 'PENDING' || t.status === 'IN_PROGRESS'
+  );
+
+  return {
+    name: currentTask?.title || 'Concluído',
+    completedCount,
+    totalCount,
+    currentIndex: currentTask ? tasks.value.indexOf(currentTask) + 1 : totalCount,
+  };
+});
+
+// Get row class based on task status for Gantt coloring
+const getTaskRowClass = (task: any) => {
+  return {
+    'gantt-row-completed': task.status === 'COMPLETED',
+    'gantt-row-in-progress': task.status === 'IN_PROGRESS',
+    'gantt-row-pending': task.status === 'PENDING',
+    'gantt-row-blocked': task.status === 'BLOCKED',
+  };
+};
+
 // Generate array of days for timeline header (SEPARATED Sat and Sun)
 const ganttDaysArray = computed(() => {
   const days: {
@@ -1945,6 +1977,30 @@ const formatDate = (date: string) => {
   });
 };
 
+const formatDateTime = (date: string) => {
+  return new Date(date).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+// Photo modal state
+const selectedPhoto = ref<any>(null);
+const showPhotoModal = ref(false);
+
+const openPhotoModal = (photo: any) => {
+  selectedPhoto.value = photo;
+  showPhotoModal.value = true;
+};
+
+const closePhotoModal = () => {
+  showPhotoModal.value = false;
+  selectedPhoto.value = null;
+};
+
 const formatHours = (hours: number) => {
   return hours?.toFixed(1) || '0';
 };
@@ -2920,11 +2976,51 @@ onMounted(async () => {
                   </div>
                   <span class="report-date">{{ formatDate(report.reportDate) }}</span>
                 </div>
+
+                <!-- AI Summary -->
                 <div v-if="report.aiSummary" class="report-summary">
-                  {{ report.aiSummary }}
+                  <strong>Resumo:</strong> {{ report.aiSummary }}
                 </div>
-                <div v-if="report.photos?.length" class="report-photos">
-                  <span>{{ report.photos.length }} foto(s)</span>
+
+                <!-- Audio transcription -->
+                <div v-if="report.audioTranscription" class="report-transcription">
+                  <strong>Transcricao:</strong>
+                  <p>{{ report.audioTranscription }}</p>
+                </div>
+
+                <!-- Notes from applicator -->
+                <div v-if="report.notes" class="report-notes">
+                  <strong>Notas:</strong>
+                  <p>{{ report.notes }}</p>
+                </div>
+
+                <!-- Tags -->
+                <div v-if="report.tags?.length" class="report-tags">
+                  <span v-for="tag in report.tags" :key="tag" class="report-tag-badge">
+                    {{ tag }}
+                  </span>
+                </div>
+
+                <!-- Photos thumbnails -->
+                <div v-if="report.photos?.length" class="report-photos-grid">
+                  <div
+                    v-for="photo in report.photos"
+                    :key="photo.id"
+                    class="report-photo-thumb"
+                    @click="openPhotoModal(photo)"
+                  >
+                    <img :src="photo.fileUrl" :alt="photo.caption || 'Foto do relatorio'" />
+                  </div>
+                </div>
+
+                <!-- AI Processing status -->
+                <div class="report-meta">
+                  <span v-if="report.aiProcessedAt" class="report-processed-badge">
+                    AI processado em {{ formatDateTime(report.aiProcessedAt) }}
+                  </span>
+                  <span v-else class="report-pending-badge">
+                    Aguardando processamento AI
+                  </span>
                 </div>
               </div>
             </div>
@@ -2939,6 +3035,11 @@ onMounted(async () => {
                   {{ scopeLabels[projectScope] }}
                 </span>
                 <div class="gantt-summary-compact">
+                  <!-- Current stage indicator -->
+                  <span v-if="tasks.length > 0" class="current-stage-badge">
+                    ETAPA ATUAL: {{ currentStage.name }} ({{ currentStage.completedCount }}/{{ currentStage.totalCount }})
+                  </span>
+                  <span v-if="tasks.length > 0" class="summary-compact-separator">•</span>
                   <span class="summary-compact-item">{{ totalGanttBlocks }} etapas</span>
                   <span class="summary-compact-separator">•</span>
                   <span class="summary-compact-item">{{ totalGanttDays }} dias</span>
@@ -3090,7 +3191,10 @@ onMounted(async () => {
                   <div
                     v-if="shouldRenderRow(index)"
                     class="gantt-row-inline"
-                    :class="{ 'gantt-row-grouped-block': isGroupedRow(index) }"
+                    :class="[
+                      { 'gantt-row-grouped-block': isGroupedRow(index) },
+                      getTaskRowClass(task)
+                    ]"
                     :style="{ minHeight: (isGroupedRow(index) ? getGroupFromStart(index).length * 44 : 44) + 'px' }"
                   >
                     <!-- Order - Número do bloco centralizado -->
@@ -3998,6 +4102,20 @@ onMounted(async () => {
           </button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Photo Modal -->
+  <div v-if="showPhotoModal" class="modal-overlay photo-modal-overlay" @click="closePhotoModal">
+    <div class="photo-modal-content" @click.stop>
+      <button class="photo-modal-close" @click="closePhotoModal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      <img v-if="selectedPhoto" :src="selectedPhoto.fileUrl" :alt="selectedPhoto.caption || 'Foto'" />
+      <div v-if="selectedPhoto?.caption" class="photo-caption">{{ selectedPhoto.caption }}</div>
     </div>
   </div>
 </template>
@@ -5329,10 +5447,149 @@ onMounted(async () => {
   line-height: 1.5;
 }
 
+.report-summary strong {
+  color: #c9a962;
+}
+
+.report-transcription,
+.report-notes {
+  margin-top: 12px;
+  padding: 12px;
+  background: #1a1a1a;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.report-transcription strong,
+.report-notes strong {
+  color: #c9a962;
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.85rem;
+}
+
+.report-transcription p,
+.report-notes p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.report-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.report-tag-badge {
+  background: #2a2a2a;
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+}
+
+.report-photos-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.report-photo-thumb {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.report-photo-thumb:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.report-photo-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.report-meta {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.report-processed-badge {
+  color: #22c55e;
+  font-size: 0.75rem;
+}
+
+.report-pending-badge {
+  color: #f97316;
+  font-size: 0.75rem;
+}
+
 .report-photos {
   margin-top: 12px;
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+/* Photo Modal */
+.photo-modal-overlay {
+  z-index: 1000;
+}
+
+.photo-modal-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.photo-modal-content img {
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.photo-modal-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+  transition: background 0.2s;
+}
+
+.photo-modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.photo-modal-close svg {
+  width: 20px;
+  height: 20px;
+}
+
+.photo-caption {
+  margin-top: 12px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 
 /* Modal */
@@ -6308,6 +6565,17 @@ onMounted(async () => {
   font-weight: 300;
 }
 
+/* Current Stage Badge */
+.current-stage-badge {
+  background: linear-gradient(135deg, #c9a962, #f59e0b);
+  color: #1a1a1a;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
 .task-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
@@ -6779,6 +7047,32 @@ onMounted(async () => {
 .gantt-row-inline:hover {
   background: rgba(201, 169, 98, 0.08);
   transform: translateX(2px);
+}
+
+/* Gantt Row Status Colors */
+.gantt-row-completed {
+  background: rgba(34, 197, 94, 0.1) !important;
+  border-left: 3px solid #22c55e;
+}
+
+.gantt-row-completed .gantt-task-cell {
+  color: #22c55e;
+  text-decoration: line-through;
+  opacity: 0.8;
+}
+
+.gantt-row-in-progress {
+  background: rgba(201, 169, 98, 0.15) !important;
+  border-left: 3px solid #c9a962;
+}
+
+.gantt-row-pending {
+  border-left: 3px solid transparent;
+}
+
+.gantt-row-blocked {
+  background: rgba(249, 115, 22, 0.1) !important;
+  border-left: 3px solid #f97316;
 }
 
 .gantt-row-grouped {

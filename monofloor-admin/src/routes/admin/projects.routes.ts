@@ -96,6 +96,16 @@ router.get(
                 },
               },
             },
+            // Include tasks for current stage calculation
+            tasks: {
+              orderBy: { sortOrder: 'asc' },
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                sortOrder: true,
+              },
+            },
           },
         }),
         prisma.project.count({ where }),
@@ -103,20 +113,36 @@ router.get(
 
       res.json({
         success: true,
-        data: projects.map((p) => ({
-          ...p,
-          m2Total: Number(p.m2Total),
-          m2Piso: Number(p.m2Piso),
-          m2Parede: Number(p.m2Parede),
-          m2Teto: Number(p.m2Teto),
-          mRodape: Number(p.mRodape),
-          workedHours: Number(p.workedHours),
-          estimatedHours: p.estimatedHours ? Number(p.estimatedHours) : null,
-          teamCount: p._count.assignments,
-          reportsCount: p._count.reports,
-          documentsCount: p._count.documents,
-          activeCheckinsCount: p._count.checkins,
-        })),
+        data: projects.map((p) => {
+          // Calculate current stage from tasks
+          const tasks = p.tasks || [];
+          const completedCount = tasks.filter((t) => t.status === 'COMPLETED').length;
+          const totalCount = tasks.length;
+          const currentTask = tasks.find((t) => t.status === 'PENDING' || t.status === 'IN_PROGRESS');
+
+          const currentStage = totalCount > 0 ? {
+            name: currentTask?.title || 'Concluido',
+            completedCount,
+            totalCount,
+          } : null;
+
+          return {
+            ...p,
+            m2Total: Number(p.m2Total),
+            m2Piso: Number(p.m2Piso),
+            m2Parede: Number(p.m2Parede),
+            m2Teto: Number(p.m2Teto),
+            mRodape: Number(p.mRodape),
+            workedHours: Number(p.workedHours),
+            estimatedHours: p.estimatedHours ? Number(p.estimatedHours) : null,
+            teamCount: p._count.assignments,
+            reportsCount: p._count.reports,
+            documentsCount: p._count.documents,
+            activeCheckinsCount: p._count.checkins,
+            currentStage,
+            tasks: undefined, // Don't send full tasks array to client
+          };
+        }),
         meta: {
           total,
           page,

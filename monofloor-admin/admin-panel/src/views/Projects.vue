@@ -607,7 +607,16 @@ onMounted(loadProjects);
             </span>
           </span>
           <div class="project-header">
-            <h3>{{ project.title }}</h3>
+            <div class="project-title-row">
+              <h3>{{ project.title }}</h3>
+              <!-- Current Stage Badge -->
+              <span v-if="project.currentStage" class="current-stage-badge-mini">
+                {{ project.currentStage.name }} ({{ project.currentStage.completedCount }}/{{ project.currentStage.totalCount }})
+              </span>
+              <span v-else class="current-stage-badge-mini no-stages">
+                Sem etapas
+              </span>
+            </div>
             <div class="project-actions">
               <button
                 class="edit-btn"
@@ -1343,6 +1352,31 @@ onMounted(loadProjects);
   font-weight: 600;
   color: var(--text-primary);
   line-height: 1.4;
+}
+
+.project-title-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Mini current stage badge for project cards */
+.current-stage-badge-mini {
+  display: inline-flex;
+  align-items: center;
+  background: linear-gradient(135deg, #c9a962, #f59e0b);
+  color: #1a1a1a;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  max-width: fit-content;
+}
+
+.current-stage-badge-mini.no-stages {
+  background: linear-gradient(135deg, #6b7280, #4b5563);
+  color: #fff;
 }
 
 .status-badge {
