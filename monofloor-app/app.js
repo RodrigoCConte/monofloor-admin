@@ -575,12 +575,29 @@ let pendingLocationUpdates = []; // Queue for offline updates
 
 // Offline Location Tracking with IndexedDB
 const LOCATION_DB_NAME = 'monofloorLocations';
-const LOCATION_DB_VERSION = 1;
+const LOCATION_DB_VERSION = 2; // Bumped for timeline store
 const LOCATION_STORE_NAME = 'pendingLocations';
 const GPS_LOG_STORE_NAME = 'gpsOffLogs';
+const TIMELINE_STORE_NAME = 'timelineEvents'; // New: stores 24h movement timeline
 let locationDB = null;
 let gpsOffStartTime = null; // Track when GPS was turned off
 let gpsAlertShown = false; // Track if persistent alert is shown
+
+// =============================================
+// ACCELEROMETER & MOVEMENT TRACKING (when NOT checked-in)
+// =============================================
+const MOVEMENT_THRESHOLD = 1.5; // m/s² - minimum acceleration to consider "moving"
+const MOVEMENT_LOCATION_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const MORNING_START_HOUR = 5; // 5 AM - start detecting wake activity
+const MORNING_END_HOUR = 10; // 10 AM - end of morning detection
+
+let accelerometerActive = false;
+let lastMovementTime = null;
+let lastMovementLocation = null;
+let movementLocationInterval = null;
+let isDeviceMoving = false;
+let morningActivityDetected = false;
+let todayMorningAlertShown = false;
 
 // Check location permission status
 async function checkLocationPermission() {
@@ -10124,6 +10141,18 @@ function initLocationDB() {
                 gpsLogStore.createIndex('startTime', 'startTime', { unique: false });
                 console.log('[LocationDB] Store de GPS logs criado');
             }
+
+            // Store for timeline events (24h movement tracking)
+            if (!db.objectStoreNames.contains(TIMELINE_STORE_NAME)) {
+                const timelineStore = db.createObjectStore(TIMELINE_STORE_NAME, {
+                    keyPath: 'id',
+                    autoIncrement: true
+                });
+                timelineStore.createIndex('timestamp', 'timestamp', { unique: false });
+                timelineStore.createIndex('type', 'type', { unique: false });
+                timelineStore.createIndex('date', 'date', { unique: false });
+                console.log('[LocationDB] Store de timeline criado');
+            }
         };
     });
 }
@@ -10534,6 +10563,621 @@ window.addEventListener('online', () => {
     }, 2000);
 });
 
+// =============================================
+// ACCELEROMETER & MOVEMENT TRACKING SYSTEM
+// =============================================
+
+/**
+ * Start accelerometer monitoring (only when NOT checked in)
+ */
+function startAccelerometerMonitoring() {
+    if (accelerometerActive) return;
+    if (activeCheckinId) {
+        console.log('[Accelerometer] Ignorado - usuário com check-in ativo');
+        return;
+    }
+
+    if (!window.DeviceMotionEvent) {
+        console.log('[Accelerometer] DeviceMotion API não suportada');
+        return;
+    }
+
+    // Check if we need permission (iOS 13+)
+    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+        DeviceMotionEvent.requestPermission()
+            .then(response => {
+                if (response === 'granted') {
+                    setupAccelerometerListener();
+                } else {
+                    console.log('[Accelerometer] Permissão negada');
+                }
+            })
+            .catch(console.error);
+    } else {
+        setupAccelerometerListener();
+    }
+}
+
+/**
+ * Setup accelerometer event listener
+ */
+function setupAccelerometerListener() {
+    window.addEventListener('devicemotion', handleDeviceMotion);
+    accelerometerActive = true;
+    console.log('[Accelerometer] Monitoramento iniciado');
+
+    // Start interval for location updates when moving
+    startMovementLocationInterval();
+}
+
+/**
+ * Stop accelerometer monitoring
+ */
+function stopAccelerometerMonitoring() {
+    if (!accelerometerActive) return;
+
+    window.removeEventListener('devicemotion', handleDeviceMotion);
+    accelerometerActive = false;
+
+    if (movementLocationInterval) {
+        clearInterval(movementLocationInterval);
+        movementLocationInterval = null;
+    }
+
+    console.log('[Accelerometer] Monitoramento parado');
+}
+
+/**
+ * Handle device motion events
+ */
+function handleDeviceMotion(event) {
+    if (activeCheckinId) {
+        // User checked in - stop accelerometer, use GPS instead
+        stopAccelerometerMonitoring();
+        return;
+    }
+
+    const acc = event.acceleration || event.accelerationIncludingGravity;
+    if (!acc) return;
+
+    // Calculate total acceleration magnitude
+    const magnitude = Math.sqrt(
+        (acc.x || 0) ** 2 +
+        (acc.y || 0) ** 2 +
+        (acc.z || 0) ** 2
+    );
+
+    // Subtract gravity (~9.8) if using accelerationIncludingGravity
+    const effectiveMagnitude = event.acceleration ? magnitude : Math.abs(magnitude - 9.8);
+
+    if (effectiveMagnitude > MOVEMENT_THRESHOLD) {
+        // Device is moving
+        if (!isDeviceMoving) {
+            isDeviceMoving = true;
+            console.log('[Accelerometer] Movimento detectado:', effectiveMagnitude.toFixed(2), 'm/s²');
+
+            // Log timeline event
+            logTimelineEvent('MOVEMENT_START', {
+                accelerationMagnitude: effectiveMagnitude
+            });
+        }
+        lastMovementTime = Date.now();
+
+        // Check for morning activity
+        checkMorningActivity();
+    } else {
+        // Device is still
+        if (isDeviceMoving && lastMovementTime && (Date.now() - lastMovementTime > 30000)) {
+            // Stopped moving for 30+ seconds
+            isDeviceMoving = false;
+            console.log('[Accelerometer] Dispositivo parou');
+
+            // Log timeline event
+            logTimelineEvent('MOVEMENT_STOP', {
+                duration: Date.now() - lastMovementTime
+            });
+        }
+    }
+}
+
+/**
+ * Start interval for sending location when moving (every 5 minutes)
+ */
+function startMovementLocationInterval() {
+    if (movementLocationInterval) return;
+
+    movementLocationInterval = setInterval(async () => {
+        // Only send if moving and not checked in
+        if (!isDeviceMoving || activeCheckinId) return;
+
+        await sendMovementLocation();
+    }, MOVEMENT_LOCATION_INTERVAL);
+
+    console.log('[Movement] Intervalo de localização iniciado (5 min)');
+}
+
+/**
+ * Send location when movement is detected
+ */
+async function sendMovementLocation() {
+    if (!navigator.geolocation) return;
+    if (locationPermissionStatus !== 'granted') return;
+
+    try {
+        const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 15000
+            });
+        });
+
+        const locationData = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            speed: position.coords.speed,
+            heading: position.coords.heading,
+            timestamp: new Date().toISOString(),
+            source: 'movement_tracking',
+            isMoving: isDeviceMoving,
+            hasActiveCheckin: false
+        };
+
+        // Log to timeline
+        await logTimelineEvent('LOCATION_UPDATE', {
+            ...locationData,
+            trigger: 'accelerometer'
+        });
+
+        // Send to server if online
+        if (isOnline) {
+            const token = getAuthToken();
+            if (token) {
+                await fetch(`${API_URL}/api/mobile/location`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(locationData)
+                });
+                console.log('[Movement] Localização enviada:', position.coords.latitude.toFixed(4), position.coords.longitude.toFixed(4));
+            }
+        } else {
+            // Save for later sync
+            await saveLocationToIndexedDB(locationData);
+        }
+
+        lastMovementLocation = locationData;
+    } catch (error) {
+        console.log('[Movement] Erro ao obter localização:', error);
+    }
+}
+
+/**
+ * Check for morning activity (wake-up indicator)
+ */
+function checkMorningActivity() {
+    const now = new Date();
+    const hour = now.getHours();
+    const today = now.toISOString().split('T')[0];
+
+    // Only during morning hours
+    if (hour < MORNING_START_HOUR || hour >= MORNING_END_HOUR) return;
+
+    // Only once per day
+    const lastMorningAlert = localStorage.getItem('lastMorningAlertDate');
+    if (lastMorningAlert === today) return;
+
+    if (!morningActivityDetected) {
+        morningActivityDetected = true;
+        localStorage.setItem('lastMorningAlertDate', today);
+
+        console.log('[Morning] Atividade matinal detectada às', now.toLocaleTimeString());
+
+        // Log timeline event
+        logTimelineEvent('MORNING_ACTIVITY', {
+            detectedAt: now.toISOString(),
+            hour: hour
+        });
+
+        // Show notification to user
+        showMorningActivityNotification();
+    }
+}
+
+/**
+ * Show morning activity notification
+ */
+function showMorningActivityNotification() {
+    if (todayMorningAlertShown) return;
+    todayMorningAlertShown = true;
+
+    // Simple toast notification
+    showToast('Bom dia! Detectamos que você acordou. Indo para o projeto?', 'info');
+}
+
+// =============================================
+// TIMELINE EVENT LOGGING
+// =============================================
+
+/**
+ * Log an event to the timeline
+ * Types: MOVEMENT_START, MOVEMENT_STOP, LOCATION_UPDATE, MORNING_ACTIVITY,
+ *        CHECKIN, CHECKOUT, LEFT_PROJECT_AREA, RETURNED_PROJECT_AREA
+ */
+async function logTimelineEvent(type, data = {}) {
+    try {
+        await initLocationDB();
+
+        if (!locationDB) {
+            console.log('[Timeline] IndexedDB não disponível');
+            return;
+        }
+
+        const now = new Date();
+        const event = {
+            type,
+            timestamp: now.toISOString(),
+            date: now.toISOString().split('T')[0],
+            hour: now.getHours(),
+            data,
+            synced: false
+        };
+
+        const transaction = locationDB.transaction([TIMELINE_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(TIMELINE_STORE_NAME);
+        store.add(event);
+
+        console.log('[Timeline] Evento registrado:', type);
+    } catch (error) {
+        console.error('[Timeline] Erro ao registrar evento:', error);
+    }
+}
+
+/**
+ * Get timeline events for a specific date
+ */
+async function getTimelineForDate(dateStr) {
+    try {
+        await initLocationDB();
+        if (!locationDB) return [];
+
+        return new Promise((resolve) => {
+            const transaction = locationDB.transaction([TIMELINE_STORE_NAME], 'readonly');
+            const store = transaction.objectStore(TIMELINE_STORE_NAME);
+            const index = store.index('date');
+            const request = index.getAll(dateStr);
+
+            request.onsuccess = () => {
+                const events = request.result || [];
+                // Sort by timestamp
+                events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                resolve(events);
+            };
+
+            request.onerror = () => resolve([]);
+        });
+    } catch (error) {
+        console.error('[Timeline] Erro ao buscar eventos:', error);
+        return [];
+    }
+}
+
+/**
+ * Get today's timeline
+ */
+async function getTodayTimeline() {
+    const today = new Date().toISOString().split('T')[0];
+    return getTimelineForDate(today);
+}
+
+/**
+ * Sync timeline events to server
+ */
+async function syncTimelineEvents() {
+    try {
+        await initLocationDB();
+        if (!locationDB) return;
+
+        const transaction = locationDB.transaction([TIMELINE_STORE_NAME], 'readonly');
+        const store = transaction.objectStore(TIMELINE_STORE_NAME);
+        const request = store.getAll();
+
+        request.onsuccess = async () => {
+            const events = (request.result || []).filter(e => !e.synced);
+            if (events.length === 0) return;
+
+            const token = getAuthToken();
+            if (!token) return;
+
+            console.log(`[Timeline] Sincronizando ${events.length} eventos...`);
+
+            try {
+                const response = await fetch(`${API_URL}/api/mobile/location/timeline`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ events })
+                });
+
+                if (response.ok) {
+                    // Mark events as synced
+                    const updateTx = locationDB.transaction([TIMELINE_STORE_NAME], 'readwrite');
+                    const updateStore = updateTx.objectStore(TIMELINE_STORE_NAME);
+
+                    for (const event of events) {
+                        event.synced = true;
+                        updateStore.put(event);
+                    }
+
+                    console.log('[Timeline] Eventos sincronizados');
+                }
+            } catch (error) {
+                console.log('[Timeline] Erro ao sincronizar:', error);
+            }
+        };
+    } catch (error) {
+        console.error('[Timeline] Erro:', error);
+    }
+}
+
+/**
+ * Clean up old timeline events (keep only last 7 days)
+ */
+async function cleanupOldTimelineEvents() {
+    try {
+        await initLocationDB();
+        if (!locationDB) return;
+
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const cutoffDate = sevenDaysAgo.toISOString().split('T')[0];
+
+        const transaction = locationDB.transaction([TIMELINE_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(TIMELINE_STORE_NAME);
+        const index = store.index('date');
+
+        const request = index.openCursor();
+        let deletedCount = 0;
+
+        request.onsuccess = (event) => {
+            const cursor = event.target.result;
+            if (cursor) {
+                if (cursor.value.date < cutoffDate) {
+                    cursor.delete();
+                    deletedCount++;
+                }
+                cursor.continue();
+            } else if (deletedCount > 0) {
+                console.log(`[Timeline] ${deletedCount} eventos antigos removidos`);
+            }
+        };
+    } catch (error) {
+        console.error('[Timeline] Erro ao limpar eventos:', error);
+    }
+}
+
+// =============================================
+// AUTO-CHECKOUT WITH JUSTIFICATION
+// =============================================
+
+/**
+ * Show leaving project modal with justification options
+ */
+function showLeavingProjectModal() {
+    const modal = document.getElementById('leaving-project-modal');
+    if (modal) {
+        modal.classList.add('active');
+    } else {
+        // Create modal dynamically if doesn't exist
+        createLeavingProjectModal();
+    }
+
+    // Log timeline event
+    logTimelineEvent('LEFT_PROJECT_AREA', {
+        projectId: currentProjectForCheckin,
+        distance: currentDistanceToProject
+    });
+}
+
+/**
+ * Create leaving project modal dynamically
+ */
+function createLeavingProjectModal() {
+    const modal = document.createElement('div');
+    modal.id = 'leaving-project-modal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal-content leaving-modal">
+            <div class="leaving-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+            </div>
+            <h3>Saindo do projeto?</h3>
+            <p>Detectamos que você se afastou da área do projeto.</p>
+
+            <div class="leaving-options">
+                <button class="leaving-option" onclick="justifyLeaving('COMPRA_MATERIAL')">
+                    <span class="option-icon">🛒</span>
+                    <span>Compra de Material</span>
+                </button>
+                <button class="leaving-option" onclick="justifyLeaving('ALMOCO')">
+                    <span class="option-icon">🍽️</span>
+                    <span>Almoço</span>
+                </button>
+                <button class="leaving-option" onclick="justifyLeaving('OUTRO_PROJETO')">
+                    <span class="option-icon">🏗️</span>
+                    <span>Indo para outro projeto</span>
+                </button>
+                <button class="leaving-option" onclick="justifyLeaving('EMERGENCIA')">
+                    <span class="option-icon">🚨</span>
+                    <span>Emergência</span>
+                </button>
+                <button class="leaving-option leaving-checkout" onclick="justifyLeaving('FIM_EXPEDIENTE')">
+                    <span class="option-icon">🏠</span>
+                    <span>Fim do expediente</span>
+                </button>
+            </div>
+
+            <button class="btn-cancel-leaving" onclick="cancelLeavingModal()">
+                Continuar trabalhando
+            </button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.classList.add('active');
+}
+
+/**
+ * Handle leaving justification
+ */
+async function justifyLeaving(reason) {
+    const modal = document.getElementById('leaving-project-modal');
+    if (modal) modal.classList.remove('active');
+
+    // Log timeline event
+    await logTimelineEvent('LEAVING_JUSTIFIED', {
+        reason,
+        projectId: currentProjectForCheckin,
+        timestamp: new Date().toISOString()
+    });
+
+    switch (reason) {
+        case 'COMPRA_MATERIAL':
+            // Don't checkout - just pause and continue tracking
+            showToast('Compra de material registrada. Boa compra!', 'info');
+            break;
+
+        case 'ALMOCO':
+            // Start lunch break
+            showToast('Hora do almoço! Bom apetite.', 'info');
+            break;
+
+        case 'OUTRO_PROJETO':
+            // Checkout from current and prepare for next
+            await doCheckoutWithReason('outro_projeto');
+            showToast('Check-out realizado. Selecione o próximo projeto.', 'success');
+            break;
+
+        case 'EMERGENCIA':
+            // Emergency - log but don't penalize
+            await doCheckoutWithReason('emergencia');
+            showToast('Emergência registrada. Cuide-se!', 'warning');
+            break;
+
+        case 'FIM_EXPEDIENTE':
+            // End of work day - normal checkout
+            await doCheckoutWithReason('fim_expediente');
+            // Start accelerometer monitoring for trajectory home
+            startAccelerometerMonitoring();
+            break;
+
+        default:
+            // Unknown reason - do checkout anyway
+            await doCheckoutWithReason('nao_justificado');
+            break;
+    }
+}
+
+/**
+ * Cancel leaving modal - user is staying
+ */
+function cancelLeavingModal() {
+    const modal = document.getElementById('leaving-project-modal');
+    if (modal) modal.classList.remove('active');
+
+    // Log timeline event
+    logTimelineEvent('RETURNED_PROJECT_AREA', {
+        projectId: currentProjectForCheckin
+    });
+
+    showToast('Voltando ao trabalho!', 'success');
+}
+
+/**
+ * Do checkout with a specific reason
+ */
+async function doCheckoutWithReason(reason) {
+    if (!activeCheckinId) return;
+
+    try {
+        const token = getAuthToken();
+        if (!token) return;
+
+        const response = await fetch(`${API_URL}/api/mobile/checkins/${activeCheckinId}/checkout`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                reason,
+                latitude: lastMovementLocation?.latitude,
+                longitude: lastMovementLocation?.longitude
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            isCheckedIn = false;
+            activeCheckinId = null;
+            updateCheckinUI(false);
+
+            // Log timeline event
+            await logTimelineEvent('CHECKOUT', {
+                reason,
+                hoursWorked: data.data?.hoursWorked
+            });
+        }
+    } catch (error) {
+        console.error('[Checkout] Erro:', error);
+    }
+}
+
+// =============================================
+// INITIALIZE MOVEMENT TRACKING
+// =============================================
+
+// Start accelerometer when app loads (if not checked in)
+document.addEventListener('DOMContentLoaded', () => {
+    // Wait a bit for auth to be established
+    setTimeout(() => {
+        if (!activeCheckinId) {
+            startAccelerometerMonitoring();
+        }
+    }, 3000);
+
+    // Cleanup old timeline events
+    cleanupOldTimelineEvents();
+
+    // Sync timeline when online
+    if (isOnline) {
+        setTimeout(syncTimelineEvents, 5000);
+    }
+});
+
+// Start accelerometer when user checks out
+window.addEventListener('checkout', () => {
+    startAccelerometerMonitoring();
+});
+
+// Stop accelerometer when user checks in
+window.addEventListener('checkin', () => {
+    stopAccelerometerMonitoring();
+});
+
+// Sync timeline when coming back online
+window.addEventListener('online', () => {
+    setTimeout(syncTimelineEvents, 3000);
+});
+
 // Export functions for debugging
 window.debugLocation = {
     getPending: getPendingLocationsFromIndexedDB,
@@ -10541,4 +11185,14 @@ window.debugLocation = {
     syncGPSLogs: syncGPSOffLogs,
     showGPSAlert: showGPSOffAlert,
     hideGPSAlert: hideGPSOffAlert
+};
+
+// Export movement tracking functions for debugging
+window.debugMovement = {
+    startAccelerometer: startAccelerometerMonitoring,
+    stopAccelerometer: stopAccelerometerMonitoring,
+    isMoving: () => isDeviceMoving,
+    getTimeline: getTodayTimeline,
+    syncTimeline: syncTimelineEvents,
+    showLeavingModal: showLeavingProjectModal
 };

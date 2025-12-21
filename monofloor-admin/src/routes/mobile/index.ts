@@ -1857,6 +1857,188 @@ router.post('/location/gps-off-logs', mobileAuth, async (req, res, next) => {
   }
 });
 
+// POST /api/mobile/location/timeline - Receive timeline events from device
+router.post('/location/timeline', mobileAuth, async (req, res, next) => {
+  try {
+    const userId = req.user!.sub;
+    const { events } = req.body;
+
+    if (!events || !Array.isArray(events)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_EVENTS', message: 'Eventos inválidos' },
+      });
+    }
+
+    console.log(`[Timeline] Recebido ${events.length} evento(s) do usuário ${userId}`);
+
+    // Process each timeline event
+    for (const event of events) {
+      const eventLog = {
+        userId,
+        type: event.type,
+        timestamp: event.timestamp,
+        date: event.date,
+        data: event.data,
+      };
+
+      console.log(`[Timeline Event] User ${userId}: ${event.type} at ${event.timestamp}`);
+
+      // Store in location history with timeline metadata
+      if (event.data?.latitude && event.data?.longitude) {
+        await prisma.locationHistory.create({
+          data: {
+            userId,
+            latitude: event.data.latitude,
+            longitude: event.data.longitude,
+            accuracy: event.data.accuracy || null,
+            projectId: event.data.projectId || null,
+          },
+        });
+      }
+
+      // Log movement events
+      if (event.type === 'MOVEMENT_DETECTED') {
+        console.log(`[Movement] User ${userId} in motion at ${event.timestamp}, acceleration: ${event.data?.acceleration?.toFixed(2)}m/s²`);
+      }
+
+      // Log morning activity
+      if (event.type === 'MORNING_ACTIVITY') {
+        console.log(`[Morning] User ${userId} detected morning activity at ${event.timestamp}`);
+      }
+
+      // Log leaving project events
+      if (event.type === 'LEAVING_PROJECT') {
+        console.log(`[Leaving] User ${userId} left project ${event.data?.projectId} for reason: ${event.data?.reason}`);
+      }
+
+      // Log auto-checkout events
+      if (event.type === 'AUTO_CHECKOUT') {
+        console.log(`[Auto-Checkout] User ${userId} auto-checkout: ${event.data?.reason}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `${events.length} evento(s) processado(s)`,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/mobile/location/timeline - Get user's timeline for a date
+router.get('/location/timeline', mobileAuth, async (req, res, next) => {
+  try {
+    const userId = req.user!.sub;
+    const { date } = req.query;
+
+    // Default to today if no date provided
+    const targetDate = date ? new Date(date as string) : new Date();
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Get check-ins for the day
+    const checkins = await prisma.checkin.findMany({
+      where: {
+        userId,
+        checkinAt: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+      },
+      include: {
+        project: {
+          select: {
+            id: true,
+            title: true,
+            cliente: true,
+          },
+        },
+      },
+      orderBy: { checkinAt: 'asc' },
+    });
+
+    // Get location history for the day
+    const locations = await prisma.locationHistory.findMany({
+      where: {
+        userId,
+        recordedAt: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+      },
+      orderBy: { recordedAt: 'asc' },
+      take: 288, // Max 1 location per 5 min for 24 hours
+    });
+
+    // Build timeline from checkins and locations
+    const timeline: Array<{ type: string; timestamp: string; data: Record<string, unknown> }> = [];
+
+    // Add check-in events
+    for (const checkin of checkins) {
+      timeline.push({
+        type: 'CHECKIN',
+        timestamp: checkin.checkinAt.toISOString(),
+        data: {
+          projectId: checkin.projectId,
+          projectTitle: checkin.project?.title || null,
+          projectClient: checkin.project?.cliente || null,
+        },
+      });
+
+      if (checkin.checkoutAt) {
+        timeline.push({
+          type: 'CHECKOUT',
+          timestamp: checkin.checkoutAt.toISOString(),
+          data: {
+            projectId: checkin.projectId,
+            projectTitle: checkin.project?.title || null,
+            hoursWorked: checkin.hoursWorked ? Number(checkin.hoursWorked) : 0,
+          },
+        });
+      }
+    }
+
+    // Add movement locations (sampled to avoid too many)
+    const sampledLocations = locations.filter((_, index) => index % 3 === 0); // Every 15 min
+    for (const loc of sampledLocations) {
+      timeline.push({
+        type: 'LOCATION',
+        timestamp: loc.recordedAt.toISOString(),
+        data: {
+          latitude: Number(loc.latitude),
+          longitude: Number(loc.longitude),
+        },
+      });
+    }
+
+    // Sort by timestamp
+    timeline.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    // Calculate total hours worked
+    const totalHoursWorked = checkins.reduce((sum, c) => {
+      const hours = c.hoursWorked ? Number(c.hoursWorked) : 0;
+      return sum + hours;
+    }, 0);
+
+    res.json({
+      success: true,
+      date: targetDate.toISOString().split('T')[0],
+      timeline,
+      summary: {
+        totalCheckins: checkins.length,
+        totalLocations: locations.length,
+        hoursWorked: totalHoursWorked,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // =============================================
 // HELP REQUESTS (Material ou Ajuda)
 // =============================================

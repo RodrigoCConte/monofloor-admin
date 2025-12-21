@@ -12282,3 +12282,365 @@ body {
     cursor: not-allowed;
 }
 
+/* ====================================== */
+/* LEAVING PROJECT MODAL (Movement Tracking) */
+/* ====================================== */
+
+.leaving-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+    padding: 20px;
+    animation: fadeIn 0.3s ease;
+}
+
+.leaving-modal-content {
+    background: var(--bg-secondary);
+    border-radius: 20px;
+    padding: 24px;
+    max-width: 360px;
+    width: 100%;
+    animation: slideUpModal 0.4s ease;
+}
+
+@keyframes slideUpModal {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.leaving-modal-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.leaving-modal-header h2 {
+    color: var(--text-primary);
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.leaving-modal-header p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.leaving-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.leaving-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.leaving-option:hover {
+    border-color: var(--accent-primary);
+    background: rgba(201, 169, 98, 0.1);
+}
+
+.leaving-option:active {
+    transform: scale(0.98);
+}
+
+.leaving-option .option-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+}
+
+.leaving-option .option-icon.material {
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+}
+
+.leaving-option .option-icon.lunch {
+    background: linear-gradient(135deg, #f97316, #ea580c);
+}
+
+.leaving-option .option-icon.other-project {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+}
+
+.leaving-option .option-icon.emergency {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.leaving-option .option-icon.end-day {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+}
+
+.leaving-option .option-text {
+    flex: 1;
+}
+
+.leaving-option .option-text .option-title {
+    color: var(--text-primary);
+    font-weight: 500;
+    font-size: 15px;
+    margin-bottom: 2px;
+}
+
+.leaving-option .option-text .option-desc {
+    color: var(--text-tertiary);
+    font-size: 12px;
+}
+
+.leaving-modal-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.leaving-modal-actions button {
+    flex: 1;
+    padding: 14px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.leaving-modal-actions .btn-cancel {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.leaving-modal-actions .btn-cancel:hover {
+    border-color: var(--accent-primary);
+}
+
+/* ====================================== */
+/* MORNING ACTIVITY ALERT */
+/* ====================================== */
+
+.morning-alert {
+    position: fixed;
+    top: 80px;
+    left: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    border-radius: 16px;
+    padding: 16px;
+    z-index: 9999;
+    animation: slideDown 0.5s ease;
+    box-shadow: 0 8px 32px rgba(249, 115, 22, 0.4);
+}
+
+.morning-alert-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.morning-alert-icon {
+    width: 48px;
+    height: 48px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+}
+
+.morning-alert-text h4 {
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.morning-alert-text p {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 13px;
+}
+
+.morning-alert-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ====================================== */
+/* TIMELINE SECTION (Profile/Academia) */
+/* ====================================== */
+
+.timeline-section {
+    margin-top: 24px;
+    padding: 20px;
+    background: var(--bg-secondary);
+    border-radius: 16px;
+}
+
+.timeline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.timeline-header h3 {
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.timeline-date {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.timeline-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.timeline-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-primary);
+    border-radius: 12px;
+    position: relative;
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: 22px;
+    top: 36px;
+    bottom: -12px;
+    width: 2px;
+    background: var(--border-color);
+}
+
+.timeline-item:last-child::before {
+    display: none;
+}
+
+.timeline-item-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    z-index: 1;
+}
+
+.timeline-item-icon.movement {
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+}
+
+.timeline-item-icon.checkin {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+}
+
+.timeline-item-icon.checkout {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.timeline-item-icon.gps-off {
+    background: linear-gradient(135deg, #6b7280, #4b5563);
+}
+
+.timeline-item-icon.morning {
+    background: linear-gradient(135deg, #f97316, #ea580c);
+}
+
+.timeline-item-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.timeline-item-title {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+
+.timeline-item-desc {
+    color: var(--text-tertiary);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.timeline-item-time {
+    color: var(--text-secondary);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.timeline-empty {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--text-tertiary);
+}
+
+.timeline-empty-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+}
+
+.timeline-empty p {
+    font-size: 14px;
+}
+
