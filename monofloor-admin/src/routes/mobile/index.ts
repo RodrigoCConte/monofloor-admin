@@ -4268,4 +4268,187 @@ router.get(
   }
 );
 
+// =============================================
+// ABSENCE NOTICE ENDPOINTS
+// =============================================
+
+// POST /api/mobile/absences - Register absence notice
+router.post(
+  '/absences',
+  mobileAuth,
+  [
+    body('absenceDate').isISO8601().withMessage('Data inválida'),
+    body('reason').isString().isLength({ min: 3 }).withMessage('Motivo deve ter pelo menos 3 caracteres'),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { absenceDate, reason } = req.body;
+      const userId = req.user!.sub;
+
+      const { registerAbsenceNotice } = await import('../../services/absence.service');
+      const result = await registerAbsenceNotice(userId, new Date(absenceDate), reason);
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          error: { message: result.message },
+        });
+      }
+
+      res.status(201).json({
+        success: true,
+        data: {
+          wasAdvanceNotice: result.wasAdvanceNotice,
+          xpPenalty: result.xpPenalty,
+          multiplierReset: result.multiplierReset,
+          message: result.message,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/mobile/absences - List user's absences
+router.get('/absences', mobileAuth, async (req, res, next) => {
+  try {
+    const userId = req.user!.sub;
+
+    const { getUserAbsences } = await import('../../services/absence.service');
+    const absences = await getUserAbsences(userId);
+
+    res.json({
+      success: true,
+      data: absences,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/mobile/absences/available-dates - Get available dates for absence notice
+router.get('/absences/available-dates', mobileAuth, async (req, res, next) => {
+  try {
+    const offset = parseInt(req.query.offset as string) || 0;
+    const count = parseInt(req.query.count as string) || 5;
+
+    const { getAvailableDates } = await import('../../services/absence.service');
+    const dates = getAvailableDates(count, offset);
+
+    // Format dates with day of week
+    const formattedDates = dates.map((date) => {
+      const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      return {
+        date: date.toISOString().split('T')[0],
+        dayOfWeek: dayNames[date.getDay()],
+        dayOfMonth: date.getDate(),
+        month: date.getMonth() + 1,
+        formatted: `${dayNames[date.getDay()]} ${date.getDate()}/${date.getMonth() + 1}`,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: formattedDates,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/mobile/absences/:date - Cancel absence notice
+router.delete(
+  '/absences/:date',
+  mobileAuth,
+  [param('date').isISO8601().withMessage('Data inválida')],
+  validate,
+  async (req, res, next) => {
+    try {
+      const userId = req.user!.sub;
+      const absenceDate = new Date(req.params.date);
+
+      const { cancelAbsenceNotice } = await import('../../services/absence.service');
+      const result = await cancelAbsenceNotice(userId, absenceDate);
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          error: { message: result.message },
+        });
+      }
+
+      res.json({
+        success: true,
+        data: { message: result.message },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST /api/mobile/absences/respond - Respond to unreported absence inquiry
+router.post(
+  '/absences/respond',
+  mobileAuth,
+  [
+    body('unreportedAbsenceId').isUUID().withMessage('ID inválido'),
+    body('response').isIn(['SIM', 'NAO']).withMessage('Resposta deve ser SIM ou NAO'),
+    body('reasonOrExplanation').isString().isLength({ min: 3 }).withMessage('Motivo/explicação deve ter pelo menos 3 caracteres'),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { unreportedAbsenceId, response, reasonOrExplanation } = req.body;
+
+      const { handleAbsenceResponse } = await import('../../services/absence.service');
+      const result = await handleAbsenceResponse(unreportedAbsenceId, response, reasonOrExplanation);
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          error: { message: result.message },
+        });
+      }
+
+      res.json({
+        success: true,
+        data: { message: result.message },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/mobile/absences/pending-inquiry - Check if user has pending absence inquiry
+router.get('/absences/pending-inquiry', mobileAuth, async (req, res, next) => {
+  try {
+    const userId = req.user!.sub;
+
+    const pendingInquiry = await prisma.unreportedAbsence.findFirst({
+      where: {
+        userId,
+        status: 'PENDING',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({
+      success: true,
+      data: pendingInquiry
+        ? {
+            id: pendingInquiry.id,
+            absenceDate: pendingInquiry.absenceDate,
+            detectedAt: pendingInquiry.detectedAt,
+          }
+        : null,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export { router as mobileRoutes };

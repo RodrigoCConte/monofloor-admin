@@ -2430,51 +2430,7 @@ function getPhotoUrl(photoUrl, bustCache = false) {
     return url;
 }
 
-// Compress image before upload (max 800px, 80% quality)
-async function compressImage(file, maxWidth = 800, maxHeight = 800, quality = 0.8) {
-    return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => {
-                // Calculate new dimensions
-                let width = img.width;
-                let height = img.height;
-
-                if (width > maxWidth) {
-                    height = (height * maxWidth) / width;
-                    width = maxWidth;
-                }
-                if (height > maxHeight) {
-                    width = (width * maxHeight) / height;
-                    height = maxHeight;
-                }
-
-                // Create canvas and compress
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-
-                // Convert to blob
-                canvas.toBlob((blob) => {
-                    // Create new file from blob
-                    const compressedFile = new File([blob], file.name, {
-                        type: 'image/jpeg',
-                        lastModified: Date.now()
-                    });
-
-                    console.log(`Image compressed: ${(file.size / 1024).toFixed(1)}KB -> ${(blob.size / 1024).toFixed(1)}KB`);
-                    resolve(compressedFile);
-                }, 'image/jpeg', quality);
-            };
-            img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
-    });
-}
+// Note: compressImage is defined below with options object support
 
 // Get initials from name
 function getInitials(name) {
@@ -2764,7 +2720,7 @@ async function previewProfilePhoto(input) {
         }
 
         // Compress the image
-        const compressedFile = await compressImage(originalFile, 800, 800, 0.8);
+        const compressedFile = await compressImage(originalFile, { maxWidth: 800, maxHeight: 800, quality: 0.8 });
         registrationData.profilePhotoFile = compressedFile;
 
         const reader = new FileReader();
@@ -4011,11 +3967,19 @@ async function compressImage(file, options = {}) {
                     return base64;
                 };
 
-                const compressedBase64 = tryCompress(quality);
-                const finalSizeKB = (compressedBase64.length * 0.75) / 1024;
-                console.log(`Imagem comprimida: ${img.width}x${img.height} -> ${Math.round(width)}x${Math.round(height)}, ${Math.round(finalSizeKB)}KB`);
-
-                resolve(compressedBase64);
+                // Converter para blob e depois para File
+                canvas.toBlob((blob) => {
+                    if (!blob) {
+                        reject(new Error('Erro ao comprimir imagem'));
+                        return;
+                    }
+                    const compressedFile = new File([blob], file.name || 'photo.jpg', {
+                        type: 'image/jpeg',
+                        lastModified: Date.now()
+                    });
+                    console.log(`Imagem comprimida: ${img.width}x${img.height} -> ${Math.round(width)}x${Math.round(height)}, ${Math.round(blob.size / 1024)}KB`);
+                    resolve(compressedFile);
+                }, 'image/jpeg', quality);
             };
             img.onerror = () => reject(new Error('Erro ao carregar imagem'));
             img.src = e.target.result;
@@ -7088,18 +7052,31 @@ async function previewEditPhoto(input) {
             editAvatarEl.innerHTML = '<div class="loading-spinner-small"></div>';
         }
 
-        // Compress the image
-        const compressedFile = await compressImage(originalFile, 800, 800, 0.8);
-        editProfilePhotoFile = compressedFile;
+        try {
+            // Compress the image
+            const compressedFile = await compressImage(originalFile, { maxWidth: 800, maxHeight: 800, quality: 0.8 });
+            editProfilePhotoFile = compressedFile;
 
-        // Show preview
-        const reader = new FileReader();
-        reader.onload = function(e) {
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                if (editAvatarEl) {
+                    editAvatarEl.innerHTML = `<img src="${e.target.result}" alt="Avatar" class="avatar-img">`;
+                }
+            };
+            reader.readAsDataURL(compressedFile);
+        } catch (error) {
+            console.error('Erro ao comprimir imagem:', error);
+            alert('Erro ao processar a imagem. Tente novamente.');
+            // Reset avatar
             if (editAvatarEl) {
-                editAvatarEl.innerHTML = `<img src="${e.target.result}" alt="Avatar" class="avatar-img">`;
+                const profile = cachedProfile || getCurrentUser();
+                if (profile?.name) {
+                    const initials = profile.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                    editAvatarEl.textContent = initials;
+                }
             }
-        };
-        reader.readAsDataURL(compressedFile);
+        }
     }
 }
 
@@ -9409,6 +9386,346 @@ if ('serviceWorker' in navigator) {
                 Math.abs(amount),
                 `${projectName}: ${reason}`
             );
+        } else if (event.data?.type === 'ABSENCE_INQUIRY') {
+            // Show absence inquiry modal from push notification
+            showAbsenceInquiryModal(event.data.unreportedAbsenceId, event.data.absenceDate);
         }
     });
 }
+
+// =============================================
+// ABSENCE NOTICE SYSTEM
+// =============================================
+
+let absenceDatesOffset = 0;
+let selectedAbsenceDate = null;
+let pendingAbsenceInquiryId = null;
+let pendingAbsenceResponse = null;
+
+/**
+ * Open the absence notice modal
+ */
+async function openAbsenceModal() {
+    const modal = document.getElementById('absenceModal');
+    if (!modal) return;
+
+    // Reset state
+    absenceDatesOffset = 0;
+    selectedAbsenceDate = null;
+    document.getElementById('absenceReason').value = '';
+    document.getElementById('btnConfirmAbsence').disabled = true;
+    document.getElementById('absenceWarning').style.display = 'none';
+
+    // Load available dates
+    await loadAbsenceDates();
+
+    modal.classList.add('active');
+}
+
+/**
+ * Close the absence notice modal
+ */
+function closeAbsenceModal() {
+    const modal = document.getElementById('absenceModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+/**
+ * Load available dates for absence notice
+ */
+async function loadAbsenceDates() {
+    const container = document.getElementById('absenceDatesList');
+    if (!container) return;
+
+    container.innerHTML = '<div class="loading-spinner-small"></div>';
+
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            container.innerHTML = '<p style="color: var(--text-secondary);">Faca login para continuar</p>';
+            return;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/api/mobile/absences/available-dates?offset=${absenceDatesOffset}&count=5`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) throw new Error('Failed to load dates');
+
+        const result = await response.json();
+        const dates = result.data || [];
+
+        if (absenceDatesOffset === 0) {
+            container.innerHTML = '';
+        } else {
+            // Remove loading spinner if it exists
+            const spinner = container.querySelector('.loading-spinner-small');
+            if (spinner) spinner.remove();
+        }
+
+        dates.forEach(dateInfo => {
+            const btn = document.createElement('button');
+            btn.className = 'absence-date-btn';
+            btn.dataset.date = dateInfo.date;
+            btn.innerHTML = `<span class="day-name">${dateInfo.dayOfWeek}</span> ${dateInfo.dayOfMonth}/${dateInfo.month}`;
+            btn.onclick = () => selectAbsenceDate(btn, dateInfo.date);
+            container.appendChild(btn);
+        });
+
+        // Check for same-day warning
+        updateAbsenceWarning();
+
+    } catch (error) {
+        console.error('Error loading absence dates:', error);
+        container.innerHTML = '<p style="color: var(--accent-red);">Erro ao carregar datas</p>';
+    }
+}
+
+/**
+ * Load more dates
+ */
+function loadMoreAbsenceDates() {
+    absenceDatesOffset += 5;
+    loadAbsenceDates();
+}
+
+/**
+ * Select an absence date
+ */
+function selectAbsenceDate(btn, date) {
+    // Remove selection from all buttons
+    document.querySelectorAll('.absence-date-btn').forEach(b => b.classList.remove('selected'));
+
+    // Select this button
+    btn.classList.add('selected');
+    selectedAbsenceDate = date;
+
+    // Update confirm button state
+    updateConfirmButton();
+
+    // Check for same-day warning
+    updateAbsenceWarning();
+}
+
+/**
+ * Update the confirm button state
+ */
+function updateConfirmButton() {
+    const btn = document.getElementById('btnConfirmAbsence');
+    const reason = document.getElementById('absenceReason').value.trim();
+    btn.disabled = !selectedAbsenceDate || reason.length < 3;
+}
+
+/**
+ * Update the same-day warning visibility
+ */
+function updateAbsenceWarning() {
+    const warning = document.getElementById('absenceWarning');
+    if (!selectedAbsenceDate) {
+        warning.style.display = 'none';
+        return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const selected = new Date(selectedAbsenceDate);
+    selected.setHours(0, 0, 0, 0);
+
+    // Show warning if it's today
+    if (selected.getTime() === today.getTime()) {
+        warning.style.display = 'flex';
+    } else {
+        warning.style.display = 'none';
+    }
+}
+
+/**
+ * Submit absence notice
+ */
+async function submitAbsenceNotice() {
+    if (!selectedAbsenceDate) return;
+
+    const reason = document.getElementById('absenceReason').value.trim();
+    if (reason.length < 3) {
+        showToast('Digite um motivo para a falta', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('btnConfirmAbsence');
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            showToast('Sessao expirada. Faca login novamente.', 'error');
+            return;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/api/mobile/absences`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                absenceDate: selectedAbsenceDate,
+                reason: reason
+            })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error?.message || 'Erro ao registrar falta');
+        }
+
+        // Show success message
+        closeAbsenceModal();
+
+        if (result.data.xpPenalty > 0) {
+            showXPLossNotification(result.data.xpPenalty, 'Aviso de falta no mesmo dia');
+        }
+
+        showToast(result.data.message, result.data.wasAdvanceNotice ? 'success' : 'warning');
+
+    } catch (error) {
+        console.error('Error submitting absence:', error);
+        showToast(error.message || 'Erro ao registrar falta', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Confirmar Falta';
+    }
+}
+
+/**
+ * Show absence inquiry modal (called from push notification)
+ */
+function showAbsenceInquiryModal(unreportedAbsenceId, absenceDate) {
+    pendingAbsenceInquiryId = unreportedAbsenceId;
+
+    const modal = document.getElementById('absenceInquiryModal');
+    if (modal) {
+        modal.classList.add('active');
+    }
+}
+
+/**
+ * Hide absence inquiry modal
+ */
+function hideAbsenceInquiryModal() {
+    const modal = document.getElementById('absenceInquiryModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+/**
+ * Respond to absence inquiry
+ */
+function respondAbsenceInquiry(response) {
+    pendingAbsenceResponse = response;
+    hideAbsenceInquiryModal();
+
+    // Show reason modal
+    const reasonModal = document.getElementById('absenceReasonModal');
+    const title = document.getElementById('absenceReasonTitle');
+
+    if (response === 'SIM') {
+        title.textContent = 'Qual foi o motivo da falta?';
+    } else {
+        title.textContent = 'Por que nao houve atividade?';
+    }
+
+    document.getElementById('absenceReasonInput').value = '';
+    reasonModal.classList.add('active');
+}
+
+/**
+ * Submit absence reason
+ */
+async function submitAbsenceReason() {
+    const reasonInput = document.getElementById('absenceReasonInput');
+    const reason = reasonInput.value.trim();
+
+    if (reason.length < 3) {
+        showToast('Digite um motivo/explicacao', 'error');
+        return;
+    }
+
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            showToast('Sessao expirada', 'error');
+            return;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/api/mobile/absences/respond`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                unreportedAbsenceId: pendingAbsenceInquiryId,
+                response: pendingAbsenceResponse,
+                reasonOrExplanation: reason
+            })
+        });
+
+        const result = await response.json();
+
+        // Close modal
+        document.getElementById('absenceReasonModal').classList.remove('active');
+
+        if (!response.ok) {
+            throw new Error(result.error?.message || 'Erro ao enviar resposta');
+        }
+
+        showToast(result.data.message, 'success');
+
+        // Reset state
+        pendingAbsenceInquiryId = null;
+        pendingAbsenceResponse = null;
+
+    } catch (error) {
+        console.error('Error submitting absence reason:', error);
+        showToast(error.message || 'Erro ao enviar resposta', 'error');
+    }
+}
+
+/**
+ * Check for pending absence inquiries on app load
+ */
+async function checkPendingAbsenceInquiry() {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const response = await fetch(`${API_BASE_URL}/api/mobile/absences/pending-inquiry`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) return;
+
+        const result = await response.json();
+
+        if (result.data) {
+            // Show inquiry modal
+            showAbsenceInquiryModal(result.data.id, result.data.absenceDate);
+        }
+    } catch (error) {
+        console.log('Could not check pending absence inquiry:', error);
+    }
+}
+
+// Add event listener for reason textarea to update confirm button
+document.getElementById('absenceReason')?.addEventListener('input', updateConfirmButton);
+
+// Check for pending absence inquiries when app loads
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(checkPendingAbsenceInquiry, 2000);
+});

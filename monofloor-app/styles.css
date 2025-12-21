@@ -5293,6 +5293,377 @@ body {
 }
 
 /* =============================================
+   ABSENCE NOTICE BUTTON
+   ============================================= */
+
+.btn-absence-notice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 16px 20px;
+    margin-top: 12px;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: var(--border-radius);
+    color: var(--accent-red);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-absence-notice:hover {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(239, 68, 68, 0.1) 100%);
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.btn-absence-notice:active {
+    transform: scale(0.98);
+}
+
+.btn-absence-notice svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+.btn-absence-notice svg:first-child {
+    margin-right: 12px;
+}
+
+.btn-absence-notice .arrow-icon {
+    margin-left: auto;
+}
+
+.btn-absence-notice span {
+    flex: 1;
+    text-align: left;
+}
+
+/* =============================================
+   ABSENCE MODAL STYLES
+   ============================================= */
+
+.absence-modal {
+    max-width: 340px;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+
+.absence-modal .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.absence-modal .modal-header h3 {
+    color: var(--text-primary);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.absence-modal .modal-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+}
+
+.absence-modal .modal-close svg {
+    width: 20px;
+    height: 20px;
+}
+
+.absence-modal-body {
+    padding: 20px;
+}
+
+.absence-info {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
+.absence-dates-container {
+    margin-bottom: 20px;
+}
+
+.absence-dates-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.absence-date-btn {
+    padding: 10px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.absence-date-btn:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--accent-primary);
+}
+
+.absence-date-btn.selected {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: #000;
+}
+
+.absence-date-btn .day-name {
+    font-weight: 600;
+}
+
+.btn-load-more-dates {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px;
+    background: transparent;
+    border: 1px dashed var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-load-more-dates:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+.btn-load-more-dates svg {
+    width: 16px;
+    height: 16px;
+}
+
+.absence-reason-container {
+    margin-bottom: 16px;
+}
+
+.absence-reason-container label {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.absence-reason-container textarea {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+    resize: none;
+}
+
+.absence-reason-container textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.absence-warning {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    color: var(--accent-red);
+    font-size: 13px;
+}
+
+.absence-warning svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+.absence-modal-footer {
+    display: flex;
+    gap: 12px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.absence-modal-footer .btn-cancel {
+    flex: 1;
+    padding: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.absence-modal-footer .btn-cancel:hover {
+    background: var(--bg-card-hover);
+}
+
+.absence-modal-footer .btn-confirm {
+    flex: 1;
+    padding: 12px;
+    background: var(--accent-red);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.absence-modal-footer .btn-confirm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.absence-modal-footer .btn-confirm:not(:disabled):hover {
+    opacity: 0.9;
+}
+
+/* Absence Inquiry Modal */
+.absence-inquiry-modal {
+    max-width: 320px;
+    text-align: center;
+}
+
+.absence-inquiry-modal .modal-header {
+    padding: 20px;
+    border-bottom: none;
+}
+
+.absence-inquiry-modal .modal-header h3 {
+    color: var(--text-primary);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.absence-inquiry-body {
+    padding: 0 20px 24px;
+}
+
+.absence-inquiry-body p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-bottom: 20px;
+}
+
+.absence-inquiry-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.absence-inquiry-buttons .btn-yes,
+.absence-inquiry-buttons .btn-no {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.absence-inquiry-buttons .btn-yes {
+    background: var(--accent-red);
+    border: none;
+    color: #fff;
+}
+
+.absence-inquiry-buttons .btn-yes:hover {
+    opacity: 0.9;
+}
+
+.absence-inquiry-buttons .btn-no {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.absence-inquiry-buttons .btn-no:hover {
+    background: var(--bg-card-hover);
+}
+
+.absence-inquiry-buttons svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Absence Reason Modal */
+.absence-reason-modal {
+    max-width: 320px;
+}
+
+.absence-reason-modal .modal-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.absence-reason-modal .modal-header h3 {
+    color: var(--text-primary);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.absence-reason-body {
+    padding: 20px;
+}
+
+.absence-reason-body textarea {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+    resize: none;
+}
+
+.absence-reason-body textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.loading-spinner-small {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 10px auto;
+}
+
+/* =============================================
    FULL SCREEN MODAL (Nearby Projects)
    ============================================= */
 
@@ -7294,20 +7665,20 @@ body {
 
 .xp-icon-container {
     position: relative;
-    width: 120px;
-    height: 120px;
-    margin: 0 auto 20px;
+    width: 67px;
+    height: 67px;
+    margin: 0 auto 12px;
 }
 
 .xp-icon {
-    width: 120px;
-    height: 120px;
+    width: 67px;
+    height: 67px;
     background: linear-gradient(135deg, #c9a962 0%, #f4d03f 50%, #c9a962 100%);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 50px;
+    font-size: 28px;
     box-shadow:
         0 0 30px rgba(201, 169, 98, 0.6),
         0 0 60px rgba(201, 169, 98, 0.4),
@@ -7339,8 +7710,8 @@ body {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 200px;
-    height: 200px;
+    width: 112px;
+    height: 112px;
     transform: translate(-50%, -50%);
     animation: xpRaysSpin 20s linear infinite;
 }
@@ -7353,8 +7724,8 @@ body {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 4px;
-    height: 80px;
+    width: 2px;
+    height: 45px;
     background: linear-gradient(to top, transparent, rgba(201, 169, 98, 0.8));
     transform-origin: center bottom;
     border-radius: 2px;

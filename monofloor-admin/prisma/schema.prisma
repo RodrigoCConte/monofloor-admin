@@ -107,6 +107,8 @@ model User {
   notificationViews     NotificationView[]
   taskCompletions       TaskCompletion[]
   reportReminders       ReportReminder[]
+  absenceNotices        AbsenceNotice[]
+  unreportedAbsences    UnreportedAbsence[]
 
   @@map("users")
 }
@@ -1337,6 +1339,86 @@ enum ReminderStatus {
   SENT         // Notificação enviada
   COMPLETED    // Usuário enviou relatório
   EXPIRED      // Expirado (max 3 tentativas)
+}
+
+// =============================================
+// ABSENCE NOTICE (Aviso de falta)
+// =============================================
+model AbsenceNotice {
+  id              String         @id @default(uuid())
+  userId          String         @map("user_id")
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Absence details
+  absenceDate     DateTime       @map("absence_date") @db.Date     // Data da falta
+  reason          String                                            // Motivo da falta
+  noticeType      AbsenceNoticeType @default(ADVANCE) @map("notice_type")
+
+  // Penalty tracking
+  wasAdvanceNotice Boolean       @default(true) @map("was_advance_notice")  // Avisou com antecedência?
+  xpPenalty        Int           @default(0) @map("xp_penalty")              // XP penalizado (0 ou 7000)
+  multiplierReset  Boolean       @default(false) @map("multiplier_reset")   // Multiplicador foi zerado?
+
+  // Status
+  status          AbsenceStatus  @default(CONFIRMED)
+
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  @@unique([userId, absenceDate])
+  @@index([userId, absenceDate])
+  @@index([absenceDate, status])
+  @@map("absence_notices")
+}
+
+// Aviso de falta não registrada (detectado automaticamente)
+model UnreportedAbsence {
+  id              String                @id @default(uuid())
+  userId          String                @map("user_id")
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Absence details
+  absenceDate     DateTime              @map("absence_date") @db.Date
+  detectedAt      DateTime              @default(now()) @map("detected_at")
+
+  // User response
+  status          UnreportedAbsenceStatus @default(PENDING)
+  userResponse    String?               @map("user_response")  // "SIM" ou "NAO"
+  reason          String?                                       // Motivo (se disse SIM)
+  explanation     String?                                       // Explicação (se disse NAO)
+
+  // Notification tracking
+  notificationSentAt DateTime?          @map("notification_sent_at")
+  respondedAt       DateTime?           @map("responded_at")
+
+  // Penalty (applied if user confirms absence without prior notice)
+  xpPenalty        Int           @default(0) @map("xp_penalty")
+  multiplierReset  Boolean       @default(false) @map("multiplier_reset")
+
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  @@unique([userId, absenceDate])
+  @@index([userId, status])
+  @@index([absenceDate, status])
+  @@map("unreported_absences")
+}
+
+enum AbsenceNoticeType {
+  ADVANCE      // Avisado com antecedência (sem penalidade)
+  SAME_DAY     // Avisado no mesmo dia pela manhã (com penalidade)
+}
+
+enum AbsenceStatus {
+  CONFIRMED    // Falta confirmada
+  CANCELLED    // Aviso cancelado (voltou a trabalhar)
+}
+
+enum UnreportedAbsenceStatus {
+  PENDING      // Aguardando resposta do usuário
+  CONFIRMED    // Usuário confirmou que faltou
+  DENIED       // Usuário disse que não faltou
+  EXPIRED      // Não respondeu
 }
 
 // =============================================

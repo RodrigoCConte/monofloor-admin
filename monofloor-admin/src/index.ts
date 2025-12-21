@@ -144,6 +144,38 @@ async function main() {
       };
 
       scheduleDailyWorktimeProcessing();
+
+      // Schedule absence detection at 20:00 daily (after work hours)
+      const scheduleAbsenceDetection = () => {
+        const now = new Date();
+        const nextRun = new Date(now);
+        nextRun.setHours(20, 0, 0, 0);
+
+        // If it's already past 20:00 today, schedule for tomorrow
+        if (now >= nextRun) {
+          nextRun.setDate(nextRun.getDate() + 1);
+        }
+
+        const msUntilRun = nextRun.getTime() - now.getTime();
+
+        setTimeout(async () => {
+          try {
+            console.log('🔍 Running daily absence detection...');
+            const { detectUnreportedAbsences } = await import('./services/absence.service');
+            await detectUnreportedAbsences(new Date());
+            console.log('✅ Absence detection completed');
+          } catch (error) {
+            console.error('❌ Error in absence detection:', error);
+          }
+
+          // Schedule next run
+          scheduleAbsenceDetection();
+        }, msUntilRun);
+
+        console.log(`👤 Absence detection scheduled for ${nextRun.toISOString()}`);
+      };
+
+      scheduleAbsenceDetection();
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
