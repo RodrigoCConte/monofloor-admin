@@ -10638,6 +10638,7 @@ const FORCED_CHECKOUT_MAX_RETRIES = 10;
 
 /**
  * Force checkout due to GPS being disabled
+ * Uses INTERNET-ONLY checkout (no GPS required)
  * Returns true if successful, false otherwise
  */
 async function forceGPSCheckout() {
@@ -10646,10 +10647,10 @@ async function forceGPSCheckout() {
         return true; // Consider success if no checkin
     }
 
-    console.log('[GPS Checkout] Attempting forced checkout...');
+    console.log('[GPS Checkout] Attempting INTERNET-ONLY checkout (no GPS)...');
 
-    // Use GPS_DESATIVADO as reason (valid reason)
-    const success = await doCheckoutWithReason('GPS_DESATIVADO', true);
+    // Use direct API call WITHOUT trying to get location
+    const success = await doCheckoutWithoutGPS();
 
     if (success) {
         // Double verification - check state after checkout
@@ -10659,16 +10660,78 @@ async function forceGPSCheckout() {
         } else {
             console.error('[GPS Checkout] State mismatch - still has active checkin');
             // Force clear local state
-            isCheckedIn = false;
-            activeCheckinId = null;
-            currentProjectForCheckin = null;
-            updateCheckinUI(false);
-            stopGPSBackgroundVerification();
+            forceLocalCheckoutClear();
             return true;
         }
     }
 
     return false;
+}
+
+/**
+ * Checkout via internet only - NO GPS REQUIRED
+ * Used when GPS is disabled and we need to force checkout
+ */
+async function doCheckoutWithoutGPS() {
+    const checkinId = activeCheckinId;
+    if (!checkinId) {
+        console.log('[Checkout NoGPS] No active checkin');
+        return false;
+    }
+
+    console.log(`[Checkout NoGPS] Sending checkout request for checkin ${checkinId}`);
+
+    try {
+        const response = await fetch(`${API_URL}/api/mobile/checkins/${checkinId}/checkout`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({
+                // NO latitude/longitude - GPS is off
+                latitude: null,
+                longitude: null,
+                reason: 'GPS_DESATIVADO'
+            })
+        });
+
+        const data = await response.json();
+        console.log('[Checkout NoGPS] API response:', data);
+
+        if (data.success) {
+            // Clear local state
+            isCheckedIn = false;
+            activeCheckinId = null;
+            currentProjectForCheckin = null;
+            pendingCheckoutReason = null;
+            updateCheckinUI(false);
+            stopGPSBackgroundVerification();
+            restartLocationTracking();
+
+            console.log('[Checkout NoGPS] SUCCESS');
+            return true;
+        } else {
+            console.error('[Checkout NoGPS] API returned error:', data.error);
+            return false;
+        }
+    } catch (error) {
+        console.error('[Checkout NoGPS] Network error:', error);
+        return false;
+    }
+}
+
+/**
+ * Force clear local checkout state (last resort)
+ */
+function forceLocalCheckoutClear() {
+    console.log('[Checkout] FORCING local state clear');
+    isCheckedIn = false;
+    activeCheckinId = null;
+    currentProjectForCheckin = null;
+    pendingCheckoutReason = null;
+    updateCheckinUI(false);
+    stopGPSBackgroundVerification();
 }
 
 /**
@@ -10797,57 +10860,51 @@ function startGPSBackgroundVerification() {
 
 /**
  * Execute automatic checkout due to GPS being off for 1 minute
+ * Uses INTERNET-ONLY checkout (no GPS dependency)
  * Shows prominent notification and does checkout
  */
 async function executeGPSAutoCheckout() {
     const checkoutMessage = 'Seu check-out automático foi realizado e suas horas no projeto não serão computadas.';
 
-    // Show in-app modal (prominent, can't be missed)
+    console.log('[GPS Auto-Checkout] EXECUTING - 1 minute GPS off reached');
+
+    // Show in-app modal FIRST (prominent, can't be missed)
     showGPSCheckoutModal(checkoutMessage);
 
     // Try to show device notification
-    await sendGPSCheckoutNotification(checkoutMessage);
+    sendGPSCheckoutNotification(checkoutMessage);
 
-    // Execute the actual checkout
+    // Execute the actual checkout via INTERNET ONLY (no GPS needed)
     try {
+        console.log('[GPS Auto-Checkout] Attempting internet-only checkout...');
         const success = await forceGPSCheckout();
 
         if (success) {
-            console.log('[GPS Checkout] SUCCESS - checkout completed');
+            console.log('[GPS Auto-Checkout] ✅ SUCCESS - checkout completed via API');
             gpsOffStartTime = null;
             gpsCheckoutInProgress = false;
         } else {
-            // Retry with more aggressive approach
-            console.log('[GPS Checkout] First attempt failed - retrying...');
-
-            // Wait 2 seconds and try again
+            // Retry once
+            console.log('[GPS Auto-Checkout] First attempt failed - retrying in 2s...');
             await new Promise(resolve => setTimeout(resolve, 2000));
+
             const retrySuccess = await forceGPSCheckout();
 
             if (retrySuccess) {
-                console.log('[GPS Checkout] Retry SUCCESS');
+                console.log('[GPS Auto-Checkout] ✅ Retry SUCCESS');
             } else {
-                // Force local state clear as last resort
-                console.log('[GPS Checkout] Forcing local state clear');
-                isCheckedIn = false;
-                activeCheckinId = null;
-                currentProjectForCheckin = null;
-                pendingCheckoutReason = null;
-                updateCheckinUI(false);
-                stopGPSBackgroundVerification();
+                // Force local state clear as LAST RESORT
+                console.log('[GPS Auto-Checkout] ⚠️ API failed - forcing local clear');
+                forceLocalCheckoutClear();
             }
 
             gpsOffStartTime = null;
             gpsCheckoutInProgress = false;
         }
     } catch (error) {
-        console.error('[GPS Checkout] Error:', error);
-        // Force local clear on error
-        isCheckedIn = false;
-        activeCheckinId = null;
-        currentProjectForCheckin = null;
-        pendingCheckoutReason = null;
-        updateCheckinUI(false);
+        console.error('[GPS Auto-Checkout] ❌ Error:', error);
+        // Force local clear on any error
+        forceLocalCheckoutClear();
         gpsOffStartTime = null;
         gpsCheckoutInProgress = false;
     }
