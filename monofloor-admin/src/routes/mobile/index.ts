@@ -1302,14 +1302,25 @@ router.get(
         }
       }
 
-      // Calculate overtime bonus (difference between total from DailyWorkSummary and base calculation)
-      // Overtime is calculated per DAY, so we add it as a separate bonus
-      let baseProjectEarnings = 0;
-      for (const entry of projectMap.values()) {
-        baseProjectEarnings += entry.earnings;
-      }
+      // Calculate actual total earnings from DailyWorkSummary (correct historical values)
       const actualTotalEarnings = totalEarnings + todayEarnings;
-      const overtimeBonus = Math.max(0, actualTotalEarnings - baseProjectEarnings);
+
+      // Proportionally distribute total earnings across projects based on hours
+      // This ensures project earnings sum equals total earnings (fixing role change discrepancy)
+      let totalProjectHours = 0;
+      for (const entry of projectMap.values()) {
+        totalProjectHours += entry.hours;
+      }
+
+      if (totalProjectHours > 0) {
+        for (const entry of projectMap.values()) {
+          // Proportional earnings = total * (project hours / total hours)
+          entry.earnings = actualTotalEarnings * (entry.hours / totalProjectHours);
+        }
+      }
+
+      // No overtime bonus needed since we're using proportional distribution
+      const overtimeBonus = 0;
 
       // Add XP data to projects
       for (const tx of xpTransactions) {
