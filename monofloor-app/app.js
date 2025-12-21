@@ -4501,17 +4501,26 @@ async function clearFeedPosts() {
     console.log('Feed limpo com sucesso!');
 }
 
-// Carregar posts do servidor (API)
+/**
+ * Load feed posts with cache-first strategy
+ * Shows cached data immediately, then updates from API in background
+ */
 async function loadFeedPosts() {
     const token = localStorage.getItem('token');
 
-    // Se nao tiver token, carregar do cache local
+    // STEP 1: Show cached data IMMEDIATELY
+    const hadCachedData = loadFeedPostsFromLocalStorage();
+    if (hadCachedData && feedPosts.length > 0) {
+        renderFeed(); // Show cached immediately
+    }
+
+    // If no token, we're done (already showing cache)
     if (!token) {
-        console.log('Sem token, carregando feed do cache local');
-        loadFeedPostsFromLocalStorage();
+        console.log('Sem token, mostrando apenas cache do feed');
         return feedPosts;
     }
 
+    // STEP 2: Fetch fresh data from API in background
     try {
         const response = await fetch(`${API_URL}/api/mobile/feed?limit=50`, {
             headers: {
@@ -4526,6 +4535,8 @@ async function loadFeedPosts() {
         const result = await response.json();
 
         if (result.success && result.data.posts) {
+            const oldPostsCount = feedPosts.length;
+
             // Transformar posts da API para o formato local
             feedPosts = result.data.posts.map(post => ({
                 id: post.id,
@@ -4543,17 +4554,22 @@ async function loadFeedPosts() {
                 liked: post.hasLiked,
                 createdAt: post.createdAt
             }));
+
             console.log(`Feed carregado: ${feedPosts.length} posts do servidor`);
 
-            // Salvar no cache local (IndexedDB como fallback offline)
+            // Salvar no cache local
             saveFeedPostsToCache();
+
+            // Only re-render if we have new data
+            if (feedPosts.length !== oldPostsCount || !hadCachedData) {
+                renderFeed();
+            }
         }
 
         return feedPosts;
     } catch (e) {
-        console.error('Erro ao carregar feed do servidor, usando cache:', e);
-        // Fallback para cache local
-        loadFeedPostsFromLocalStorage();
+        console.error('Erro ao carregar feed do servidor:', e);
+        // Cached data already shown (if available)
         return feedPosts;
     }
 }
@@ -4572,7 +4588,10 @@ function saveFeedPostsToCache() {
     }
 }
 
-// Fallback: carregar do cache localStorage
+/**
+ * Load feed from localStorage cache
+ * @returns {boolean} true if cache had data
+ */
 function loadFeedPostsFromLocalStorage() {
     try {
         // Tentar cache primeiro
@@ -4583,9 +4602,11 @@ function loadFeedPostsFromLocalStorage() {
         }
         feedPosts = stored ? JSON.parse(stored) : [];
         console.log(`Feed carregado: ${feedPosts.length} posts do cache local`);
+        return feedPosts.length > 0;
     } catch (e) {
         console.error('Erro ao carregar do cache:', e);
         feedPosts = [];
+        return false;
     }
 }
 
@@ -4864,10 +4885,11 @@ async function publishPost() {
     }
 }
 
-// Renderizar feed
+/**
+ * Render feed posts from feedPosts array
+ * Note: This only renders - call loadFeedPosts() separately to fetch data
+ */
 function renderFeed() {
-    loadFeedPosts();
-
     const emptyState = document.getElementById('feedEmptyState');
     const postsContainer = document.getElementById('feedPosts');
 
@@ -4921,7 +4943,7 @@ function renderFeed() {
                     </div>
                     ${post.imageUrl ? `
                         <div class="post-image">
-                            <img src="${post.imageUrl}" alt="Post image">
+                            <img src="${post.imageUrl}" alt="Post image" loading="lazy" decoding="async">
                         </div>
                     ` : ''}
                     <div class="post-actions">
@@ -6954,8 +6976,22 @@ async function submitReport() {
 // PROFILE - Carregar perfil do backend
 // =============================================
 let cachedProfile = null;
+const PROFILE_CACHE_KEY = 'profileCache';
+const PROFILE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+/**
+ * Load profile with cache-first strategy
+ * Shows cached data immediately, then updates from API in background
+ */
 async function loadProfile() {
+    // STEP 1: Show cached data IMMEDIATELY (no waiting)
+    const cached = getProfileFromCache();
+    if (cached) {
+        cachedProfile = cached;
+        renderProfile(cached);
+    }
+
+    // STEP 2: Fetch fresh data from API in background
     try {
         const response = await fetch(`${API_URL}/api/mobile/profile`, {
             headers: {
@@ -6970,16 +7006,68 @@ async function loadProfile() {
             checkForRoleEvolution(data.data);
 
             cachedProfile = data.data;
-            // Atualizar localStorage com dados atualizados
-            localStorage.setItem('user', JSON.stringify(data.data));
-            renderProfile(data.data);
+
+            // Save to cache
+            saveProfileToCache(data.data);
+
+            // Only re-render if data changed
+            if (hasProfileChanged(cached, data.data)) {
+                renderProfile(data.data);
+            }
         }
     } catch (error) {
         console.error('Erro ao carregar perfil:', error);
-        // Usar dados do localStorage como fallback
-        const user = getCurrentUser();
-        if (user) renderProfile(user);
+        // Cached data already shown, just log error
+        if (!cached) {
+            const user = getCurrentUser();
+            if (user) renderProfile(user);
+        }
     }
+}
+
+/**
+ * Get profile from localStorage cache
+ */
+function getProfileFromCache() {
+    try {
+        const cacheData = localStorage.getItem(PROFILE_CACHE_KEY);
+        if (!cacheData) return null;
+
+        const { profile, timestamp } = JSON.parse(cacheData);
+        const age = Date.now() - timestamp;
+
+        // Return even if stale (we'll update in background)
+        // But if very old (>1 hour), prefer fresh fetch
+        if (age > 60 * 60 * 1000) return null;
+
+        return profile;
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
+ * Save profile to localStorage cache
+ */
+function saveProfileToCache(profile) {
+    try {
+        const cacheData = {
+            profile,
+            timestamp: Date.now()
+        };
+        localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(cacheData));
+        localStorage.setItem('user', JSON.stringify(profile));
+    } catch (e) {
+        console.log('Failed to cache profile:', e);
+    }
+}
+
+/**
+ * Check if profile data has changed (to avoid unnecessary re-renders)
+ */
+function hasProfileChanged(oldProfile, newProfile) {
+    if (!oldProfile) return true;
+    return JSON.stringify(oldProfile) !== JSON.stringify(newProfile);
 }
 
 function renderProfile(profile, bustCache = false) {

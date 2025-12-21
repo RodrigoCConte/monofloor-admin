@@ -1,21 +1,222 @@
 /**
  * Service Worker for Monofloor Equipes
- * Handles push notifications and background sync
+ * Handles push notifications, background sync, and IMAGE CACHING
  */
 
-const CACHE_NAME = 'monofloor-v2'; // Updated to force SW refresh
+const CACHE_NAME = 'monofloor-v3'; // Bump version to force cache refresh
+const IMAGE_CACHE_NAME = 'monofloor-images-v1';
+const API_CACHE_NAME = 'monofloor-api-v1';
 
-// Install event
+// URLs to precache (static assets)
+const PRECACHE_URLS = [
+    '/icons/icon-192.png',
+    '/icons/badge-72.png',
+    '/logo.png'
+];
+
+// Install event - precache static assets
 self.addEventListener('install', (event) => {
     console.log('[SW] Installing service worker...');
-    self.skipWaiting();
+    event.waitUntil(
+        caches.open(CACHE_NAME)
+            .then(cache => {
+                console.log('[SW] Precaching static assets');
+                return cache.addAll(PRECACHE_URLS).catch(err => {
+                    console.log('[SW] Precache failed (non-critical):', err);
+                });
+            })
+            .then(() => self.skipWaiting())
+    );
 });
 
-// Activate event
+// Activate event - cleanup old caches
 self.addEventListener('activate', (event) => {
     console.log('[SW] Activating service worker...');
-    event.waitUntil(clients.claim());
+    event.waitUntil(
+        caches.keys().then(cacheNames => {
+            return Promise.all(
+                cacheNames.map(cacheName => {
+                    // Keep current caches, delete old versions
+                    if (cacheName !== CACHE_NAME &&
+                        cacheName !== IMAGE_CACHE_NAME &&
+                        cacheName !== API_CACHE_NAME &&
+                        cacheName.startsWith('monofloor')) {
+                        console.log('[SW] Deleting old cache:', cacheName);
+                        return caches.delete(cacheName);
+                    }
+                })
+            );
+        }).then(() => clients.claim())
+    );
 });
+
+// Fetch event - cache images and profile photos
+self.addEventListener('fetch', (event) => {
+    const url = new URL(event.request.url);
+
+    // Only handle GET requests
+    if (event.request.method !== 'GET') return;
+
+    // Cache images (profile photos, badges, feed images, etc.)
+    if (isImageRequest(event.request)) {
+        event.respondWith(cacheFirstImage(event.request));
+        return;
+    }
+
+    // Cache API responses for profile data (short TTL)
+    if (isProfileApiRequest(url)) {
+        event.respondWith(staleWhileRevalidate(event.request, API_CACHE_NAME, 5 * 60 * 1000)); // 5 min TTL
+        return;
+    }
+});
+
+/**
+ * Check if request is for an image
+ */
+function isImageRequest(request) {
+    const url = request.url.toLowerCase();
+    const acceptHeader = request.headers.get('Accept') || '';
+
+    // Check file extensions
+    if (url.match(/\.(jpg|jpeg|png|gif|webp|svg|ico)(\?.*)?$/)) {
+        return true;
+    }
+
+    // Check Accept header for images
+    if (acceptHeader.includes('image/')) {
+        return true;
+    }
+
+    // Check for common image hosting patterns
+    if (url.includes('/uploads/') ||
+        url.includes('/photos/') ||
+        url.includes('/avatars/') ||
+        url.includes('/badges/') ||
+        url.includes('/icons/') ||
+        url.includes('cloudinary.com') ||
+        url.includes('imgur.com') ||
+        url.includes('googleusercontent.com')) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Check if request is for profile API
+ */
+function isProfileApiRequest(url) {
+    return url.pathname.includes('/api/mobile/profile') ||
+           url.pathname.includes('/api/mobile/feed');
+}
+
+/**
+ * Cache-first strategy for images
+ * Returns cached version immediately, updates cache in background
+ */
+async function cacheFirstImage(request) {
+    const cache = await caches.open(IMAGE_CACHE_NAME);
+    const cachedResponse = await cache.match(request);
+
+    if (cachedResponse) {
+        // Return cached immediately, update in background
+        updateCacheInBackground(request, cache);
+        return cachedResponse;
+    }
+
+    // Not in cache, fetch and cache
+    try {
+        const networkResponse = await fetch(request);
+        if (networkResponse.ok) {
+            // Clone before caching (response can only be used once)
+            cache.put(request, networkResponse.clone());
+        }
+        return networkResponse;
+    } catch (error) {
+        console.log('[SW] Image fetch failed:', request.url);
+        // Return a placeholder or empty response
+        return new Response('', { status: 404 });
+    }
+}
+
+/**
+ * Update cache in background without blocking
+ */
+function updateCacheInBackground(request, cache) {
+    fetch(request).then(response => {
+        if (response.ok) {
+            cache.put(request, response);
+        }
+    }).catch(() => {
+        // Ignore errors - cached version is still valid
+    });
+}
+
+/**
+ * Stale-while-revalidate strategy for API data
+ * Returns cached version immediately (if fresh), updates in background
+ */
+async function staleWhileRevalidate(request, cacheName, maxAge) {
+    const cache = await caches.open(cacheName);
+    const cachedResponse = await cache.match(request);
+
+    // Check if cached response is still fresh
+    if (cachedResponse) {
+        const cachedDate = new Date(cachedResponse.headers.get('sw-cached-at') || 0);
+        const age = Date.now() - cachedDate.getTime();
+
+        if (age < maxAge) {
+            // Fresh cache - return it and update in background
+            updateApiCacheInBackground(request, cache);
+            return cachedResponse;
+        }
+    }
+
+    // Stale or no cache - fetch fresh
+    try {
+        const networkResponse = await fetch(request);
+        if (networkResponse.ok) {
+            // Add timestamp header for freshness check
+            const headers = new Headers(networkResponse.headers);
+            headers.set('sw-cached-at', new Date().toISOString());
+
+            const responseToCache = new Response(await networkResponse.clone().blob(), {
+                status: networkResponse.status,
+                statusText: networkResponse.statusText,
+                headers: headers
+            });
+            cache.put(request, responseToCache);
+        }
+        return networkResponse;
+    } catch (error) {
+        // Network failed - return stale cache if available
+        if (cachedResponse) {
+            return cachedResponse;
+        }
+        throw error;
+    }
+}
+
+/**
+ * Update API cache in background
+ */
+function updateApiCacheInBackground(request, cache) {
+    fetch(request).then(async response => {
+        if (response.ok) {
+            const headers = new Headers(response.headers);
+            headers.set('sw-cached-at', new Date().toISOString());
+
+            const responseToCache = new Response(await response.blob(), {
+                status: response.status,
+                statusText: response.statusText,
+                headers: headers
+            });
+            cache.put(request, responseToCache);
+        }
+    }).catch(() => {
+        // Ignore errors
+    });
+}
 
 // Push event - handle incoming push notifications
 self.addEventListener('push', (event) => {
