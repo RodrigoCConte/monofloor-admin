@@ -9387,7 +9387,7 @@ async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
             // Check if report is required NOW
             if (data.data?.requiresReport) {
                 // Navigate to report screen immediately
-                closeReportReminderModal();
+                hideReportReminderModal();
                 closeTaskCompletionModal();
                 navigateTo('report');
                 showSuccessModal('Relatorio Obrigatorio', 'Por favor, envie seu relatorio antes de finalizar.');
