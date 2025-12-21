@@ -199,7 +199,8 @@ export async function getUserAbsences(userId: string): Promise<any[]> {
 }
 
 /**
- * Get upcoming available dates for absence notice (next 5 days by default)
+ * Get upcoming available dates for absence notice
+ * Includes today and all days (including weekends)
  */
 export function getAvailableDates(count: number = 5, offset: number = 0): Date[] {
   const dates: Date[] = [];
@@ -208,7 +209,7 @@ export function getAvailableDates(count: number = 5, offset: number = 0): Date[]
 
   for (let i = offset; i < offset + count; i++) {
     const date = new Date(today);
-    date.setDate(date.getDate() + i + 1); // Start from tomorrow
+    date.setDate(date.getDate() + i); // Start from today (includes weekends)
     dates.push(date);
   }
 
