@@ -6778,18 +6778,29 @@ async function submitReport() {
         const data = await response.json();
 
         if (data.success) {
-            showSuccessModal('Relatório Enviado!', 'O relatório foi enviado para o time do projeto.');
-
             // Limpar form
             if (notesEl) notesEl.value = '';
             document.querySelectorAll('.tag-item.selected').forEach(tag => {
                 tag.classList.remove('selected');
             });
 
-            // Voltar para detalhes do projeto
+            // Se o usuário ainda está checado, fazer checkout automático
+            if (isCheckedIn && activeCheckinId) {
+                try {
+                    await doCheckoutWithTasksAndReminder('REPORT_SENT');
+                    showSuccessModal('Relatório Enviado!', 'Relatório enviado e checkout realizado com sucesso.');
+                } catch (checkoutError) {
+                    console.error('Erro no checkout após relatório:', checkoutError);
+                    showSuccessModal('Relatório Enviado!', 'Relatório enviado. Checkout pendente.');
+                }
+            } else {
+                showSuccessModal('Relatório Enviado!', 'O relatório foi enviado para o time do projeto.');
+            }
+
+            // Voltar para tela de projetos
             setTimeout(() => {
                 closeModal();
-                navigateTo('screen-project-detail');
+                navigateTo('screen-projects');
             }, 1500);
         } else {
             throw new Error(data.error?.message || 'Erro ao enviar relatório');
@@ -9235,14 +9246,18 @@ function hideReportReminderModal() {
 
 /**
  * Go to report screen (user chose "Enviar agora")
+ * Does NOT complete checkout - user stays checked in while writing report
  */
-async function goToReportScreen() {
+function goToReportScreen() {
     hideReportReminderModal();
 
-    // Complete checkout with tasks and reportOption = NOW
-    await doCheckoutWithTasksAndReminder('NOW');
+    // Close the leaving modal if open
+    const leavingModal = document.getElementById('leavingModal');
+    if (leavingModal) {
+        leavingModal.classList.remove('active');
+    }
 
-    // Navigate to report screen
+    // Navigate to report screen (user remains checked in)
     navigateTo('screen-report');
 }
 
