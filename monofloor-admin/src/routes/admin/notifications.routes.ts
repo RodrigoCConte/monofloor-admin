@@ -1,34 +1,17 @@
 import { Router } from 'express';
 import { body, param, query, validationResult } from 'express-validator';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import { PrismaClient } from '@prisma/client';
 import { adminAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
+import { saveFile, deleteFile, UploadType } from '../../services/db-storage.service';
 
 const router = Router();
 const prisma = new PrismaClient();
 
-// Ensure uploads directory for notification videos exists
-const notificationUploadsDir = path.join(__dirname, '../../../uploads/notifications');
-if (!fs.existsSync(notificationUploadsDir)) {
-  fs.mkdirSync(notificationUploadsDir, { recursive: true });
-}
-
-// Multer configuration for notification videos
-const notificationStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, notificationUploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'notification-' + uniqueSuffix + path.extname(file.originalname));
-  },
-});
-
+// Multer configuration with memory storage (videos saved to PostgreSQL)
 const uploadNotificationVideo = multer({
-  storage: notificationStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
@@ -227,13 +210,19 @@ router.post(
         throw new AppError('Nenhum video enviado', 400, 'NO_FILE');
       }
 
-      const videoUrl = `/uploads/notifications/${req.file.filename}`;
+      // Save to PostgreSQL
+      const saved = await saveFile({
+        filename: req.file.originalname,
+        mimetype: req.file.mimetype,
+        data: req.file.buffer,
+        type: 'NOTIFICATION' as UploadType,
+      });
 
       res.json({
         success: true,
         data: {
-          url: videoUrl,
-          filename: req.file.filename,
+          url: saved.url,
+          filename: saved.filename,
           size: req.file.size,
         },
       });
@@ -316,12 +305,10 @@ router.delete(
         throw new AppError('Notificacao nao encontrada', 404, 'NOT_FOUND');
       }
 
-      // Delete video file if exists
-      if (notification.videoUrl && notification.videoUrl.startsWith('/uploads/notifications/')) {
-        const videoPath = path.join(__dirname, '../../..', notification.videoUrl);
-        if (fs.existsSync(videoPath)) {
-          fs.unlinkSync(videoPath);
-        }
+      // Delete video file from database if exists
+      if (notification.videoUrl && notification.videoUrl.startsWith('/files/')) {
+        const fileId = notification.videoUrl.replace('/files/', '');
+        await deleteFile(fileId);
       }
 
       await prisma.notification.delete({

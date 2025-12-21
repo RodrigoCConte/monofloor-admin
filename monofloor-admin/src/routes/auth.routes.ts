@@ -5,41 +5,12 @@ import { hashPassword, comparePassword } from '../utils/password';
 import { generateAdminToken, generateMobileToken } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
+import { saveProfilePhoto, saveDocument } from '../services/db-storage.service';
 
 const router = Router();
 const prisma = new PrismaClient();
 
-// Configure upload directories
-const uploadsDir = path.join(__dirname, '../../uploads');
-const profilePhotosDir = path.join(uploadsDir, 'profile-photos');
-const documentsDir = path.join(uploadsDir, 'documents');
-
-// Create directories if they don't exist
-[uploadsDir, profilePhotosDir, documentsDir].forEach(dir => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-});
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    if (file.fieldname === 'profilePhoto') {
-      cb(null, profilePhotosDir);
-    } else if (file.fieldname === 'document') {
-      cb(null, documentsDir);
-    } else {
-      cb(null, uploadsDir);
-    }
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
+// Configure multer for memory storage (files saved to PostgreSQL)
 const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'application/pdf'];
   if (allowedTypes.includes(file.mimetype)) {
@@ -50,7 +21,7 @@ const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCa
 };
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(), // Use memory storage for PostgreSQL
   fileFilter,
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB max
@@ -251,19 +222,12 @@ router.post(
 
       const passwordHash = await hashPassword(password);
 
-      // Get uploaded file paths
+      // Get uploaded files from memory
       const files = req.files as { [fieldname: string]: Express.Multer.File[] };
       const profilePhotoFile = files?.profilePhoto?.[0];
       const documentFile = files?.document?.[0];
 
-      // Generate URLs for files
-      const photoUrl = profilePhotoFile
-        ? `/uploads/profile-photos/${profilePhotoFile.filename}`
-        : null;
-      const documentUrl = documentFile
-        ? `/uploads/documents/${documentFile.filename}`
-        : null;
-
+      // Create user first (needed for file association)
       const user = await prisma.user.create({
         data: {
           email: email.toLowerCase(),
@@ -272,11 +236,32 @@ router.post(
           username,
           phone: phone || null,
           cpf: cpf ? cpf.replace(/\D/g, '') : null,
-          photoUrl,
-          documentUrl,
           status: 'PENDING_APPROVAL', // Needs admin approval
         },
       });
+
+      // Save files to PostgreSQL and get URLs
+      let photoUrl: string | null = null;
+      let documentUrl: string | null = null;
+
+      if (profilePhotoFile) {
+        photoUrl = await saveProfilePhoto(user.id, profilePhotoFile);
+      }
+
+      if (documentFile) {
+        documentUrl = await saveDocument(user.id, documentFile);
+      }
+
+      // Update user with file URLs
+      if (photoUrl || documentUrl) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            photoUrl,
+            documentUrl,
+          },
+        });
+      }
 
       res.status(201).json({
         success: true,

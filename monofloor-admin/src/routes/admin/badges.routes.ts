@@ -2,33 +2,16 @@ import { Router } from 'express';
 import { PrismaClient, BadgeCategory, BadgeRarity } from '@prisma/client';
 import { body, param, query, validationResult } from 'express-validator';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import { adminAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
+import { saveFile, UploadType } from '../../services/db-storage.service';
 
 const router = Router();
 const prisma = new PrismaClient();
 
-// Ensure uploads directory for badges exists
-const badgesUploadsDir = path.join(__dirname, '../../../uploads/badges');
-if (!fs.existsSync(badgesUploadsDir)) {
-  fs.mkdirSync(badgesUploadsDir, { recursive: true });
-}
-
-// Multer configuration for badge icons
-const badgeStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, badgesUploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'badge-' + uniqueSuffix + path.extname(file.originalname));
-  },
-});
-
+// Multer configuration with memory storage (files saved to PostgreSQL)
 const uploadBadgeIcon = multer({
-  storage: badgeStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
@@ -353,13 +336,19 @@ router.post(
         throw new AppError('Nenhum arquivo enviado', 400, 'NO_FILE');
       }
 
-      const fileUrl = `/uploads/badges/${req.file.filename}`;
+      // Save to PostgreSQL
+      const saved = await saveFile({
+        filename: req.file.originalname,
+        mimetype: req.file.mimetype,
+        data: req.file.buffer,
+        type: 'BADGE' as UploadType,
+      });
 
       res.json({
         success: true,
         data: {
-          url: fileUrl,
-          filename: req.file.filename,
+          url: saved.url,
+          filename: saved.filename,
         },
         message: 'Icone enviado com sucesso!',
       });

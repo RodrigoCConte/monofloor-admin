@@ -1490,3 +1490,44 @@ model LunchBreakAlert {
   @@index([checkinId])
   @@map("lunch_break_alerts")
 }
+
+// =============================================
+// UPLOADS (Arquivos armazenados no PostgreSQL)
+// =============================================
+model Upload {
+  id          String      @id @default(uuid())
+
+  // File metadata
+  filename    String                          // Nome original do arquivo
+  mimetype    String                          // Tipo MIME (image/png, etc)
+  size        Int                             // Tamanho em bytes
+
+  // File content stored as binary
+  data        Bytes                           // Conteúdo binário do arquivo
+
+  // Categorization
+  type        UploadType  @default(OTHER)     // Tipo de upload
+
+  // Optional references
+  userId      String?     @map("user_id")     // Usuário dono (se aplicável)
+  entityId    String?     @map("entity_id")   // ID da entidade relacionada (badge, campaign, etc)
+
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@index([type])
+  @@index([userId])
+  @@index([entityId])
+  @@map("uploads")
+}
+
+enum UploadType {
+  PROFILE_PHOTO     // Foto de perfil do usuário
+  DOCUMENT          // Documento de identidade
+  BADGE             // Ícone de badge/conquista
+  CAMPAIGN          // Mídia de campanha (banner, slides)
+  FEED              // Imagens de posts do feed
+  REPORT            // Fotos de relatórios
+  NOTIFICATION      // Vídeos de notificações
+  HELP_REQUEST      // Arquivos de solicitações de ajuda
+  OTHER             // Outros
+}

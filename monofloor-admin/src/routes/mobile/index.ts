@@ -4,8 +4,6 @@ import { body, param, query, validationResult } from 'express-validator';
 import { mobileAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import { getGeofenceStatus, calculateDistance } from '../../services/geofencing.service';
 import {
   emitLocationUpdate,
@@ -19,29 +17,14 @@ import {
 import { isLunchTime } from '../../services/lunch-scheduler.service';
 import { sendRequestNotification } from '../../services/whatsapp.service';
 import { whisperService } from '../../services/ai/whisper.service';
+import { saveFile, deleteFile, UploadType } from '../../services/db-storage.service';
 
 const router = Router();
 const prisma = new PrismaClient();
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../../../uploads/profile-photos');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Multer configuration for profile photo upload
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'profile-' + uniqueSuffix + path.extname(file.originalname));
-  },
-});
-
+// Multer configuration with memory storage (files saved to PostgreSQL)
 const uploadProfilePhoto = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
@@ -180,21 +163,26 @@ router.put(
 
       // Handle profile photo upload
       if (req.file) {
-        const photoUrl = `/uploads/profile-photos/${req.file.filename}`;
-        updateData.photoUrl = photoUrl;
-
-        // Delete old photo if exists
+        // Delete old photo from database if exists
         const currentUser = await prisma.user.findUnique({
           where: { id: req.user!.sub },
           select: { photoUrl: true },
         });
 
-        if (currentUser?.photoUrl && currentUser.photoUrl.startsWith('/uploads/')) {
-          const oldPhotoPath = path.join(__dirname, '../../..', currentUser.photoUrl);
-          if (fs.existsSync(oldPhotoPath)) {
-            fs.unlinkSync(oldPhotoPath);
-          }
+        if (currentUser?.photoUrl && currentUser.photoUrl.startsWith('/files/')) {
+          const oldFileId = currentUser.photoUrl.replace('/files/', '');
+          await deleteFile(oldFileId);
         }
+
+        // Save new photo to PostgreSQL
+        const saved = await saveFile({
+          filename: req.file.originalname,
+          mimetype: req.file.mimetype,
+          data: req.file.buffer,
+          type: 'PROFILE_PHOTO' as UploadType,
+          userId: req.user!.sub,
+        });
+        updateData.photoUrl = saved.url;
       }
 
       const user = await prisma.user.update({
@@ -1757,26 +1745,9 @@ router.put('/location/offline', mobileAuth, async (req, res, next) => {
 // HELP REQUESTS (Material ou Ajuda)
 // =============================================
 
-// Ensure uploads directory for help requests exists
-const helpRequestsUploadsDir = path.join(__dirname, '../../../uploads/help-requests');
-if (!fs.existsSync(helpRequestsUploadsDir)) {
-  fs.mkdirSync(helpRequestsUploadsDir, { recursive: true });
-}
-
-// Multer configuration for help request files
-const helpRequestStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, helpRequestsUploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const prefix = file.fieldname === 'audio' ? 'audio-' : 'video-';
-    cb(null, prefix + uniqueSuffix + path.extname(file.originalname));
-  },
-});
-
+// Multer configuration for help request files (memory storage for PostgreSQL)
 const uploadHelpRequest = multer({
-  storage: helpRequestStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit for video
   fileFilter: (req, file, cb) => {
     const allowedAudioTypes = ['audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/ogg'];
@@ -1829,18 +1800,41 @@ router.post(
         });
       }
 
-      // Get file URLs
+      // Get files and save to PostgreSQL
       const audioFile = files?.audio?.[0];
       const videoFile = files?.video?.[0];
-      const audioUrl = audioFile ? `/uploads/help-requests/${audioFile.filename}` : null;
-      const videoUrl = videoFile ? `/uploads/help-requests/${videoFile.filename}` : null;
+
+      let audioUrl: string | null = null;
+      let videoUrl: string | null = null;
+
+      if (audioFile) {
+        const savedAudio = await saveFile({
+          filename: audioFile.originalname,
+          mimetype: audioFile.mimetype,
+          data: audioFile.buffer,
+          type: 'HELP_REQUEST' as UploadType,
+          userId,
+        });
+        audioUrl = savedAudio.url;
+      }
+
+      if (videoFile) {
+        const savedVideo = await saveFile({
+          filename: videoFile.originalname,
+          mimetype: videoFile.mimetype,
+          data: videoFile.buffer,
+          type: 'HELP_REQUEST' as UploadType,
+          userId,
+        });
+        videoUrl = savedVideo.url;
+      }
 
       // Transcribe audio automatically if no transcription provided
       let finalAudioTranscription = audioTranscription || null;
       if (audioFile && !audioTranscription) {
         try {
-          console.log(`[Whisper] Transcribing audio: ${audioFile.path}`);
-          const transcriptionResult = await whisperService.transcribeAudio(audioFile.path);
+          console.log(`[Whisper] Transcribing audio from buffer`);
+          const transcriptionResult = await whisperService.transcribeFromBuffer(audioFile.buffer, audioFile.originalname);
           finalAudioTranscription = transcriptionResult.text;
           console.log(`[Whisper] Transcription complete: "${finalAudioTranscription?.substring(0, 100)}..."`);
         } catch (transcriptionError) {
@@ -2519,25 +2513,9 @@ router.post(
 // FEED POSTS (Social feed)
 // =============================================
 
-// Ensure uploads directory for feed images exists
-const feedUploadsDir = path.join(__dirname, '../../../uploads/feed');
-if (!fs.existsSync(feedUploadsDir)) {
-  fs.mkdirSync(feedUploadsDir, { recursive: true });
-}
-
-// Multer configuration for feed images
-const feedStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, feedUploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'feed-' + uniqueSuffix + path.extname(file.originalname));
-  },
-});
-
+// Multer configuration for feed images (memory storage for PostgreSQL)
 const uploadFeedImage = multer({
-  storage: feedStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -2662,20 +2640,39 @@ router.post(
         });
       }
 
-      // Handle image
+      // Handle image - save to PostgreSQL
       let imageUrl: string | null = null;
       if (req.file) {
-        imageUrl = `/uploads/feed/${req.file.filename}`;
+        const savedImage = await saveFile({
+          filename: req.file.originalname,
+          mimetype: req.file.mimetype,
+          data: req.file.buffer,
+          type: 'FEED' as UploadType,
+          userId,
+        });
+        imageUrl = savedImage.url;
       } else if (imageBase64) {
-        // Save base64 image to file
+        // Save base64 image to PostgreSQL
         const matches = imageBase64.match(/^data:image\/([a-z]+);base64,(.+)$/i);
         if (matches) {
           const ext = matches[1];
           const data = matches[2];
-          const filename = `feed-${Date.now()}-${Math.round(Math.random() * 1e9)}.${ext}`;
-          const filepath = path.join(feedUploadsDir, filename);
-          fs.writeFileSync(filepath, Buffer.from(data, 'base64'));
-          imageUrl = `/uploads/feed/${filename}`;
+          const filename = `feed-${Date.now()}.${ext}`;
+          const mimeMap: Record<string, string> = {
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'gif': 'image/gif',
+            'webp': 'image/webp',
+          };
+          const savedImage = await saveFile({
+            filename,
+            mimetype: mimeMap[ext.toLowerCase()] || `image/${ext}`,
+            data: Buffer.from(data, 'base64'),
+            type: 'FEED' as UploadType,
+            userId,
+          });
+          imageUrl = savedImage.url;
         }
       }
 
@@ -2746,12 +2743,10 @@ router.delete(
         throw new AppError('Voce nao pode deletar este post', 403, 'FORBIDDEN');
       }
 
-      // Delete image file if exists
-      if (post.imageUrl && post.imageUrl.startsWith('/uploads/feed/')) {
-        const imagePath = path.join(__dirname, '../../..', post.imageUrl);
-        if (fs.existsSync(imagePath)) {
-          fs.unlinkSync(imagePath);
-        }
+      // Delete image file from database if exists
+      if (post.imageUrl && post.imageUrl.startsWith('/files/')) {
+        const fileId = post.imageUrl.replace('/files/', '');
+        await deleteFile(fileId);
       }
 
       await prisma.feedPost.delete({

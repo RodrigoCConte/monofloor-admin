@@ -3,12 +3,13 @@ import cors from 'cors';
 import path from 'path';
 import { config } from './config';
 
-// Force rebuild: 2024-12-18T02:45:00Z
+// Force rebuild: 2024-12-21T01:15:00Z - PostgreSQL file storage
 import { errorHandler } from './middleware/errorHandler';
 import { authRoutes } from './routes/auth.routes';
 import { adminRoutes } from './routes/admin';
 import { mobileRoutes } from './routes/mobile';
 import proposalsRoutes from './routes/proposals.routes';
+import filesRoutes from './routes/files.routes';
 
 const app = express();
 
@@ -59,6 +60,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/mobile', mobileRoutes);
 app.use('/api/proposals', proposalsRoutes);
+
+// File serving from PostgreSQL database
+app.use('/files', filesRoutes);
 
 // Error handling
 app.use(errorHandler);
