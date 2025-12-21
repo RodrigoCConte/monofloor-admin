@@ -582,13 +582,13 @@ const TIMELINE_STORE_NAME = 'timelineEvents'; // New: stores 24h movement timeli
 let locationDB = null;
 let gpsOffStartTime = null; // Track when GPS was turned off
 let gpsAlertShown = false; // Track if persistent alert is shown
-let gpsWarningDismissCount = 0; // Counter for GPS warning dismissals (max 3 before auto-checkout)
-const GPS_MAX_WARNINGS = 3; // Maximum warnings before forced checkout
+let gpsCheckoutInProgress = false; // Prevent multiple checkout attempts
 
-// GPS Background Verification - Double check system
+// GPS Auto-Checkout: 1 minute with GPS off = automatic checkout
+// SIMPLIFIED RULE: No warnings, just immediate checkout after 1 minute
 let gpsVerificationInterval = null;
-const GPS_VERIFICATION_INTERVAL = 60 * 1000; // Check every 1 minute
-const GPS_MAX_OFF_DURATION = 5 * 60 * 1000; // 5 minutes - force checkout after this
+const GPS_VERIFICATION_INTERVAL = 10 * 1000; // Check every 10 seconds for responsiveness
+const GPS_MAX_OFF_DURATION = 60 * 1000; // 1 minute - force checkout after this (no exceptions)
 
 // =============================================
 // ACCELEROMETER & MOVEMENT TRACKING (when NOT checked-in)
@@ -10731,9 +10731,9 @@ function startForcedCheckoutRetry() {
 }
 
 /**
- * Start GPS background verification - DOUBLE CHECK SYSTEM
- * Runs every minute to ensure GPS status is monitored
- * Forces checkout if GPS is off for more than 5 minutes with active checkin
+ * Start GPS background verification - SIMPLIFIED RULE
+ * Checks every 10 seconds. If GPS is off for 1 minute = automatic checkout
+ * NO WARNINGS - Just immediate checkout with notification
  */
 function startGPSBackgroundVerification() {
     // Clear existing interval if any
@@ -10741,66 +10741,184 @@ function startGPSBackgroundVerification() {
         clearInterval(gpsVerificationInterval);
     }
 
-    console.log('[GPS Verification] Starting background verification');
+    console.log('[GPS Verification] Starting - 1 minute rule active');
+    gpsCheckoutInProgress = false;
 
     gpsVerificationInterval = setInterval(async () => {
-        // Only verify if user has active check-in
-        if (!activeCheckinId || !isCheckedIn) {
+        // Only verify if user has active check-in and not already processing
+        if (!activeCheckinId || !isCheckedIn || gpsCheckoutInProgress) {
             return;
         }
 
         // Check current GPS permission status
         const currentStatus = await checkLocationPermission();
-        console.log(`[GPS Verification] Status: ${currentStatus}, gpsOffStartTime: ${gpsOffStartTime}`);
 
         if (currentStatus !== 'granted') {
             // GPS is not available
             if (!gpsOffStartTime) {
-                // Just turned off - record start time
+                // Just turned off - start the 1 minute countdown
                 gpsOffStartTime = Date.now();
-                console.log('[GPS Verification] GPS just turned off, recording start time');
+                console.log('[GPS] Localização DESLIGADA - iniciando contagem de 1 minuto');
+
+                // Show immediate warning
+                showToast('⚠️ Localização desligada! Checkout automático em 1 minuto.', 'warning');
             } else {
                 // Calculate how long GPS has been off
                 const offDuration = Date.now() - gpsOffStartTime;
-                console.log(`[GPS Verification] GPS off for ${Math.round(offDuration / 1000)}s`);
+                const secondsLeft = Math.max(0, Math.ceil((GPS_MAX_OFF_DURATION - offDuration) / 1000));
 
-                if (offDuration >= GPS_MAX_OFF_DURATION) {
-                    // GPS has been off too long - force checkout
-                    console.log('[GPS Verification] GPS off too long - FORCING checkout');
+                console.log(`[GPS] Localização off há ${Math.round(offDuration / 1000)}s (${secondsLeft}s restantes)`);
+
+                if (offDuration >= GPS_MAX_OFF_DURATION && !gpsCheckoutInProgress) {
+                    // 1 MINUTE REACHED - FORCE CHECKOUT IMMEDIATELY
+                    gpsCheckoutInProgress = true;
+                    console.log('[GPS] ⚠️ 1 MINUTO ATINGIDO - CHECKOUT AUTOMÁTICO AGORA');
 
                     // Log critical event
-                    await logTimelineEvent('GPS_TIMEOUT_CHECKOUT', {
+                    await logTimelineEvent('GPS_AUTO_CHECKOUT', {
                         offDuration: offDuration,
-                        maxDuration: GPS_MAX_OFF_DURATION,
-                        warningsDismissed: gpsWarningDismissCount
+                        rule: '1 minute GPS off = auto checkout'
                     });
 
-                    // Show notification
-                    showToast('GPS desativado por muito tempo. Realizando checkout automático.', 'warning');
-
-                    // Force checkout with retry
-                    const success = await forceGPSCheckout();
-
-                    if (success) {
-                        console.log('[GPS Verification] Forced checkout SUCCESS');
-                        gpsOffStartTime = null;
-                        gpsWarningDismissCount = 0;
-                    } else {
-                        // Start retry loop
-                        console.log('[GPS Verification] Forced checkout FAILED - starting retry');
-                        startForcedCheckoutRetry();
-                    }
+                    // Execute checkout with full notification
+                    await executeGPSAutoCheckout();
                 }
             }
         } else {
             // GPS is back on - reset timer
             if (gpsOffStartTime) {
-                console.log('[GPS Verification] GPS restored - resetting timer');
+                console.log('[GPS] Localização RESTAURADA - timer resetado');
                 gpsOffStartTime = null;
-                gpsWarningDismissCount = 0;
+                showToast('✅ Localização ativada!', 'success');
             }
         }
     }, GPS_VERIFICATION_INTERVAL);
+}
+
+/**
+ * Execute automatic checkout due to GPS being off for 1 minute
+ * Shows prominent notification and does checkout
+ */
+async function executeGPSAutoCheckout() {
+    const checkoutMessage = 'Seu check-out automático foi realizado e suas horas no projeto não serão computadas.';
+
+    // Show in-app modal (prominent, can't be missed)
+    showGPSCheckoutModal(checkoutMessage);
+
+    // Try to show device notification
+    await sendGPSCheckoutNotification(checkoutMessage);
+
+    // Execute the actual checkout
+    try {
+        const success = await forceGPSCheckout();
+
+        if (success) {
+            console.log('[GPS Checkout] SUCCESS - checkout completed');
+            gpsOffStartTime = null;
+            gpsCheckoutInProgress = false;
+        } else {
+            // Retry with more aggressive approach
+            console.log('[GPS Checkout] First attempt failed - retrying...');
+
+            // Wait 2 seconds and try again
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            const retrySuccess = await forceGPSCheckout();
+
+            if (retrySuccess) {
+                console.log('[GPS Checkout] Retry SUCCESS');
+            } else {
+                // Force local state clear as last resort
+                console.log('[GPS Checkout] Forcing local state clear');
+                isCheckedIn = false;
+                activeCheckinId = null;
+                currentProjectForCheckin = null;
+                pendingCheckoutReason = null;
+                updateCheckinUI(false);
+                stopGPSBackgroundVerification();
+            }
+
+            gpsOffStartTime = null;
+            gpsCheckoutInProgress = false;
+        }
+    } catch (error) {
+        console.error('[GPS Checkout] Error:', error);
+        // Force local clear on error
+        isCheckedIn = false;
+        activeCheckinId = null;
+        currentProjectForCheckin = null;
+        pendingCheckoutReason = null;
+        updateCheckinUI(false);
+        gpsOffStartTime = null;
+        gpsCheckoutInProgress = false;
+    }
+}
+
+/**
+ * Show prominent modal for GPS auto-checkout
+ */
+function showGPSCheckoutModal(message) {
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('gps-checkout-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'gps-checkout-modal';
+        modal.className = 'gps-checkout-modal';
+        modal.innerHTML = `
+            <div class="gps-checkout-content">
+                <div class="gps-checkout-icon">⚠️</div>
+                <h2>Check-out Automático</h2>
+                <p id="gps-checkout-message"></p>
+                <button onclick="closeGPSCheckoutModal()" class="btn-gps-checkout-ok">Entendi</button>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    document.getElementById('gps-checkout-message').textContent = message;
+    modal.style.display = 'flex';
+
+    // Auto-close after 10 seconds
+    setTimeout(() => {
+        closeGPSCheckoutModal();
+    }, 10000);
+}
+
+function closeGPSCheckoutModal() {
+    const modal = document.getElementById('gps-checkout-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+/**
+ * Send device push notification for GPS checkout
+ */
+async function sendGPSCheckoutNotification(message) {
+    try {
+        // Check if notifications are supported and permitted
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('Monofloor - Check-out Automático', {
+                body: message,
+                icon: '/logo.png',
+                tag: 'gps-checkout',
+                requireInteraction: true
+            });
+            console.log('[GPS] Device notification sent');
+        } else if ('Notification' in window && Notification.permission !== 'denied') {
+            // Request permission
+            const permission = await Notification.requestPermission();
+            if (permission === 'granted') {
+                new Notification('Monofloor - Check-out Automático', {
+                    body: message,
+                    icon: '/logo.png',
+                    tag: 'gps-checkout',
+                    requireInteraction: true
+                });
+            }
+        }
+    } catch (error) {
+        console.log('[GPS] Could not send device notification:', error);
+    }
 }
 
 /**
