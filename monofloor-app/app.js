@@ -2454,6 +2454,7 @@ async function doCheckoutWithReason(reason, showMessages = true) {
             isCheckedIn = false;
             activeCheckinId = null;
             currentProjectForCheckin = null;
+            pendingCheckoutReason = null; // Clear to prevent stale values
             updateCheckinUI(false);
 
             // Stop GPS background verification
@@ -3411,6 +3412,7 @@ async function executeAutoCheckout() {
             isCheckedIn = false;
             activeCheckinId = null;
             currentProjectForCheckin = null;
+            pendingCheckoutReason = null; // Clear stale values
 
             // Stop GPS background verification
             stopGPSBackgroundVerification();
@@ -3462,6 +3464,7 @@ async function doCheckoutWithReason(reason, isAutoCheckout = false) {
             isCheckedIn = false;
             activeCheckinId = null;
             currentProjectForCheckin = null;
+            pendingCheckoutReason = null; // Clear stale values
 
             // Stop GPS background verification
             stopGPSBackgroundVerification();
@@ -3673,6 +3676,7 @@ async function doCheckin() {
             currentProjectForCheckin = selectedProject.id;
             gpsWarningDismissCount = 0; // Reset GPS warning counter on new check-in
             gpsOffStartTime = null; // Reset GPS off timer on new check-in
+            pendingCheckoutReason = null; // Clear any stale checkout reason
             updateCheckinUI(true);
 
             // Mostrar XP ganho se disponível
@@ -3871,6 +3875,7 @@ async function confirmCheckout(reason) {
             isCheckedIn = false;
             activeCheckinId = null;
             currentProjectForCheckin = null;
+            pendingCheckoutReason = null; // Clear stale values
             updateCheckinUI(false);
 
             // Stop GPS background verification
@@ -9396,10 +9401,17 @@ async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
         // Map REPORT_SENT to SKIP since report was already sent (API only accepts NOW, LATER_60MIN, SKIP)
         const apiReportOption = isReportSent ? 'SKIP' : reportOption;
 
+        // IMPORTANT: Backend only accepts 'OUTRO_PROJETO' or 'FIM_EXPEDIENTE' as checkoutReason
+        // Use 'FIM_EXPEDIENTE' as default if pendingCheckoutReason is not valid
+        const validCheckoutReasons = ['OUTRO_PROJETO', 'FIM_EXPEDIENTE'];
+        const checkoutReasonToSend = validCheckoutReasons.includes(pendingCheckoutReason)
+            ? pendingCheckoutReason
+            : 'FIM_EXPEDIENTE';
+
         console.log('[CHECKOUT] Enviando para API:', {
             completedTaskIds: taskIdsToSend,
             taskCompletions: taskCompletionsArray.length,
-            checkoutReason: pendingCheckoutReason || 'FIM_EXPEDIENTE',
+            checkoutReason: checkoutReasonToSend,
             reportOption: apiReportOption
         });
 
@@ -9412,7 +9424,7 @@ async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
             body: JSON.stringify({
                 completedTaskIds: taskIdsToSend,
                 taskCompletions: taskCompletionsArray,
-                checkoutReason: pendingCheckoutReason || 'FIM_EXPEDIENTE',
+                checkoutReason: checkoutReasonToSend,
                 reportOption: apiReportOption,
                 latitude,
                 longitude
@@ -11575,6 +11587,7 @@ async function doCheckoutWithReason(reason) {
         if (data.success) {
             isCheckedIn = false;
             activeCheckinId = null;
+            pendingCheckoutReason = null; // Clear stale values
             updateCheckinUI(false);
 
             // Stop GPS background verification
