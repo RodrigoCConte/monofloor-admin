@@ -1802,6 +1802,7 @@ function showXPGain(amount, reason = '') {
             <div class="xp-icon">⭐</div>
             <div class="xp-amount">+${amount} XP</div>
             ${reason ? `<div class="xp-reason">${reason}</div>` : ''}
+            <button class="xp-gain-continue-btn">Continuar</button>
             <div class="xp-floaters">${floatersHtml}</div>
             <div class="xp-sparkles">${sparklesHtml}</div>
         </div>
@@ -1809,6 +1810,14 @@ function showXPGain(amount, reason = '') {
 
     // Add to body
     document.body.appendChild(overlay);
+
+    // Close on button click
+    const closeOverlay = () => {
+        overlay.style.animation = 'fadeOut 0.5s ease forwards';
+        setTimeout(() => overlay.remove(), 500);
+    };
+
+    overlay.querySelector('.xp-gain-continue-btn').addEventListener('click', closeOverlay);
 
     // Vibrate if supported (mobile)
     if ('vibrate' in navigator) {
@@ -1821,12 +1830,6 @@ function showXPGain(amount, reason = '') {
         audio.volume = 0.3;
         audio.play().catch(() => {});
     } catch (e) {}
-
-    // Auto-close after animation
-    setTimeout(() => {
-        overlay.style.animation = 'fadeOut 0.5s ease forwards';
-        setTimeout(() => overlay.remove(), 500);
-    }, 2500);
 
     console.log(`[XP Animation] +${amount} XP${reason ? ` - ${reason}` : ''}`);
 }
@@ -1871,6 +1874,7 @@ function showXPLoss(amount, reason = '') {
             <div class="xp-loss-icon">💔</div>
             <div class="xp-loss-amount">-${amount} XP</div>
             ${reason ? `<div class="xp-loss-reason">${reason}</div>` : ''}
+            <button class="xp-loss-continue-btn">Continuar</button>
             <div class="xp-loss-floaters">${floatersHtml}</div>
             <div class="xp-loss-particles">${particlesHtml}</div>
         </div>
@@ -1878,6 +1882,14 @@ function showXPLoss(amount, reason = '') {
 
     // Add to body
     document.body.appendChild(overlay);
+
+    // Close on button click
+    const closeOverlay = () => {
+        overlay.style.animation = 'fadeOut 0.5s ease forwards';
+        setTimeout(() => overlay.remove(), 500);
+    };
+
+    overlay.querySelector('.xp-loss-continue-btn').addEventListener('click', closeOverlay);
 
     // Intense vibration for loss (mobile)
     if ('vibrate' in navigator) {
@@ -1891,12 +1903,6 @@ function showXPLoss(amount, reason = '') {
         audio.playbackRate = 0.7;  // Lower pitch for loss
         audio.play().catch(() => {});
     } catch (e) {}
-
-    // Auto-close after animation
-    setTimeout(() => {
-        overlay.style.animation = 'fadeOut 0.5s ease forwards';
-        setTimeout(() => overlay.remove(), 500);
-    }, 2500);
 
     console.log(`[XP Animation] -${amount} XP${reason ? ` - ${reason}` : ''}`);
 }
