@@ -6789,9 +6789,19 @@ async function submitReport() {
             if (isCheckedIn && activeCheckinId) {
                 console.log('[REPORT] Iniciando checkout automático após relatório...');
                 try {
-                    await doCheckoutWithTasksAndReminder('REPORT_SENT');
-                    console.log('[REPORT] Checkout automático concluído com sucesso!');
-                    showSuccessModal('Relatório Enviado!', 'Relatório enviado e checkout realizado com sucesso.');
+                    const checkoutResult = await doCheckoutWithTasksAndReminder('REPORT_SENT');
+                    console.log('[REPORT] Checkout automático concluído!', checkoutResult);
+
+                    // Mostrar animação de XP se ganhou XP
+                    if (checkoutResult?.xp) {
+                        showXPNotification(
+                            checkoutResult.xp.totalEarned,
+                            'Relatório + Checkout',
+                            checkoutResult.xp.total
+                        );
+                    } else {
+                        showSuccessModal('Relatório Enviado!', 'Relatório enviado e checkout realizado com sucesso.');
+                    }
                 } catch (checkoutError) {
                     console.error('[REPORT] Erro no checkout após relatório:', checkoutError);
                     showSuccessModal('Relatório Enviado!', 'Relatório enviado. Checkout pendente.');
@@ -9389,9 +9399,10 @@ async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
             }
 
             // Skip showing success modal if report was just sent (caller handles it)
+            // Return XP data so caller can show notification
             if (reportOption === 'REPORT_SENT') {
-                console.log('[CHECKOUT] reportOption=REPORT_SENT, pulando showSuccessModal (caller vai exibir)');
-                return;
+                console.log('[CHECKOUT] reportOption=REPORT_SENT, retornando dados de XP para caller');
+                return { success: true, xp: data.xp, tasksCompleted: data.data?.tasksCompleted || 0 };
             }
 
             // Show success message
