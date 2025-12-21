@@ -221,20 +221,48 @@ router.get('/projects', mobileAuth, async (req, res, next) => {
         isActive: true,
       },
       include: {
-        project: true,
+        project: {
+          include: {
+            tasks: {
+              orderBy: { sortOrder: 'asc' },
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                sortOrder: true,
+              },
+            },
+          },
+        },
       },
     });
 
     res.json({
       success: true,
-      data: assignments.map((a) => ({
-        ...a.project,
-        m2Total: Number(a.project.m2Total),
-        m2Piso: Number(a.project.m2Piso),
-        m2Parede: Number(a.project.m2Parede),
-        workedHours: Number(a.project.workedHours),
-        projectRole: a.projectRole,
-      })),
+      data: assignments.map((a) => {
+        // Calculate current stage from tasks
+        const tasks = a.project.tasks || [];
+        const completedCount = tasks.filter((t) => t.status === 'COMPLETED').length;
+        const totalCount = tasks.length;
+        const currentTask = tasks.find((t) => t.status === 'PENDING' || t.status === 'IN_PROGRESS');
+
+        const currentStage = totalCount > 0 ? {
+          name: currentTask?.title || 'Concluido',
+          completedCount,
+          totalCount,
+        } : null;
+
+        return {
+          ...a.project,
+          m2Total: Number(a.project.m2Total),
+          m2Piso: Number(a.project.m2Piso),
+          m2Parede: Number(a.project.m2Parede),
+          workedHours: Number(a.project.workedHours),
+          projectRole: a.projectRole,
+          currentStage,
+          tasks: undefined, // Don't send full tasks array to client
+        };
+      }),
     });
   } catch (error) {
     next(error);

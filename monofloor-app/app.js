@@ -5817,12 +5817,18 @@ function renderProjects(projects) {
             (parseFloat(project.m2Teto) || 0)
         );
 
+        // Badge de etapa atual
+        const stageBadge = project.currentStage
+            ? `<span class="current-stage-badge">${project.currentStage.name} (${project.currentStage.completedCount}/${project.currentStage.totalCount})</span>`
+            : `<span class="current-stage-badge no-stages">Sem etapas</span>`;
+
         return `
         <div class="project-card-full" onclick="openProject('${project.id}')">
             <div class="project-header-row">
                 <div class="project-status-badge ${project.status === 'EM_EXECUCAO' ? 'active' : ''}">${getStatusLabel(project.status)}</div>
             </div>
             <h3>${project.cliente || project.title}</h3>
+            ${stageBadge}
             <p class="project-address">${formatEndereco(project.endereco)}</p>
 
             <div class="project-tags">
