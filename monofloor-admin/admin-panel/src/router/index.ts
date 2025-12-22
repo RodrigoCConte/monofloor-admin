@@ -33,6 +33,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/reports',
+    name: 'Reports',
+    component: () => import('../views/Reports.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/map',
     name: 'Map',
     component: () => import('../views/Map.vue'),

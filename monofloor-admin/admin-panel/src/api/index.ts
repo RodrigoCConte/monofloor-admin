@@ -155,6 +155,14 @@ export const tasksApi = {
 
 // Reports API
 export const reportsApi = {
+  // Raw user reports
+  getAll: (params?: { projectId?: string; userId?: string; status?: string; startDate?: string; endDate?: string; page?: number; limit?: number }) =>
+    api.get('/api/admin/reports', { params }),
+  getById: (id: string) => api.get(`/api/admin/reports/${id}`),
+  update: (id: string, data: { status?: string; adminNotes?: string }) =>
+    api.put(`/api/admin/reports/${id}`, data),
+  getStats: () => api.get('/api/admin/reports/stats/overview'),
+  // AI generated reports
   generateDaily: (projectId: string, date: string) =>
     api.post('/api/admin/reports/generate-daily', { projectId, date }),
   generatePeriod: (projectId: string, startDate: string, endDate: string) =>

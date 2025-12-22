@@ -24,6 +24,225 @@ const validate = (req: any, res: any, next: any) => {
   next();
 };
 
+// GET /api/admin/reports - List all user-submitted reports (raw reports from mobile)
+router.get(
+  '/',
+  adminAuth,
+  [
+    query('projectId').optional().isUUID(),
+    query('userId').optional().isUUID(),
+    query('status').optional().isIn(['DRAFT', 'SUBMITTED', 'PROCESSED']),
+    query('startDate').optional().isISO8601(),
+    query('endDate').optional().isISO8601(),
+    query('page').optional().isInt({ min: 1 }),
+    query('limit').optional().isInt({ min: 1, max: 100 }),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 30;
+
+      const where: any = {};
+
+      if (req.query.projectId) {
+        where.projectId = req.query.projectId;
+      }
+
+      if (req.query.userId) {
+        where.userId = req.query.userId;
+      }
+
+      if (req.query.status) {
+        where.status = req.query.status;
+      }
+
+      if (req.query.startDate || req.query.endDate) {
+        where.reportDate = {};
+        if (req.query.startDate) {
+          where.reportDate.gte = new Date(req.query.startDate as string);
+        }
+        if (req.query.endDate) {
+          where.reportDate.lte = new Date(req.query.endDate as string);
+        }
+      }
+
+      const [reports, total] = await Promise.all([
+        prisma.report.findMany({
+          where,
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: { reportDate: 'desc' },
+          include: {
+            user: {
+              select: { id: true, name: true, email: true, photoUrl: true, role: true, phone: true },
+            },
+            project: {
+              select: { id: true, title: true, cliente: true, endereco: true },
+            },
+            checkin: {
+              select: { id: true, checkinAt: true, checkoutAt: true, hoursWorked: true },
+            },
+            photos: true,
+          },
+        }),
+        prisma.report.count({ where }),
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          reports,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/admin/reports/:id - Get single report with all details
+router.get(
+  '/:id',
+  adminAuth,
+  [param('id').isUUID()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const report = await prisma.report.findUnique({
+        where: { id: req.params.id },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true, photoUrl: true, role: true, phone: true },
+          },
+          project: {
+            select: { id: true, title: true, cliente: true, endereco: true, status: true },
+          },
+          checkin: {
+            select: { id: true, checkinAt: true, checkoutAt: true, hoursWorked: true, checkinLatitude: true, checkinLongitude: true },
+          },
+          photos: true,
+        },
+      });
+
+      if (!report) {
+        throw new AppError('Report not found', 404, 'REPORT_NOT_FOUND');
+      }
+
+      res.json({
+        success: true,
+        data: report,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// PUT /api/admin/reports/:id - Update report status (mark as processed)
+router.put(
+  '/:id',
+  adminAuth,
+  [
+    param('id').isUUID(),
+    body('status').optional().isIn(['DRAFT', 'SUBMITTED', 'PROCESSED']),
+    body('adminNotes').optional().trim(),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { status, adminNotes } = req.body;
+
+      const report = await prisma.report.findUnique({
+        where: { id: req.params.id },
+      });
+
+      if (!report) {
+        throw new AppError('Report not found', 404, 'REPORT_NOT_FOUND');
+      }
+
+      const updated = await prisma.report.update({
+        where: { id: req.params.id },
+        data: {
+          ...(status && { status }),
+          ...(adminNotes !== undefined && { notes: adminNotes }),
+        },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true, photoUrl: true },
+          },
+          project: {
+            select: { id: true, title: true, cliente: true },
+          },
+          photos: true,
+        },
+      });
+
+      res.json({
+        success: true,
+        data: updated,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/admin/reports/stats - Get report statistics
+router.get(
+  '/stats/overview',
+  adminAuth,
+  async (req, res, next) => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+
+      const [
+        totalReports,
+        todayReports,
+        weekReports,
+        pendingReports,
+        reportsWithAudio,
+        reportsWithPhotos,
+      ] = await Promise.all([
+        prisma.report.count(),
+        prisma.report.count({ where: { reportDate: { gte: today } } }),
+        prisma.report.count({ where: { reportDate: { gte: weekAgo } } }),
+        prisma.report.count({ where: { status: 'SUBMITTED' } }),
+        prisma.report.count({ where: { audioFileUrl: { not: null } } }),
+        prisma.report.count({
+          where: {
+            photos: { some: {} },
+          },
+        }),
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          totalReports,
+          todayReports,
+          weekReports,
+          pendingReports,
+          reportsWithAudio,
+          reportsWithPhotos,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // POST /api/admin/reports/generate-daily - Generate daily report
 router.post(
   '/generate-daily',
