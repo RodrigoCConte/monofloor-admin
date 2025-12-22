@@ -340,7 +340,7 @@ router.post(
         return {
           projectId,
           title: task.title,
-          taskType: 'CUSTOM' as TaskType,
+          taskType: (task.isCura ? 'CURA' : 'CUSTOM') as TaskType,
           startDate: task.startDate,
           endDate: task.endDate,
           color: task.color,

@@ -9120,7 +9120,8 @@ function renderTaskBlockSection(tasksData) {
             pendingTasks.forEach((task) => {
                 const isPartial = task.status === 'IN_PROGRESS' || task.completionType === 'PARTIAL';
                 const taskProgress = task.progress || 0;
-                const isCura = task.taskType === 'CURA';
+                // Check taskType OR title for backward compatibility with existing CURA tasks
+                const isCura = task.taskType === 'CURA' || task.title.toLowerCase().includes('cura');
                 const isInProgress = task.status === 'IN_PROGRESS';
 
                 // Calculate CURA progress if applicable

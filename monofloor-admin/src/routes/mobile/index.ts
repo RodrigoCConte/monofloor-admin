@@ -4077,7 +4077,8 @@ router.post(
         };
 
         // Set curaStartedAt for CURA tasks when they become IN_PROGRESS
-        if (task.taskType === 'CURA' && isPartial && !task.curaStartedAt) {
+        const isCurrentTaskCura = task.taskType === 'CURA' || task.title.toLowerCase().includes('cura');
+        if (isCurrentTaskCura && isPartial && !task.curaStartedAt) {
           taskUpdateData.curaStartedAt = new Date();
         }
 
@@ -4136,7 +4137,8 @@ router.post(
               };
 
               // If next task is CURA, set curaStartedAt to start the 24h countdown
-              if (nextTask.taskType === 'CURA') {
+              const isNextTaskCura = nextTask.taskType === 'CURA' || nextTask.title.toLowerCase().includes('cura');
+              if (isNextTaskCura) {
                 nextTaskUpdateData.curaStartedAt = new Date();
                 console.log(`⏱️ CURA task "${nextTask.title}" auto-started with 24h countdown`);
               }
@@ -4258,7 +4260,9 @@ router.post(
         throw new AppError('Tarefa nao encontrada', 404, 'TASK_NOT_FOUND');
       }
 
-      if (task.taskType !== 'CURA') {
+      // Check if task is CURA type OR has "Cura" in title (backward compatibility)
+      const isCuraTask = task.taskType === 'CURA' || task.title.toLowerCase().includes('cura');
+      if (!isCuraTask) {
         throw new AppError('Esta tarefa nao e uma tarefa de CURA', 400, 'NOT_CURA_TASK');
       }
 
@@ -4290,7 +4294,8 @@ router.post(
         };
 
         // If next task is also CURA, set curaStartedAt
-        if (nextTask.taskType === 'CURA') {
+        const isNextTaskCura = nextTask.taskType === 'CURA' || nextTask.title.toLowerCase().includes('cura');
+        if (isNextTaskCura) {
           updateData.curaStartedAt = new Date();
         }
 
