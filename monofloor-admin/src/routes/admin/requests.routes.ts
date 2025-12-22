@@ -32,252 +32,249 @@ interface UnifiedRequest {
   reviewedBy: { id: string; name: string } | null;
 }
 
-// GET /api/admin/requests - Get unified list of all request types
+// GET /api/admin/requests - Get unified list of all request types (OPTIMIZED V2)
 router.get('/', adminAuth, async (req, res, next) => {
   try {
     const { type, status, page = 1, limit = 30 } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
-    const requests: UnifiedRequest[] = [];
+    // OPTIMIZATION V2: Run ALL main queries in parallel
+    const shouldFetchContributions = !type || type === 'CONTRIBUTION';
+    const shouldFetchHelpRequests = !type || type === 'HELP_REQUEST' || type === 'MATERIAL_REQUEST';
+    const shouldFetchAbsences = !type || type === 'ABSENCE';
 
-    // Fetch Contributions (if no type filter or type is CONTRIBUTION)
-    if (!type || type === 'CONTRIBUTION') {
-      const contributions = await prisma.contributionRequest.findMany({
-        where: {
-          ...(status && { status: status as any }),
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              photoUrl: true,
-              role: true,
-              phone: true,
+    const [contributions, helpRequests, absenceNotices, unreportedAbsences] = await Promise.all([
+      // Contributions
+      shouldFetchContributions
+        ? prisma.contributionRequest.findMany({
+            where: { ...(status && { status: status as any }) },
+            include: {
+              user: { select: { id: true, name: true, email: true, photoUrl: true, role: true, phone: true } },
+              project: { select: { id: true, title: true, cliente: true, endereco: true } },
+              reviewedBy: { select: { id: true, name: true } },
             },
-          },
-          project: {
-            select: {
-              id: true,
-              title: true,
-              cliente: true,
-              endereco: true,
+            orderBy: { createdAt: 'desc' },
+          })
+        : Promise.resolve([]),
+      // Help Requests
+      shouldFetchHelpRequests
+        ? prisma.helpRequest.findMany({
+            where: {
+              ...(status && { status: status as any }),
+              ...(type === 'HELP_REQUEST' && { type: 'HELP' }),
+              ...(type === 'MATERIAL_REQUEST' && { type: 'MATERIAL' }),
             },
-          },
-          reviewedBy: {
-            select: {
-              id: true,
-              name: true,
+            include: {
+              user: { select: { id: true, name: true, email: true, photoUrl: true, role: true, phone: true } },
+              project: { select: { id: true, title: true, cliente: true, endereco: true } },
+              resolvedBy: { select: { id: true, name: true } },
             },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+            orderBy: { createdAt: 'desc' },
+          })
+        : Promise.resolve([]),
+      // Absence Notices
+      shouldFetchAbsences
+        ? prisma.absenceNotice.findMany({
+            where: { ...(status && { status: status as any }) },
+            include: {
+              user: { select: { id: true, name: true, email: true, photoUrl: true, role: true, phone: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          })
+        : Promise.resolve([]),
+      // Unreported Absences
+      shouldFetchAbsences
+        ? prisma.unreportedAbsence.findMany({
+            where: { ...(status ? { status: status as any } : { status: 'PENDING' }) },
+            include: {
+              user: { select: { id: true, name: true, email: true, photoUrl: true, role: true, phone: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          })
+        : Promise.resolve([]),
+    ]);
 
-      // Get current project for each user (from active checkin)
-      for (const contribution of contributions) {
-        const activeCheckin = await prisma.checkin.findFirst({
-          where: {
-            userId: contribution.userId,
-            checkoutAt: null,
-          },
-          include: {
-            project: {
-              select: {
-                id: true,
-                title: true,
-                cliente: true,
+    // Get user IDs for secondary queries
+    const contributionUserIds = [...new Set(contributions.map(c => c.userId))];
+    const allAbsenceData = [
+      ...absenceNotices.map(a => ({ userId: a.userId, absenceDate: a.absenceDate })),
+      ...unreportedAbsences.map(a => ({ userId: a.userId, absenceDate: a.absenceDate })),
+    ];
+    const absenceUserIds = [...new Set(allAbsenceData.map(a => a.userId))];
+
+    // Calculate date range for task assignments
+    const absenceDates = allAbsenceData.map(a => new Date(a.absenceDate));
+    const minDate = absenceDates.length > 0 ? new Date(Math.min(...absenceDates.map(d => d.getTime()))) : new Date();
+    const maxDate = absenceDates.length > 0 ? new Date(Math.max(...absenceDates.map(d => d.getTime()))) : new Date();
+    minDate.setHours(0, 0, 0, 0);
+    maxDate.setHours(23, 59, 59, 999);
+
+    // OPTIMIZATION V2: Run secondary queries in parallel
+    const [activeCheckins, allTaskAssignments] = await Promise.all([
+      // Active checkins for contributions
+      contributionUserIds.length > 0
+        ? prisma.checkin.findMany({
+            where: { userId: { in: contributionUserIds }, checkoutAt: null },
+            include: { project: { select: { id: true, title: true, cliente: true } } },
+          })
+        : Promise.resolve([]),
+      // Task assignments for absences (simplified query - only if we have absences)
+      absenceUserIds.length > 0
+        ? prisma.taskAssignment.findMany({
+            where: {
+              userId: { in: absenceUserIds },
+              projectTask: {
+                OR: [
+                  { startDate: { lte: maxDate }, endDate: { gte: minDate } },
+                  { startDate: { gte: minDate, lte: maxDate }, endDate: null },
+                ],
               },
             },
-          },
-        });
+            include: {
+              projectTask: {
+                include: { project: { select: { id: true, title: true, cliente: true, endereco: true } } },
+              },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
 
-        requests.push({
-          id: contribution.id,
-          type: 'CONTRIBUTION',
-          status: contribution.status,
-          createdAt: contribution.createdAt,
-          user: contribution.user,
-          project: contribution.project,
-          details: {
-            description: contribution.description,
-            currentProject: activeCheckin?.project || null,
-          },
-          reviewedAt: contribution.reviewedAt,
-          reviewedBy: contribution.reviewedBy,
-        });
+    // Build lookup maps
+    const checkinByUser = new Map(activeCheckins.map(c => [c.userId, c]));
+
+    // Build task map more efficiently - group by userId first
+    const tasksByUserId = new Map<string, typeof allTaskAssignments>();
+    for (const ta of allTaskAssignments) {
+      if (!tasksByUserId.has(ta.userId)) {
+        tasksByUserId.set(ta.userId, []);
       }
+      tasksByUserId.get(ta.userId)!.push(ta);
     }
 
-    // Fetch Help Requests (if no type filter or type is HELP_REQUEST/MATERIAL_REQUEST)
-    if (!type || type === 'HELP_REQUEST' || type === 'MATERIAL_REQUEST') {
-      const helpRequests = await prisma.helpRequest.findMany({
-        where: {
-          ...(status && { status: status as any }),
-          ...(type === 'HELP_REQUEST' && { type: 'HELP' }),
-          ...(type === 'MATERIAL_REQUEST' && { type: 'MATERIAL' }),
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              photoUrl: true,
-              role: true,
-              phone: true,
-            },
-          },
-          project: {
-            select: {
-              id: true,
-              title: true,
-              cliente: true,
-              endereco: true,
-            },
-          },
-          resolvedBy: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+    // Helper to get tasks for a specific absence
+    const getTasksForAbsence = (userId: string, absenceDate: Date) => {
+      const userTasks = tasksByUserId.get(userId) || [];
+      const targetDate = new Date(absenceDate);
+      targetDate.setHours(0, 0, 0, 0);
 
-      for (const helpRequest of helpRequests) {
-        requests.push({
-          id: helpRequest.id,
-          type: helpRequest.type === 'MATERIAL' ? 'MATERIAL_REQUEST' : 'HELP_REQUEST',
-          status: helpRequest.status,
-          createdAt: helpRequest.createdAt,
-          user: helpRequest.user,
-          project: helpRequest.project,
-          details: {
-            materialName: helpRequest.materialName,
-            quantity: helpRequest.quantity,
-            description: helpRequest.description,
-            audioUrl: helpRequest.audioUrl,
-            audioTranscription: helpRequest.audioTranscription,
-            videoUrl: helpRequest.videoUrl,
-            adminNotes: helpRequest.adminNotes,
-          },
-          reviewedAt: helpRequest.resolvedAt,
-          reviewedBy: helpRequest.resolvedBy,
-        });
-      }
+      return userTasks
+        .filter(ta => {
+          const startDate = ta.projectTask.startDate ? new Date(ta.projectTask.startDate) : null;
+          const endDate = ta.projectTask.endDate ? new Date(ta.projectTask.endDate) : null;
+          if (!startDate) return false;
+          startDate.setHours(0, 0, 0, 0);
+          if (endDate) endDate.setHours(23, 59, 59, 999);
+          return (endDate && startDate <= targetDate && endDate >= targetDate) ||
+                 (!endDate && startDate.getTime() === targetDate.getTime());
+        })
+        .map(ta => ({
+          id: ta.projectTask.id,
+          title: ta.projectTask.title,
+          project: ta.projectTask.project,
+        }));
+    };
+
+    // Build unified requests array
+    const requests: UnifiedRequest[] = [];
+
+    // Add contributions
+    for (const c of contributions) {
+      requests.push({
+        id: c.id,
+        type: 'CONTRIBUTION',
+        status: c.status,
+        createdAt: c.createdAt,
+        user: c.user,
+        project: c.project,
+        details: {
+          description: c.description,
+          currentProject: checkinByUser.get(c.userId)?.project || null,
+        },
+        reviewedAt: c.reviewedAt,
+        reviewedBy: c.reviewedBy,
+      });
     }
 
-    // Fetch Absences (if no type filter or type is ABSENCE)
-    if (!type || type === 'ABSENCE') {
-      // Fetch AbsenceNotice records
-      const absenceNotices = await prisma.absenceNotice.findMany({
-        where: {
-          ...(status && { status: status as any }),
+    // Add help requests
+    for (const hr of helpRequests) {
+      requests.push({
+        id: hr.id,
+        type: hr.type === 'MATERIAL' ? 'MATERIAL_REQUEST' : 'HELP_REQUEST',
+        status: hr.status,
+        createdAt: hr.createdAt,
+        user: hr.user,
+        project: hr.project,
+        details: {
+          materialName: hr.materialName,
+          quantity: hr.quantity,
+          description: hr.description,
+          audioUrl: hr.audioUrl,
+          audioTranscription: hr.audioTranscription,
+          videoUrl: hr.videoUrl,
+          adminNotes: hr.adminNotes,
         },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              photoUrl: true,
-              role: true,
-              phone: true,
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
+        reviewedAt: hr.resolvedAt,
+        reviewedBy: hr.resolvedBy,
       });
-
-      for (const absence of absenceNotices) {
-        const scheduledTasks = await getScheduledTasksForDate(absence.userId, absence.absenceDate);
-
-        requests.push({
-          id: absence.id,
-          type: 'ABSENCE',
-          status: absence.status,
-          createdAt: absence.createdAt,
-          user: absence.user,
-          project: scheduledTasks.length > 0 ? scheduledTasks[0].project : null,
-          details: {
-            absenceDate: absence.absenceDate,
-            reason: absence.reason,
-            wasAdvanceNotice: absence.wasAdvanceNotice,
-            xpPenalty: absence.xpPenalty,
-            multiplierReset: absence.multiplierReset,
-            noticeType: absence.noticeType,
-            acknowledgedAt: absence.acknowledgedAt,
-            acknowledgedBy: absence.acknowledgedBy,
-            scheduledTasks: scheduledTasks.map((t) => ({
-              title: t.title,
-              project: t.project?.title || t.project?.cliente,
-            })),
-          },
-          reviewedAt: absence.acknowledgedAt,
-          reviewedBy: null,
-        });
-      }
-
-      // Fetch UnreportedAbsence records (only pending ones for notifications)
-      const unreportedAbsences = await prisma.unreportedAbsence.findMany({
-        where: {
-          ...(status ? { status: status as any } : { status: 'PENDING' }),
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              photoUrl: true,
-              role: true,
-              phone: true,
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      for (const absence of unreportedAbsences) {
-        const scheduledTasks = await getScheduledTasksForDate(absence.userId, absence.absenceDate);
-
-        requests.push({
-          id: absence.id,
-          type: 'ABSENCE',
-          status: `UNREPORTED_${absence.status}`,
-          createdAt: absence.createdAt,
-          user: absence.user,
-          project: scheduledTasks.length > 0 ? scheduledTasks[0].project : null,
-          details: {
-            absenceDate: absence.absenceDate,
-            reason: absence.reason,
-            explanation: absence.explanation,
-            userResponse: absence.userResponse,
-            isUnreported: true,
-            detectedAt: absence.detectedAt,
-            respondedAt: absence.respondedAt,
-            xpPenalty: absence.xpPenalty,
-            multiplierReset: absence.multiplierReset,
-            acknowledgedAt: absence.acknowledgedAt,
-            acknowledgedBy: absence.acknowledgedBy,
-            scheduledTasks: scheduledTasks.map((t) => ({
-              title: t.title,
-              project: t.project?.title || t.project?.cliente,
-            })),
-          },
-          reviewedAt: absence.acknowledgedAt,
-          reviewedBy: null,
-        });
-      }
     }
 
-    // Sort all by createdAt desc
+    // Add absence notices
+    for (const a of absenceNotices) {
+      const scheduledTasks = getTasksForAbsence(a.userId, a.absenceDate);
+      requests.push({
+        id: a.id,
+        type: 'ABSENCE',
+        status: a.status,
+        createdAt: a.createdAt,
+        user: a.user,
+        project: scheduledTasks[0]?.project || null,
+        details: {
+          absenceDate: a.absenceDate,
+          reason: a.reason,
+          wasAdvanceNotice: a.wasAdvanceNotice,
+          xpPenalty: a.xpPenalty,
+          multiplierReset: a.multiplierReset,
+          noticeType: a.noticeType,
+          acknowledgedAt: a.acknowledgedAt,
+          acknowledgedBy: a.acknowledgedBy,
+          scheduledTasks: scheduledTasks.map(t => ({ title: t.title, project: t.project?.title || t.project?.cliente })),
+        },
+        reviewedAt: a.acknowledgedAt,
+        reviewedBy: null,
+      });
+    }
+
+    // Add unreported absences
+    for (const a of unreportedAbsences) {
+      const scheduledTasks = getTasksForAbsence(a.userId, a.absenceDate);
+      requests.push({
+        id: a.id,
+        type: 'ABSENCE',
+        status: `UNREPORTED_${a.status}`,
+        createdAt: a.createdAt,
+        user: a.user,
+        project: scheduledTasks[0]?.project || null,
+        details: {
+          absenceDate: a.absenceDate,
+          reason: a.reason,
+          explanation: a.explanation,
+          userResponse: a.userResponse,
+          isUnreported: true,
+          detectedAt: a.detectedAt,
+          respondedAt: a.respondedAt,
+          xpPenalty: a.xpPenalty,
+          multiplierReset: a.multiplierReset,
+          acknowledgedAt: a.acknowledgedAt,
+          acknowledgedBy: a.acknowledgedBy,
+          scheduledTasks: scheduledTasks.map(t => ({ title: t.title, project: t.project?.title || t.project?.cliente })),
+        },
+        reviewedAt: a.acknowledgedAt,
+        reviewedBy: null,
+      });
+    }
+
+    // Sort and paginate
     requests.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    // Apply pagination
     const paginatedRequests = requests.slice(skip, skip + Number(limit));
 
     res.json({
@@ -297,42 +294,42 @@ router.get('/', adminAuth, async (req, res, next) => {
   }
 });
 
-// GET /api/admin/requests/counts - Get counts by type
+// GET /api/admin/requests/counts - Get counts by type (OPTIMIZED with parallel queries)
 router.get('/counts', adminAuth, async (req, res, next) => {
   try {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    // Count pending contributions
-    const contributionsPending = await prisma.contributionRequest.count({
-      where: { status: 'PENDING' },
-    });
-
-    // Count pending help requests
-    const helpRequestsPending = await prisma.helpRequest.count({
-      where: { status: 'PENDING', type: 'HELP' },
-    });
-
-    // Count pending material requests
-    const materialRequestsPending = await prisma.helpRequest.count({
-      where: { status: 'PENDING', type: 'MATERIAL' },
-    });
-
-    // Count recent absences (last 7 days) that are NOT acknowledged
-    const absencesRecent = await prisma.absenceNotice.count({
-      where: {
-        createdAt: { gte: sevenDaysAgo },
-        acknowledgedAt: null,
-      },
-    });
-
-    // Count unreported absences pending that are NOT acknowledged
-    const unreportedPending = await prisma.unreportedAbsence.count({
-      where: {
-        status: 'PENDING',
-        acknowledgedAt: null,
-      },
-    });
+    // OPTIMIZATION: Run all counts in parallel
+    const [
+      contributionsPending,
+      helpRequestsPending,
+      materialRequestsPending,
+      absencesRecent,
+      unreportedPending,
+    ] = await Promise.all([
+      prisma.contributionRequest.count({
+        where: { status: 'PENDING' },
+      }),
+      prisma.helpRequest.count({
+        where: { status: 'PENDING', type: 'HELP' },
+      }),
+      prisma.helpRequest.count({
+        where: { status: 'PENDING', type: 'MATERIAL' },
+      }),
+      prisma.absenceNotice.count({
+        where: {
+          createdAt: { gte: sevenDaysAgo },
+          acknowledgedAt: null,
+        },
+      }),
+      prisma.unreportedAbsence.count({
+        where: {
+          status: 'PENDING',
+          acknowledgedAt: null,
+        },
+      }),
+    ]);
 
     res.json({
       success: true,
@@ -348,56 +345,5 @@ router.get('/counts', adminAuth, async (req, res, next) => {
     next(error);
   }
 });
-
-// Helper function to get scheduled tasks for a user on a specific date
-async function getScheduledTasksForDate(userId: string, date: Date) {
-  const absenceDate = new Date(date);
-  absenceDate.setHours(0, 0, 0, 0);
-
-  const nextDay = new Date(absenceDate);
-  nextDay.setDate(nextDay.getDate() + 1);
-
-  const taskAssignments = await prisma.taskAssignment.findMany({
-    where: {
-      userId,
-      projectTask: {
-        OR: [
-          // Task starts on or before the absence date and ends on or after
-          {
-            startDate: { lte: absenceDate },
-            endDate: { gte: absenceDate },
-          },
-          // Task starts on the absence date (no end date)
-          {
-            startDate: { gte: absenceDate, lt: nextDay },
-            endDate: null,
-          },
-        ],
-      },
-    },
-    include: {
-      projectTask: {
-        include: {
-          project: {
-            select: {
-              id: true,
-              title: true,
-              cliente: true,
-              endereco: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  return taskAssignments.map((ta) => ({
-    id: ta.projectTask.id,
-    title: ta.projectTask.title,
-    startDate: ta.projectTask.startDate,
-    endDate: ta.projectTask.endDate,
-    project: ta.projectTask.project,
-  }));
-}
 
 export default router;

@@ -5,45 +5,50 @@ import { adminAuth } from '../../middleware/auth';
 const router = Router();
 const prisma = new PrismaClient();
 
-// GET /api/admin/dashboard/stats
+// GET /api/admin/dashboard/stats (OPTIMIZED with parallel queries)
 router.get('/stats', adminAuth, async (req, res, next) => {
   try {
-    // Total projects in execution
-    const activeProjects = await prisma.project.count({
-      where: { status: 'EM_EXECUCAO' },
-    });
-
-    // Total projects
-    const totalProjects = await prisma.project.count();
-
-    // Total approved applicators
-    const totalApplicators = await prisma.user.count({
-      where: { status: 'APPROVED' },
-    });
-
-    // Total square meters (sum of all active projects)
-    const m2Result = await prisma.project.aggregate({
-      where: { status: 'EM_EXECUCAO' },
-      _sum: { m2Total: true },
-    });
-
-    // Total square meters applied (sum from all users)
-    const m2AppliedResult = await prisma.user.aggregate({
-      _sum: { totalM2Applied: true },
-    });
-
-    // Online applicators (users with active check-in)
-    const onlineApplicators = await prisma.checkin.count({
-      where: {
-        checkoutAt: null,
-        checkinAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Last 24h
-      },
-    });
-
-    // Pending approvals
-    const pendingApprovals = await prisma.user.count({
-      where: { status: 'PENDING_APPROVAL' },
-    });
+    // OPTIMIZATION: Run all queries in parallel
+    const [
+      activeProjects,
+      totalProjects,
+      totalApplicators,
+      m2Result,
+      m2AppliedResult,
+      onlineApplicators,
+      pendingApprovals,
+    ] = await Promise.all([
+      // Total projects in execution
+      prisma.project.count({
+        where: { status: 'EM_EXECUCAO' },
+      }),
+      // Total projects
+      prisma.project.count(),
+      // Total approved applicators
+      prisma.user.count({
+        where: { status: 'APPROVED' },
+      }),
+      // Total square meters (sum of all active projects)
+      prisma.project.aggregate({
+        where: { status: 'EM_EXECUCAO' },
+        _sum: { m2Total: true },
+      }),
+      // Total square meters applied (sum from all users)
+      prisma.user.aggregate({
+        _sum: { totalM2Applied: true },
+      }),
+      // Online applicators (users with active check-in)
+      prisma.checkin.count({
+        where: {
+          checkoutAt: null,
+          checkinAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Last 24h
+        },
+      }),
+      // Pending approvals
+      prisma.user.count({
+        where: { status: 'PENDING_APPROVAL' },
+      }),
+    ]);
 
     res.json({
       success: true,
