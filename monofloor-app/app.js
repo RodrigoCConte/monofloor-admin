@@ -9144,11 +9144,15 @@ function renderTaskBlockSection(tasksData) {
                     };
                 }
 
+                // For CURA tasks, show complete button when IN_PROGRESS or PENDING (manual completion)
+                const showCuraCompleteBtn = isCura && (isInProgress || task.status === 'PENDING');
+
                 html += `
                     <div class="task-block-item-simple ${isPartial ? 'partial' : ''} ${isCura && isInProgress ? 'cura-active' : ''}"
                          data-task-id="${task.id}"
                          data-progress="${taskProgress}"
-                         data-is-cura="${isCura}">
+                         data-is-cura="${isCura}"
+                         onclick="${isCura ? '' : `showTaskCompletionOptions('${task.id}', '${escapeHtml(task.title).replace(/'/g, "\\'")}', ${taskProgress})`}">
                         <div class="task-color-bar" style="background-color: ${task.color || '#c9a962'}"></div>
                         <div class="task-info">
                             <div class="task-name">
@@ -9168,17 +9172,17 @@ function renderTaskBlockSection(tasksData) {
                                     </span>
                                 </div>
                             ` : ''}
-                            ${isCura && !task.curaStartedAt && task.status === 'PENDING' ? `
+                            ${isCura && task.status === 'PENDING' ? `
                                 <div class="cura-waiting-badge">
                                     <span class="cura-waiting-icon">🕐</span>
-                                    Aguardando inicio (24h de cura)
+                                    Aguardando inicio
                                 </div>
                             ` : ''}
                         </div>
                         ${isPartial && !isCura ? `
                             <div class="task-partial-badge">${taskProgress}%</div>
                         ` : ''}
-                        ${curaInfo && curaInfo.canCompleteEarly ? `
+                        ${showCuraCompleteBtn ? `
                             <button class="cura-complete-early-btn" onclick="event.stopPropagation(); completeCuraEarly('${task.id}');">
                                 <span class="btn-icon">⚡</span>
                                 Concluir

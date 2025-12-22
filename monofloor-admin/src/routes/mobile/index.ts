@@ -4266,8 +4266,9 @@ router.post(
         throw new AppError('Esta tarefa nao e uma tarefa de CURA', 400, 'NOT_CURA_TASK');
       }
 
-      if (task.status !== 'IN_PROGRESS') {
-        throw new AppError('Tarefa de CURA nao esta em andamento', 400, 'CURA_NOT_IN_PROGRESS');
+      // Allow completing CURA tasks that are IN_PROGRESS or PENDING (manual completion)
+      if (task.status !== 'IN_PROGRESS' && task.status !== 'PENDING') {
+        throw new AppError('Tarefa de CURA nao pode ser concluida', 400, 'CURA_CANNOT_COMPLETE');
       }
 
       // Complete the CURA task
