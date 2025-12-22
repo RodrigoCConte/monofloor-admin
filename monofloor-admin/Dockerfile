@@ -30,6 +30,11 @@ RUN npm run build
 # Generate Prisma Client
 RUN npx prisma generate
 
+# Build admin panel
+WORKDIR /app/admin-panel
+RUN npm ci && npm run build
+WORKDIR /app
+
 # Production image
 FROM node:20-bullseye-slim
 
@@ -75,6 +80,7 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/data ./data
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/admin-panel/dist ./admin-panel/dist
 
 # Copy Python requirements and install
 COPY requirements.txt ./
