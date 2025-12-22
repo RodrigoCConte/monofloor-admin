@@ -39,16 +39,18 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: '/contributions',
-    name: 'Contributions',
-    component: () => import('../views/Contributions.vue'),
+    path: '/requests',
+    name: 'Requests',
+    component: () => import('../views/Requests.vue'),
     meta: { requiresAuth: true },
   },
   {
+    path: '/contributions',
+    redirect: '/requests',
+  },
+  {
     path: '/help-requests',
-    name: 'HelpRequests',
-    component: () => import('../views/HelpRequests.vue'),
-    meta: { requiresAuth: true },
+    redirect: '/requests',
   },
   {
     path: '/campaigns',

@@ -4877,6 +4877,7 @@ router.get(
           id: video.id,
           title: video.title,
           description: video.description,
+          videoUrl: video.videoUrl,
           thumbnailUrl: video.thumbnailUrl,
           durationSeconds: video.durationSeconds,
           category: video.category,

@@ -330,3 +330,18 @@ export const academyApi = {
   }) => api.post(`/api/admin/academy/videos/${videoId}/quiz`, data),
   deleteQuiz: (videoId: string) => api.delete(`/api/admin/academy/videos/${videoId}/quiz`),
 };
+
+// Unified Requests API (Contributions + Help Requests + Absences)
+export const requestsApi = {
+  getAll: (params?: { type?: string; status?: string; page?: number; limit?: number }) =>
+    api.get('/api/admin/requests', { params }),
+  getCounts: () => api.get('/api/admin/requests/counts'),
+};
+
+// Absences API (Admin view of absence notices)
+export const absencesApi = {
+  getAll: (params?: { status?: string; startDate?: string; endDate?: string; page?: number; limit?: number }) =>
+    api.get('/api/admin/absences', { params }),
+  getPendingCount: () => api.get('/api/admin/absences/pending-count'),
+  getById: (id: string) => api.get(`/api/admin/absences/${id}`),
+};

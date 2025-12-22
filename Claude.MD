@@ -333,6 +333,9 @@ npm run dev
 - [x] Sistema de Solicitações de Contribuição - **IMPLEMENTADO**
 - [x] Sistema de Turno Noturno - **IMPLEMENTADO**
 - [x] Sistema de Solicitações de Ajuda/Material - **IMPLEMENTADO**
+- [x] Módulo Academia com Vídeos Educativos e Quizzes - **IMPLEMENTADO** (21/12/2024)
+- [x] Gerenciamento de Help Requests no Admin Console - **IMPLEMENTADO**
+- [x] Seleção de Pessoas no Gantt (Task Assignments) - **IMPLEMENTADO**
 - [ ] Integração Telegram (estrutura pronta, não implementada)
 
 ---
@@ -505,6 +508,182 @@ cd monofloor-admin/admin-panel && npm run dev
   - Motivo: Service Worker e funcionalidades de campanha funcionam melhor com acesso direto ao arquivo
   - Abrir: `file:///caminho/para/monofloor-app/index.html` no navegador
 
+### Sessão 5 (21/12/2024) - Módulo Academia e Correções
+
+#### 1. Módulo Academia com Vídeos Educativos e Quizzes
+
+**Novas Tabelas no Prisma Schema:**
+- `educational_videos` - Vídeos educativos (título, descrição, URL, categoria, nível, XP)
+- `video_quizzes` - Questionários vinculados aos vídeos
+- `quiz_questions` - Perguntas dos quizzes (SINGLE_CHOICE, MULTIPLE_CHOICE, TRUE_FALSE)
+- `quiz_answers` - Respostas/opções das perguntas
+- `video_progress` - Progresso do usuário no vídeo (assistido, completado)
+- `quiz_attempts` - Tentativas do usuário no quiz (score, passed, xpEarned)
+
+**Enums Adicionados:**
+- `VideoCategory`: TECNICA, SEGURANCA, PRODUTO, ATENDIMENTO, GERAL
+- `VideoLevel`: INICIANTE, INTERMEDIARIO, AVANCADO
+- `QuestionType`: SINGLE_CHOICE, MULTIPLE_CHOICE, TRUE_FALSE
+- `XpTransactionType`: adicionado `QUIZ_PASSED`
+
+**Novos Endpoints Admin** (`/api/admin/academy`):
+- `GET /videos` - Listar vídeos (filtros: category, level, isActive)
+- `GET /videos/:id` - Detalhes do vídeo com quiz
+- `POST /videos` - Criar vídeo
+- `PUT /videos/:id` - Atualizar vídeo
+- `DELETE /videos/:id` - Excluir vídeo
+- `POST /videos/:id/publish` - Publicar vídeo
+- `POST /videos/upload` - Upload de vídeo
+- `GET /videos/:id/stats` - Estatísticas (views, completions, quiz pass rate)
+- `POST /videos/:id/quiz` - Criar/atualizar quiz
+- `GET /videos/:id/quiz` - Obter quiz completo (com respostas corretas)
+- `DELETE /videos/:id/quiz` - Excluir quiz
+
+**Novos Endpoints Mobile** (`/api/mobile/academy`):
+- `GET /videos` - Listar vídeos (com progresso do usuário)
+- `GET /videos/:id` - Detalhes do vídeo
+- `POST /videos/:id/progress` - Atualizar progresso
+- `POST /videos/:id/complete` - Marcar como completo
+- `GET /videos/:id/quiz` - Obter quiz (sem respostas corretas)
+- `POST /videos/:id/quiz/submit` - Submeter respostas
+- `GET /stats` - Estatísticas do usuário
+
+**Nova View Admin Panel:**
+- `Academy.vue` - Gerenciamento completo de vídeos e quizzes
+  - Listagem com filtros por categoria e nível
+  - Upload de vídeo
+  - Criação de quiz com perguntas e respostas
+  - Estatísticas de visualização e aprovação
+
+**Arquivos Criados:**
+- `monofloor-admin/src/routes/admin/academy.routes.ts`
+- `monofloor-admin/admin-panel/src/views/Academy.vue`
+
+#### 2. Gerenciamento de Help Requests no Admin Console
+
+**Novos Endpoints Admin** (`/api/admin/help-requests`):
+- `GET /` - Listar solicitações (filtros: status, type)
+- `GET /pending-count` - Contagem de pendentes
+- `GET /:id` - Detalhes com mídia
+- `PUT /:id` - Atualizar status
+- `POST /:id/resolve` - Resolver com notas
+
+**Nova View Admin Panel:**
+- `HelpRequests.vue` - Gerenciamento de solicitações de ajuda/material
+  - Tabs: PENDING, IN_PROGRESS, RESOLVED, CANCELLED
+  - Player de áudio/vídeo
+  - Transcrição do áudio (Whisper)
+  - Ações: Em progresso, Resolver, Cancelar
+
+**Arquivos Criados:**
+- `monofloor-admin/src/routes/admin/help-requests.routes.ts`
+- `monofloor-admin/admin-panel/src/views/HelpRequests.vue`
+
+#### 3. Seleção de Pessoas no Gantt (Task Assignments)
+
+**Nova Tabela Prisma:**
+```prisma
+model TaskAssignment {
+  id            String      @id @default(uuid())
+  projectTaskId String
+  projectTask   ProjectTask @relation(...)
+  userId        String
+  user          User        @relation(...)
+  assignedAt    DateTime    @default(now())
+  @@unique([projectTaskId, userId])
+  @@map("task_assignments")
+}
+```
+
+**Novos Endpoints** (`/api/admin/projects/:projectId/tasks`):
+- `GET /:taskId/assignments` - Listar usuários atribuídos
+- `PUT /:taskId/assignments` - Atualizar atribuições (array de userIds)
+- `POST /bulk-assignments` - Atribuição em lote para múltiplas tarefas
+
+**UI no ProjectDetail.vue:**
+- Dropdown substituído por seletor multi-select
+- Modal com busca de aplicadores
+- Preview de avatares selecionados
+- Opção "Aplicar para tarefas abaixo"
+
+#### 4. Correção: Liberação na Portaria (Entry Request)
+
+**Problema:** Mobile enviava apenas o contato do aplicador individual
+**Solução:** Agora envia TODOS os membros ativos do projeto
+
+**Arquivo Modificado:** `monofloor-admin/src/routes/mobile/index.ts` (linhas 2294-2383)
+```typescript
+// Antes: Apenas 1 pessoa
+applicators: [{ name: user.name, cpf, phone, role }]
+
+// Depois: Todos os membros do projeto
+const teamMembers = await prisma.projectAssignment.findMany({
+  where: { projectId, isActive: true },
+  include: { user: { select: { name, cpf, phone } } }
+});
+applicators: teamMembers.map(m => ({ name, cpf, phone, role }))
+```
+
+#### 5. Navegação Admin Panel
+
+**Link "Academia" adicionado em todas as views:**
+- Dashboard.vue
+- Campaigns.vue
+- Badges.vue
+- Applicators.vue
+- Projects.vue
+- Map.vue
+- HelpRequests.vue
+- ProjectDetail.vue
+- Contributions.vue
+
+**Padrão de navegação:**
+```html
+<router-link to="/academy" class="nav-link">
+  <svg class="nav-icon" viewBox="0 0 24 24" ...>
+    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+    <polyline points="2 17 12 22 22 17"/>
+    <polyline points="2 12 12 17 22 12"/>
+  </svg>
+  Academia
+</router-link>
+```
+
+#### 6. Router Atualizado
+
+**Novas rotas em** `admin-panel/src/router/index.ts`:
+```typescript
+{ path: '/help-requests', name: 'HelpRequests', component: () => import('../views/HelpRequests.vue') }
+{ path: '/academy', name: 'Academy', component: () => import('../views/Academy.vue') }
+```
+
+#### 7. API Index Atualizado
+
+**Novos métodos em** `admin-panel/src/api/index.ts`:
+```typescript
+export const helpRequestsApi = {
+  getAll, getPendingCount, getById, updateStatus, resolve
+};
+
+export const academyApi = {
+  getVideos, getVideo, createVideo, updateVideo, deleteVideo,
+  publishVideo, uploadVideo, getStats, getQuiz, saveQuiz, deleteQuiz
+};
+```
+
+#### Arquivos Modificados nesta Sessão:
+- `prisma/schema.prisma` - Novos models Academia + TaskAssignment
+- `src/routes/admin/index.ts` - Registrar novas rotas
+- `src/routes/admin/academy.routes.ts` - **NOVO**
+- `src/routes/admin/help-requests.routes.ts` - **NOVO**
+- `src/routes/admin/tasks.routes.ts` - Endpoints de assignments
+- `src/routes/mobile/index.ts` - Fix entry request
+- `admin-panel/src/api/index.ts` - Novos API clients
+- `admin-panel/src/router/index.ts` - Novas rotas
+- `admin-panel/src/views/Academy.vue` - **NOVO**
+- `admin-panel/src/views/HelpRequests.vue` - **NOVO**
+- `admin-panel/src/views/*.vue` - Link Academia no nav (9 arquivos)
+
 ---
 
 ## Próximos Passos Sugeridos
@@ -514,5 +693,7 @@ cd monofloor-admin/admin-panel && npm run dev
 3. Implementar upload de arquivos (fotos/áudio) - estrutura pronta
 4. ~~Criar Admin Panel frontend~~ ✅ (Vue.js implementado)
 5. ~~Atualizar mobile app para usar API real~~ ✅
-6. Deploy no Railway
-7. Testar fluxo completo de solicitação de material/ajuda
+6. Deploy no Railway ✅ (deployed)
+7. ~~Testar fluxo completo de solicitação de material/ajuda~~ ✅
+8. **Melhorar design do módulo Academia** (usando plugin frontend-design)
+9. Implementar tela de Academia no app mobile (vídeos + quizzes)

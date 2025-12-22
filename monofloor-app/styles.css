@@ -25,6 +25,11 @@
     --border-radius-xl: 24px;
 }
 
+/* Utility classes */
+.hidden {
+    display: none !important;
+}
+
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     background-color: #1a1a1a;
@@ -14026,6 +14031,36 @@ body {
     object-fit: contain;
 }
 
+/* Quality Selector */
+.video-quality-selector {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.video-quality-selector label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.video-quality-selector select {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.video-quality-selector select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
 .video-overlay-loading {
     position: absolute;
     top: 0;
@@ -14131,6 +14166,85 @@ body {
     border-top: 1px solid var(--border-color);
 }
 
+/* Claim XP Section */
+.claim-xp-section {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+.claim-xp-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, var(--accent-primary) 0%, #b8942e 100%);
+    border: none;
+    border-radius: var(--border-radius);
+    color: #000;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(201, 169, 98, 0.3);
+}
+
+.claim-xp-btn svg {
+    stroke: #000;
+    fill: rgba(0, 0, 0, 0.1);
+}
+
+.claim-xp-btn:disabled {
+    background: var(--bg-secondary);
+    color: var(--text-tertiary);
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.claim-xp-btn:disabled svg {
+    stroke: var(--text-tertiary);
+    fill: none;
+}
+
+.claim-xp-btn:not(:disabled):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(201, 169, 98, 0.4);
+}
+
+.claim-xp-btn:not(:disabled):active {
+    transform: translateY(0);
+}
+
+.claim-xp-btn.claimed {
+    background: var(--accent-green);
+    color: #fff;
+}
+
+.claim-xp-btn.claimed svg {
+    stroke: #fff;
+}
+
+.claim-xp-amount {
+    padding: 4px 10px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.claim-xp-hint {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin-top: 10px;
+}
+
+.claim-xp-hint.hidden {
+    display: none;
+}
+
 .quiz-unlock-info {
     display: flex;
     align-items: center;
@@ -14149,7 +14263,13 @@ body {
 }
 
 .quiz-unlock-info.unlocked {
-    display: none;
+    background: linear-gradient(135deg, rgba(201, 169, 98, 0.2) 0%, rgba(184, 148, 63, 0.15) 100%);
+    border: 1px solid rgba(201, 169, 98, 0.3);
+    color: var(--primary-color);
+}
+
+.quiz-unlock-info.unlocked svg {
+    stroke: var(--primary-color);
 }
 
 .video-quiz-btn {
@@ -14185,6 +14305,36 @@ body {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 4px;
     font-size: 12px;
+}
+
+.quiz-xp-badge.claimed {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    color: white;
+    font-weight: 600;
+}
+
+/* Quiz button unlocked state - golden glow */
+.video-quiz-btn:not(:disabled) {
+    background: linear-gradient(135deg, #c9a962 0%, #b8943f 100%);
+    box-shadow: 0 0 20px rgba(201, 169, 98, 0.4);
+    animation: quizPulse 2s ease-in-out infinite;
+}
+
+.video-quiz-btn:not(:disabled):hover {
+    background: linear-gradient(135deg, #d4b872 0%, #c9a962 100%);
+    box-shadow: 0 0 25px rgba(201, 169, 98, 0.6);
+    transform: translateY(-2px);
+}
+
+.video-quiz-btn:not(:disabled) .quiz-xp-badge {
+    background: rgba(0, 0, 0, 0.3);
+    color: white;
+    font-weight: 700;
+}
+
+@keyframes quizPulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(201, 169, 98, 0.4); }
+    50% { box-shadow: 0 0 30px rgba(201, 169, 98, 0.7); }
 }
 
 /* Quiz Screen */

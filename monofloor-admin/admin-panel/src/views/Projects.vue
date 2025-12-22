@@ -476,7 +476,7 @@ onMounted(loadProjects);
           </svg>
           Projetos
         </router-link>
-        <router-link to="/contributions" class="nav-link">
+        <router-link to="/requests" class="nav-link">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
             <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
@@ -489,6 +489,14 @@ onMounted(loadProjects);
             <line x1="4" y1="22" x2="4" y2="15"/>
           </svg>
           Campanhas
+        </router-link>
+        <router-link to="/academy" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+            <polyline points="2 17 12 22 22 17"/>
+            <polyline points="2 12 12 17 22 12"/>
+          </svg>
+          Academia
         </router-link>
         <router-link to="/map" class="nav-link">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

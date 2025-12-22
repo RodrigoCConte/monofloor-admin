@@ -27,11 +27,15 @@ const uploadVideo = multer({
 const validate = (req: any, res: any, next: any) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
+    const errorMessages = errors.array().map((e: any) => `${e.path}: ${e.msg}`).join(', ');
+    console.error('[Academy] Validation errors:', errorMessages);
+    console.error('[Academy] Request body:', JSON.stringify(req.body, null, 2));
+    console.error('[Academy] Full errors:', JSON.stringify(errors.array(), null, 2));
     return res.status(400).json({
       success: false,
       error: {
         code: 'VALIDATION_ERROR',
-        message: 'Validation failed',
+        message: `Validacao falhou: ${errorMessages}`,
         details: errors.array(),
       },
     });
@@ -181,7 +185,7 @@ router.post(
     body('durationSeconds').isInt({ min: 1 }),
     body('category').optional().isIn(['TECNICA', 'SEGURANCA', 'PRODUTO', 'ATENDIMENTO', 'GERAL']),
     body('level').optional().isIn(['INICIANTE', 'INTERMEDIARIO', 'AVANCADO']),
-    body('xpForWatching').optional().isInt({ min: 0, max: 1000 }),
+    body('xpForWatching').optional().isInt({ min: 0, max: 100000 }),
     body('isRequired').optional().isBoolean(),
   ],
   validate,
@@ -291,7 +295,7 @@ router.put(
     body('durationSeconds').optional().isInt({ min: 1 }),
     body('category').optional().isIn(['TECNICA', 'SEGURANCA', 'PRODUTO', 'ATENDIMENTO', 'GERAL']),
     body('level').optional().isIn(['INICIANTE', 'INTERMEDIARIO', 'AVANCADO']),
-    body('xpForWatching').optional().isInt({ min: 0, max: 1000 }),
+    body('xpForWatching').optional().isInt({ min: 0, max: 100000 }),
     body('isRequired').optional().isBoolean(),
     body('isActive').optional().isBoolean(),
     body('sortOrder').optional().isInt({ min: 0 }),
@@ -536,16 +540,32 @@ router.post(
   [
     param('id').isUUID(),
     body('title').optional().trim().isLength({ max: 200 }),
-    body('passingScore').optional().isInt({ min: 1, max: 100 }),
-    body('maxAttempts').optional().isInt({ min: 0, max: 10 }),
-    body('xpReward').optional().isInt({ min: 0, max: 1000 }),
+    body('passingScore').optional().custom((value) => {
+      const num = Number(value);
+      if (isNaN(num) || num < 1 || num > 100) throw new Error('Deve ser entre 1 e 100');
+      return true;
+    }),
+    body('maxAttempts').optional().custom((value) => {
+      const num = Number(value);
+      if (isNaN(num) || num < 0 || num > 10) throw new Error('Deve ser entre 0 e 10');
+      return true;
+    }),
+    body('xpReward').optional().custom((value) => {
+      const num = Number(value);
+      if (isNaN(num) || num < 0 || num > 100000) throw new Error('Deve ser entre 0 e 100000');
+      return true;
+    }),
     body('questions').isArray({ min: 1 }),
     body('questions.*.questionText').trim().isLength({ min: 1, max: 1000 }),
     body('questions.*.questionType').optional().isIn(['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'TRUE_FALSE']),
     body('questions.*.explanation').optional().trim().isLength({ max: 2000 }),
     body('questions.*.answers').isArray({ min: 2 }),
     body('questions.*.answers.*.answerText').trim().isLength({ min: 1, max: 500 }),
-    body('questions.*.answers.*.isCorrect').isBoolean(),
+    body('questions.*.answers.*.isCorrect').custom((value) => {
+      if (typeof value === 'boolean') return true;
+      if (value === 'true' || value === 'false') return true;
+      throw new Error('Deve ser um valor booleano');
+    }),
   ],
   validate,
   async (req, res, next) => {
@@ -561,9 +581,12 @@ router.post(
 
       const { title, passingScore, maxAttempts, xpReward, questions } = req.body;
 
+      // Helper to convert string/boolean to boolean
+      const toBool = (val: any): boolean => val === true || val === 'true';
+
       // Validate each question has at least one correct answer
       for (const q of questions) {
-        const hasCorrect = q.answers.some((a: any) => a.isCorrect === true);
+        const hasCorrect = q.answers.some((a: any) => toBool(a.isCorrect));
         if (!hasCorrect) {
           throw new AppError(
             `A pergunta "${q.questionText.substring(0, 50)}..." precisa ter pelo menos uma resposta correta`,
@@ -598,7 +621,7 @@ router.post(
               answers: {
                 create: q.answers.map((a: any, aIndex: number) => ({
                   answerText: a.answerText,
-                  isCorrect: a.isCorrect,
+                  isCorrect: toBool(a.isCorrect),
                   sortOrder: aIndex,
                 })),
               },

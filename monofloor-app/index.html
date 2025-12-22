@@ -1144,12 +1144,28 @@
             <div class="content video-player-content">
                 <!-- Video Container -->
                 <div class="video-container">
-                    <video id="academyVideoPlayer" class="academy-video" controls playsinline>
+                    <!-- Native Video Player (for MP4, etc) -->
+                    <video id="academyVideoPlayer" class="academy-video hidden" controls playsinline>
                         <source src="" type="video/mp4">
                     </video>
+                    <!-- YouTube Player Container (API creates iframe here) -->
+                    <div id="youtubePlayerContainer" class="academy-video hidden"></div>
                     <div class="video-overlay-loading" id="videoLoadingOverlay">
                         <div class="video-spinner"></div>
                     </div>
+                </div>
+
+                <!-- Quality Selector -->
+                <div class="video-quality-selector" id="qualitySelector" style="display: none;">
+                    <label>Qualidade:</label>
+                    <select id="videoQualitySelect" onchange="changeVideoQuality(this.value)">
+                        <option value="hd1080">1080p HD</option>
+                        <option value="hd720" selected>720p HD</option>
+                        <option value="large">480p</option>
+                        <option value="medium">360p</option>
+                        <option value="small">240p</option>
+                        <option value="auto">Auto</option>
+                    </select>
                 </div>
 
                 <!-- Video Info -->
@@ -1183,6 +1199,18 @@
                         <div class="watch-progress-bar">
                             <div class="watch-progress-fill" id="videoProgressFill" style="width: 0%"></div>
                         </div>
+                    </div>
+
+                    <!-- Claim XP Button -->
+                    <div id="claimXPSection" class="claim-xp-section">
+                        <button id="claimXPBtn" class="claim-xp-btn" onclick="claimVideoXP()" disabled>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                            </svg>
+                            <span>Resgatar XP</span>
+                            <span class="claim-xp-amount" id="claimXPAmount">+0 XP</span>
+                        </button>
+                        <p class="claim-xp-hint" id="claimXPHint">Assista 90% do video para resgatar</p>
                     </div>
 
                     <!-- Quiz Button -->
