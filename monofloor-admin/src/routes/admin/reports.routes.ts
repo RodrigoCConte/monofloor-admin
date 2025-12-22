@@ -107,6 +107,56 @@ router.get(
   }
 );
 
+// GET /api/admin/reports/stats - Get report statistics
+// IMPORTANT: This route MUST be defined BEFORE /:id to avoid matching "stats" as an ID
+router.get(
+  '/stats/overview',
+  adminAuth,
+  async (req, res, next) => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+
+      const [
+        totalReports,
+        todayReports,
+        weekReports,
+        pendingReports,
+        reportsWithAudio,
+        reportsWithPhotos,
+      ] = await Promise.all([
+        prisma.report.count(),
+        prisma.report.count({ where: { reportDate: { gte: today } } }),
+        prisma.report.count({ where: { reportDate: { gte: weekAgo } } }),
+        prisma.report.count({ where: { status: 'SUBMITTED' } }),
+        prisma.report.count({ where: { audioFileUrl: { not: null } } }),
+        prisma.report.count({
+          where: {
+            photos: { some: {} },
+          },
+        }),
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          totalReports,
+          todayReports,
+          weekReports,
+          pendingReports,
+          reportsWithAudio,
+          reportsWithPhotos,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // GET /api/admin/reports/:id - Get single report with all details
 router.get(
   '/:id',
@@ -187,55 +237,6 @@ router.put(
       res.json({
         success: true,
         data: updated,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-// GET /api/admin/reports/stats - Get report statistics
-router.get(
-  '/stats/overview',
-  adminAuth,
-  async (req, res, next) => {
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-
-      const [
-        totalReports,
-        todayReports,
-        weekReports,
-        pendingReports,
-        reportsWithAudio,
-        reportsWithPhotos,
-      ] = await Promise.all([
-        prisma.report.count(),
-        prisma.report.count({ where: { reportDate: { gte: today } } }),
-        prisma.report.count({ where: { reportDate: { gte: weekAgo } } }),
-        prisma.report.count({ where: { status: 'SUBMITTED' } }),
-        prisma.report.count({ where: { audioFileUrl: { not: null } } }),
-        prisma.report.count({
-          where: {
-            photos: { some: {} },
-          },
-        }),
-      ]);
-
-      res.json({
-        success: true,
-        data: {
-          totalReports,
-          todayReports,
-          weekReports,
-          pendingReports,
-          reportsWithAudio,
-          reportsWithPhotos,
-        },
       });
     } catch (error) {
       next(error);
