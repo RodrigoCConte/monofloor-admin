@@ -1,6 +1,6 @@
 // API Configuration
-// const API_URL = 'https://devoted-wholeness-production.up.railway.app'; // Production
-const API_URL = 'http://localhost:3000'; // Local server for testing
+const API_URL = 'https://devoted-wholeness-production.up.railway.app'; // Production
+// const API_URL = 'http://localhost:3000'; // Local server for testing
 
 // =============================================
 // CHARACTER ICONS BY ROLE
@@ -4621,6 +4621,7 @@ function resetNewPostForm() {
 // =============================================
 let feedPosts = [];
 let feedDB = null;
+let lastFeedRenderHash = null; // Track last rendered state to avoid unnecessary re-renders
 const FEED_DB_NAME = 'monofloorFeed';
 const FEED_DB_VERSION = 1;
 const FEED_STORE_NAME = 'posts';
@@ -5102,17 +5103,28 @@ async function publishPost() {
 /**
  * Render feed posts from feedPosts array
  * Note: This only renders - call loadFeedPosts() separately to fetch data
+ * @param {boolean} forceRender - Force re-render even if data hasn't changed
  */
-function renderFeed() {
+function renderFeed(forceRender = false) {
     const emptyState = document.getElementById('feedEmptyState');
     const postsContainer = document.getElementById('feedPosts');
 
     if (!postsContainer) return;
 
+    // Calculate hash of current feed state to detect changes
+    const currentHash = feedPosts.map(p => `${p.id}:${p.likes}:${p.liked}:${p.comments}`).join('|');
+
+    // Skip re-render if content hasn't changed and container already has posts
+    if (!forceRender && lastFeedRenderHash === currentHash && postsContainer.children.length > 0) {
+        console.log('[Feed] Skipping render - no changes detected');
+        return;
+    }
+
     if (feedPosts.length === 0) {
         // Mostrar empty state
         if (emptyState) emptyState.style.display = 'flex';
         postsContainer.style.display = 'none';
+        lastFeedRenderHash = currentHash;
     } else {
         // Esconder empty state e mostrar posts
         if (emptyState) emptyState.style.display = 'none';
@@ -5187,6 +5199,10 @@ function renderFeed() {
                 </div>
             `;
         }).join('');
+
+        // Update hash after successful render
+        lastFeedRenderHash = currentHash;
+        console.log(`[Feed] Rendered ${feedPosts.length} posts`);
     }
 }
 
@@ -5201,7 +5217,7 @@ async function togglePostLike(postId) {
     // Otimistic update
     post.liked = !post.liked;
     post.likes = post.liked ? post.likes + 1 : Math.max(0, post.likes - 1);
-    renderFeed();
+    updateLikeUI(postId, post.liked, post.likes); // Update just the like button
 
     // Enviar para o servidor
     const token = localStorage.getItem('token');
@@ -5221,19 +5237,58 @@ async function togglePostLike(postId) {
                 post.liked = result.data.liked;
                 post.likes = result.data.likesCount;
                 saveFeedPostsToCache();
-                renderFeed();
+                updateLikeUI(postId, post.liked, post.likes);
             }
         } catch (e) {
             console.error('Erro ao curtir post:', e);
             // Reverter em caso de erro
             post.liked = wasLiked;
             post.likes = wasLiked ? post.likes + 1 : post.likes - 1;
-            renderFeed();
+            updateLikeUI(postId, post.liked, post.likes);
         }
     } else {
         // Sem token, salvar apenas localmente
         saveFeedPostsToCache();
     }
+}
+
+// Update only the like button UI without re-rendering the entire feed
+function updateLikeUI(postId, isLiked, likesCount) {
+    const postEl = document.querySelector(`.feed-post[data-post-id="${postId}"]`);
+    if (!postEl) return;
+
+    // Update like button
+    const likeBtn = postEl.querySelector('.action-btn');
+    if (likeBtn) {
+        likeBtn.classList.toggle('liked', isLiked);
+        const svg = likeBtn.querySelector('svg');
+        if (svg) {
+            svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
+        }
+    }
+
+    // Update likes count
+    let likesDiv = postEl.querySelector('.post-likes');
+    if (likesCount > 0) {
+        const likesText = likesCount === 1 ? '1 curtida' : `${likesCount} curtidas`;
+        if (likesDiv) {
+            likesDiv.textContent = likesText;
+        } else {
+            // Create likes div if it doesn't exist
+            const actionsDiv = postEl.querySelector('.post-actions');
+            if (actionsDiv) {
+                likesDiv = document.createElement('div');
+                likesDiv.className = 'post-likes';
+                likesDiv.textContent = likesText;
+                actionsDiv.insertAdjacentElement('afterend', likesDiv);
+            }
+        }
+    } else if (likesDiv) {
+        likesDiv.remove();
+    }
+
+    // Update the hash to reflect new state (prevents unnecessary full re-render later)
+    lastFeedRenderHash = feedPosts.map(p => `${p.id}:${p.likes}:${p.liked}:${p.comments}`).join('|');
 }
 
 // =============================================

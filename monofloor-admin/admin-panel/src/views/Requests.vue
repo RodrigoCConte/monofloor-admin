@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
-import { requestsApi, contributionsApi, helpRequestsApi } from '../api';
+import { requestsApi, contributionsApi, helpRequestsApi, absencesApi } from '../api';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -107,6 +107,18 @@ const rejectContribution = async (id: string) => {
       console.error('Error rejecting contribution:', error);
       alert('Erro ao rejeitar solicitacao');
     }
+  }
+};
+
+// Absence actions
+const acknowledgeAbsence = async (id: string) => {
+  try {
+    await absencesApi.acknowledge(id);
+    await loadRequests();
+    await loadCounts();
+  } catch (error) {
+    console.error('Error acknowledging absence:', error);
+    alert('Erro ao marcar ciencia da falta');
   }
 };
 
@@ -229,6 +241,8 @@ const needsAction = (request: UnifiedRequest) => {
   if (request.type === 'CONTRIBUTION' && request.status === 'PENDING') return true;
   if ((request.type === 'HELP_REQUEST' || request.type === 'MATERIAL_REQUEST') &&
       (request.status === 'PENDING' || request.status === 'IN_PROGRESS')) return true;
+  // Absence needs action if not yet acknowledged by admin
+  if (request.type === 'ABSENCE' && !request.details?.acknowledgedAt) return true;
   return false;
 };
 
@@ -539,6 +553,14 @@ onMounted(() => {
                     Falta detectada automaticamente
                   </span>
                 </div>
+                <div class="acknowledged-info" v-if="request.details?.acknowledgedAt">
+                  <span class="acknowledged-badge">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Admin ciente em {{ formatDate(request.details.acknowledgedAt) }}
+                  </span>
+                </div>
               </div>
             </template>
 
@@ -624,6 +646,16 @@ onMounted(() => {
                   <line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
                 Rejeitar
+              </button>
+            </template>
+
+            <!-- ABSENCE actions -->
+            <template v-if="request.type === 'ABSENCE' && !request.details?.acknowledgedAt">
+              <button class="btn-acknowledge" @click="acknowledgeAbsence(request.id)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Estou Ciente
               </button>
             </template>
 
@@ -1164,6 +1196,22 @@ onMounted(() => {
   font-weight: 500;
 }
 
+.acknowledged-info {
+  margin-top: 0.5rem;
+}
+
+.acknowledged-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(201, 169, 98, 0.1);
+  color: var(--accent-gold);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
 /* Help/Material specific styles */
 .info-row {
   display: flex;
@@ -1293,7 +1341,8 @@ onMounted(() => {
 .btn-reject,
 .btn-progress,
 .btn-resolve,
-.btn-cancel {
+.btn-cancel,
+.btn-acknowledge {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1335,6 +1384,15 @@ onMounted(() => {
 
 .btn-progress:hover {
   background: #2563eb;
+}
+
+.btn-acknowledge {
+  background: var(--accent-gold);
+  color: #000;
+}
+
+.btn-acknowledge:hover {
+  background: #b8982e;
 }
 
 /* Modal */

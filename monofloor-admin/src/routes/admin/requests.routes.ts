@@ -209,12 +209,14 @@ router.get('/', adminAuth, async (req, res, next) => {
             xpPenalty: absence.xpPenalty,
             multiplierReset: absence.multiplierReset,
             noticeType: absence.noticeType,
+            acknowledgedAt: absence.acknowledgedAt,
+            acknowledgedBy: absence.acknowledgedBy,
             scheduledTasks: scheduledTasks.map((t) => ({
               title: t.title,
               project: t.project?.title || t.project?.cliente,
             })),
           },
-          reviewedAt: null,
+          reviewedAt: absence.acknowledgedAt,
           reviewedBy: null,
         });
       }
@@ -259,12 +261,14 @@ router.get('/', adminAuth, async (req, res, next) => {
             respondedAt: absence.respondedAt,
             xpPenalty: absence.xpPenalty,
             multiplierReset: absence.multiplierReset,
+            acknowledgedAt: absence.acknowledgedAt,
+            acknowledgedBy: absence.acknowledgedBy,
             scheduledTasks: scheduledTasks.map((t) => ({
               title: t.title,
               project: t.project?.title || t.project?.cliente,
             })),
           },
-          reviewedAt: null,
+          reviewedAt: absence.acknowledgedAt,
           reviewedBy: null,
         });
       }
@@ -314,14 +318,20 @@ router.get('/counts', adminAuth, async (req, res, next) => {
       where: { status: 'PENDING', type: 'MATERIAL' },
     });
 
-    // Count recent absences (last 7 days)
+    // Count recent absences (last 7 days) that are NOT acknowledged
     const absencesRecent = await prisma.absenceNotice.count({
-      where: { createdAt: { gte: sevenDaysAgo } },
+      where: {
+        createdAt: { gte: sevenDaysAgo },
+        acknowledgedAt: null,
+      },
     });
 
-    // Count unreported absences pending
+    // Count unreported absences pending that are NOT acknowledged
     const unreportedPending = await prisma.unreportedAbsence.count({
-      where: { status: 'PENDING' },
+      where: {
+        status: 'PENDING',
+        acknowledgedAt: null,
+      },
     });
 
     res.json({

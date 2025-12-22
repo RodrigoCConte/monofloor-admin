@@ -13,7 +13,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 // Configuration
-const SAME_DAY_XP_PENALTY = 7000;
+const SAME_DAY_XP_PENALTY = 15000; // Penalidade por falta sem aviso antecipado
 const MORNING_CUTOFF_HOUR = 12; // Before noon = morning notice
 
 interface AbsenceNoticeResult {

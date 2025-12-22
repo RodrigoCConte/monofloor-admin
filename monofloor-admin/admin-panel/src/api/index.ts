@@ -345,6 +345,8 @@ export const requestsApi = {
 export const absencesApi = {
   getAll: (params?: { status?: string; startDate?: string; endDate?: string; page?: number; limit?: number }) =>
     api.get('/api/admin/absences', { params }),
+  getPending: () => api.get('/api/admin/absences/pending'),
   getPendingCount: () => api.get('/api/admin/absences/pending-count'),
   getById: (id: string) => api.get(`/api/admin/absences/${id}`),
+  acknowledge: (id: string) => api.post(`/api/admin/absences/${id}/acknowledge`),
 };

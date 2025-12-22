@@ -156,6 +156,85 @@ router.get('/pending-count', adminAuth, async (req, res, next) => {
   }
 });
 
+// GET /api/admin/absences/pending - Get absences requiring admin action (not acknowledged)
+router.get('/pending', adminAuth, async (req, res, next) => {
+  try {
+    // Get absence notices without acknowledgement
+    const pendingNotices = await prisma.absenceNotice.findMany({
+      where: {
+        acknowledgedAt: null,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            photoUrl: true,
+            role: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Get unreported absences without acknowledgement
+    const pendingUnreported = await prisma.unreportedAbsence.findMany({
+      where: {
+        acknowledgedAt: null,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            photoUrl: true,
+            role: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Enrich with scheduled tasks
+    const enrichedNotices = await Promise.all(
+      pendingNotices.map(async (absence) => {
+        const scheduledTasks = await getScheduledTasksForDate(absence.userId, absence.absenceDate);
+        return {
+          ...absence,
+          type: 'ABSENCE_NOTICE' as const,
+          scheduledTasks,
+          project: scheduledTasks.length > 0 ? scheduledTasks[0].project : null,
+        };
+      })
+    );
+
+    const enrichedUnreported = await Promise.all(
+      pendingUnreported.map(async (absence) => {
+        const scheduledTasks = await getScheduledTasksForDate(absence.userId, absence.absenceDate);
+        return {
+          ...absence,
+          type: 'UNREPORTED_ABSENCE' as const,
+          scheduledTasks,
+          project: scheduledTasks.length > 0 ? scheduledTasks[0].project : null,
+        };
+      })
+    );
+
+    res.json({
+      success: true,
+      data: {
+        absenceNotices: enrichedNotices,
+        unreportedAbsences: enrichedUnreported,
+        total: enrichedNotices.length + enrichedUnreported.length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/admin/absences/:id - Get single absence details
 router.get('/:id', adminAuth, async (req, res, next) => {
   try {
@@ -224,6 +303,73 @@ router.get('/:id', adminAuth, async (req, res, next) => {
     return res.status(404).json({
       success: false,
       error: { message: 'Absence not found' },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/admin/absences/:id/acknowledge - Mark absence as acknowledged by admin
+router.post('/:id/acknowledge', adminAuth, async (req: any, res, next) => {
+  try {
+    const { id } = req.params;
+    const adminId = req.user?.sub || req.user?.id;
+
+    // Try to find in AbsenceNotice first
+    let absence: any = await prisma.absenceNotice.findUnique({
+      where: { id },
+    });
+
+    if (absence) {
+      const updated = await prisma.absenceNotice.update({
+        where: { id },
+        data: {
+          acknowledgedAt: new Date(),
+          acknowledgedBy: adminId,
+        },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true },
+          },
+        },
+      });
+
+      return res.json({
+        success: true,
+        message: 'Falta marcada como ciente',
+        data: { ...updated, type: 'ABSENCE_NOTICE' },
+      });
+    }
+
+    // Try UnreportedAbsence
+    absence = await prisma.unreportedAbsence.findUnique({
+      where: { id },
+    });
+
+    if (absence) {
+      const updated = await prisma.unreportedAbsence.update({
+        where: { id },
+        data: {
+          acknowledgedAt: new Date(),
+          acknowledgedBy: adminId,
+        },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true },
+          },
+        },
+      });
+
+      return res.json({
+        success: true,
+        message: 'Falta marcada como ciente',
+        data: { ...updated, type: 'UNREPORTED_ABSENCE' },
+      });
+    }
+
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Falta não encontrada' },
     });
   } catch (error) {
     next(error);
