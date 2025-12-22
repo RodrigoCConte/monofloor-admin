@@ -40,6 +40,15 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // Serve video processor static files
 app.use('/video-processor', express.static(path.join(__dirname, '../public/video-processor')));
 
+// Serve admin panel static files (Vue.js build)
+const adminPanelPath = path.join(__dirname, '../admin-panel/dist');
+app.use('/admin', express.static(adminPanelPath));
+
+// Handle admin panel SPA routing (all /admin/* routes serve index.html)
+app.get('/admin/*', (req, res) => {
+  res.sendFile(path.join(adminPanelPath, 'index.html'));
+});
+
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
