@@ -124,6 +124,46 @@ router.get('/profile', mobileAuth, async (req, res, next) => {
       throw new AppError('User not found', 404, 'USER_NOT_FOUND');
     }
 
+    // Calculate REAL stats: only completed projects count
+    const completedProjects = await prisma.projectAssignment.findMany({
+      where: {
+        userId: req.user!.sub,
+        isActive: true,
+        project: { status: 'CONCLUIDO' },
+      },
+      include: {
+        project: { select: { id: true, m2Total: true } },
+      },
+    });
+
+    const completedProjectsCount = completedProjects.length;
+
+    // Calculate m² proporcional às horas trabalhadas em cada projeto concluído
+    let totalM2Applied = 0;
+    for (const assignment of completedProjects) {
+      if (!assignment.project.m2Total) continue;
+
+      // Horas do usuário neste projeto
+      const userHours = await prisma.checkin.aggregate({
+        where: { userId: req.user!.sub, projectId: assignment.projectId },
+        _sum: { hoursWorked: true },
+      });
+
+      // Total de horas de todos neste projeto
+      const allHours = await prisma.checkin.aggregate({
+        where: { projectId: assignment.projectId },
+        _sum: { hoursWorked: true },
+      });
+
+      const userHoursNum = Number(userHours._sum.hoursWorked || 0);
+      const allHoursNum = Number(allHours._sum.hoursWorked || 0);
+
+      if (allHoursNum > 0) {
+        const proportion = userHoursNum / allHoursNum;
+        totalM2Applied += proportion * Number(assignment.project.m2Total);
+      }
+    }
+
     // Find primary badge (like Instagram verification)
     const primaryBadge = user.badges.find(b => b.isPrimary)?.badge || null;
 
@@ -132,7 +172,8 @@ router.get('/profile', mobileAuth, async (req, res, next) => {
       data: {
         ...user,
         totalHoursWorked: Number(user.totalHoursWorked),
-        totalM2Applied: Number(user.totalM2Applied),
+        totalM2Applied: Math.round(totalM2Applied * 100) / 100, // Arredondado para 2 casas decimais
+        totalProjectsCount: completedProjectsCount, // Apenas projetos CONCLUIDOS
         primaryBadge,
         badges: user.badges.map(b => ({
           ...b.badge,
@@ -317,8 +358,47 @@ router.get(
             where: { isActive: true },
             select: { id: true },
           },
+          tasks: {
+            where: { publishedToApp: true },
+            orderBy: { sortOrder: 'asc' },
+            select: { id: true, title: true, phase: true, status: true, taskType: true },
+          },
         },
       });
+
+      // Helper function to calculate current phase and task from tasks
+      const calculateCurrentPhaseAndTask = (tasks: { title: string; phase: string; status: string; taskType: string }[]): {
+        currentPhase: string;
+        currentTask: { title: string; taskType: string } | null;
+      } => {
+        if (tasks.length === 0) return { currentPhase: 'PREPARO', currentTask: null };
+
+        const tasksByPhase = {
+          PREPARO: tasks.filter((t) => t.phase === 'PREPARO'),
+          APLICACAO: tasks.filter((t) => t.phase === 'APLICACAO'),
+          ACABAMENTO: tasks.filter((t) => t.phase === 'ACABAMENTO'),
+        };
+
+        const preparoCompleted = tasksByPhase.PREPARO.length > 0 &&
+          tasksByPhase.PREPARO.every((t) => t.status === 'COMPLETED');
+        const aplicacaoCompleted = tasksByPhase.APLICACAO.length > 0 &&
+          tasksByPhase.APLICACAO.every((t) => t.status === 'COMPLETED');
+
+        let currentPhase = 'PREPARO';
+        if (preparoCompleted && aplicacaoCompleted) currentPhase = 'ACABAMENTO';
+        else if (preparoCompleted) currentPhase = 'APLICACAO';
+
+        // Find the current task (first IN_PROGRESS task, or first PENDING task if none in progress)
+        let currentTask = tasks.find((t) => t.status === 'IN_PROGRESS');
+        if (!currentTask) {
+          currentTask = tasks.find((t) => t.status === 'PENDING');
+        }
+
+        return {
+          currentPhase,
+          currentTask: currentTask ? { title: currentTask.title, taskType: currentTask.taskType } : null,
+        };
+      };
 
       // Calculate distance for each project and sort
       const projectsWithDistance = allProjects.map(project => {
@@ -334,6 +414,9 @@ router.get(
           distanceFormatted = `${(distance / 1000).toFixed(1)} km`;
         }
 
+        // Calculate current phase and task
+        const { currentPhase, currentTask } = calculateCurrentPhaseAndTask(project.tasks);
+
         return {
           id: project.id,
           name: project.title,
@@ -345,6 +428,8 @@ router.get(
           teamSize: project.assignments.length,
           latitude: projectLat,
           longitude: projectLng,
+          currentPhase,
+          currentTask,
         };
       });
 
@@ -3831,6 +3916,9 @@ router.get(
         progress: t.progress,
         completionType: t.completionType,
         estimatedHours: t.estimatedHours ? Number(t.estimatedHours) : null,
+        // CURA fields for countdown display
+        curaStartedAt: t.curaStartedAt,
+        curaAutoCompletedAt: t.curaAutoCompletedAt,
       });
 
       res.json({
@@ -3982,13 +4070,20 @@ router.post(
         }
 
         // Update task status and progress
+        const taskUpdateData: any = {
+          status: isPartial ? 'IN_PROGRESS' : 'COMPLETED',
+          progress: taskProgress,
+          completionType: taskCompletionType,
+        };
+
+        // Set curaStartedAt for CURA tasks when they become IN_PROGRESS
+        if (task.taskType === 'CURA' && isPartial && !task.curaStartedAt) {
+          taskUpdateData.curaStartedAt = new Date();
+        }
+
         await prisma.projectTask.update({
           where: { id: taskId },
-          data: {
-            status: isPartial ? 'IN_PROGRESS' : 'COMPLETED',
-            progress: taskProgress,
-            completionType: taskCompletionType,
-          },
+          data: taskUpdateData,
         });
 
         // Award XP for task completion (only if not previously completed or upgrading)
@@ -4019,6 +4114,40 @@ router.post(
         }
 
         isCompleted = taskProgress === 100;
+
+        // If task was completed (100%), auto-start the next task
+        if (isCompleted) {
+          // Get all tasks ordered by sortOrder to find the next one
+          const projectTasks = await prisma.projectTask.findMany({
+            where: {
+              projectId: activeCheckin.projectId,
+              publishedToApp: true,
+            },
+            orderBy: { sortOrder: 'asc' },
+          });
+
+          // Find the next task in sequence that is PENDING
+          const currentTaskIndex = projectTasks.findIndex(t => t.id === taskId);
+          if (currentTaskIndex >= 0 && currentTaskIndex < projectTasks.length - 1) {
+            const nextTask = projectTasks[currentTaskIndex + 1];
+            if (nextTask && nextTask.status === 'PENDING') {
+              const nextTaskUpdateData: any = {
+                status: 'IN_PROGRESS' as const,
+              };
+
+              // If next task is CURA, set curaStartedAt to start the 24h countdown
+              if (nextTask.taskType === 'CURA') {
+                nextTaskUpdateData.curaStartedAt = new Date();
+                console.log(`⏱️ CURA task "${nextTask.title}" auto-started with 24h countdown`);
+              }
+
+              await prisma.projectTask.update({
+                where: { id: nextTask.id },
+                data: nextTaskUpdateData,
+              });
+            }
+          }
+        }
       }
 
       // Get updated progress including phase progress
@@ -4091,6 +4220,96 @@ router.post(
           phaseProgress,
           phaseUnlocked,
           currentPhase,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST /api/mobile/tasks/:taskId/complete-cura-early - Complete CURA task early (for hot days)
+router.post(
+  '/tasks/:taskId/complete-cura-early',
+  mobileAuth,
+  [param('taskId').isUUID()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { taskId } = req.params;
+      const userId = req.user!.sub;
+
+      // Verify task exists and is CURA type
+      const task = await prisma.projectTask.findUnique({
+        where: { id: taskId },
+        include: {
+          project: {
+            include: {
+              tasks: {
+                orderBy: { sortOrder: 'asc' },
+                select: { id: true, status: true, sortOrder: true, title: true, taskType: true },
+              },
+            },
+          },
+        },
+      });
+
+      if (!task) {
+        throw new AppError('Tarefa nao encontrada', 404, 'TASK_NOT_FOUND');
+      }
+
+      if (task.taskType !== 'CURA') {
+        throw new AppError('Esta tarefa nao e uma tarefa de CURA', 400, 'NOT_CURA_TASK');
+      }
+
+      if (task.status !== 'IN_PROGRESS') {
+        throw new AppError('Tarefa de CURA nao esta em andamento', 400, 'CURA_NOT_IN_PROGRESS');
+      }
+
+      // Complete the CURA task
+      await prisma.projectTask.update({
+        where: { id: taskId },
+        data: {
+          status: 'COMPLETED',
+          progress: 100,
+          // Note: curaAutoCompletedAt is NOT set because this is manual early completion
+        },
+      });
+
+      console.log(`⚡ CURA task ${taskId} completed early by user ${userId}`);
+
+      // Find and start the next task
+      const nextTask = task.project.tasks.find(
+        (t) => t.sortOrder > task.sortOrder && t.status === 'PENDING'
+      );
+
+      let nextTaskStarted = null;
+      if (nextTask) {
+        const updateData: any = {
+          status: 'IN_PROGRESS' as const,
+        };
+
+        // If next task is also CURA, set curaStartedAt
+        if (nextTask.taskType === 'CURA') {
+          updateData.curaStartedAt = new Date();
+        }
+
+        await prisma.projectTask.update({
+          where: { id: nextTask.id },
+          data: updateData,
+        });
+
+        nextTaskStarted = { id: nextTask.id, title: nextTask.title };
+      }
+
+      res.json({
+        success: true,
+        message: nextTaskStarted
+          ? 'Cura concluida! Proxima tarefa iniciada.'
+          : 'Cura concluida!',
+        data: {
+          taskId,
+          nextTask: nextTaskStarted,
         },
       });
     } catch (error) {
@@ -4496,31 +4715,103 @@ router.post(
 /**
  * GET /api/mobile/ranking/top10
  * Get top 10 applicators by XP
+ * Query params:
+ *   - type: 'month' (default) or 'total'
  */
 router.get('/ranking/top10', mobileAuth, async (req, res, next) => {
   try {
-    const topUsers = await prisma.user.findMany({
-      where: {
-        status: 'APPROVED',
-      },
-      select: {
-        id: true,
-        name: true,
-        username: true,
-        role: true,
-        xpTotal: true,
-        level: true,
-      },
-      orderBy: {
-        xpTotal: 'desc',
-      },
-      take: 10,
-    });
+    const type = (req.query.type as string) || 'month';
 
-    res.json({
-      success: true,
-      data: topUsers,
-    });
+    // Get start of current month for monthly XP calculation
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    if (type === 'month') {
+      // For monthly ranking, we need to calculate xpMonth for ALL users first,
+      // then sort by xpMonth and take top 10
+      const allApprovedUsers = await prisma.user.findMany({
+        where: { status: 'APPROVED' },
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          role: true,
+          xpTotal: true,
+          level: true,
+          photoUrl: true,
+        },
+      });
+
+      // Calculate monthly XP for each user
+      const usersWithMonthlyXP = await Promise.all(
+        allApprovedUsers.map(async (user) => {
+          const monthlyXP = await prisma.xpTransaction.aggregate({
+            where: {
+              userId: user.id,
+              createdAt: { gte: startOfMonth },
+              amount: { gt: 0 }, // Only positive XP
+            },
+            _sum: { amount: true },
+          });
+
+          return {
+            ...user,
+            xpMonth: monthlyXP._sum.amount || 0,
+          };
+        })
+      );
+
+      // Sort by xpMonth descending and take top 10
+      const topByMonth = usersWithMonthlyXP
+        .sort((a, b) => b.xpMonth - a.xpMonth)
+        .slice(0, 10);
+
+      res.json({
+        success: true,
+        data: topByMonth,
+      });
+    } else {
+      // For total ranking, order by xpTotal
+      const topUsers = await prisma.user.findMany({
+        where: { status: 'APPROVED' },
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          role: true,
+          xpTotal: true,
+          level: true,
+          photoUrl: true,
+        },
+        orderBy: { xpTotal: 'desc' },
+        take: 10,
+      });
+
+      // Still calculate monthly XP for reference
+      const usersWithMonthlyXP = await Promise.all(
+        topUsers.map(async (user) => {
+          const monthlyXP = await prisma.xpTransaction.aggregate({
+            where: {
+              userId: user.id,
+              createdAt: { gte: startOfMonth },
+              amount: { gt: 0 },
+            },
+            _sum: { amount: true },
+          });
+
+          return {
+            ...user,
+            xpMonth: monthlyXP._sum.amount || 0,
+          };
+        })
+      );
+
+      res.json({
+        success: true,
+        data: usersWithMonthlyXP,
+      });
+    }
   } catch (error) {
     next(error);
   }
@@ -4868,7 +5159,9 @@ router.get(
       const videosWithProgress = videos.map(video => {
         const progress = progressMap.get(video.id);
         const quizAttemptsList = video.quiz ? (attemptsByQuiz.get(video.quiz.id) || []) : [];
-        const passedQuiz = quizAttemptsList.some(a => a.passed);
+        const passedAttempt = quizAttemptsList.find(a => a.passed);
+        const passedQuiz = !!passedAttempt;
+        const quizXpEarned = passedAttempt?.xpEarned || 0;
 
         // Check if video is locked (advanced videos require 3+ completed)
         const isLocked = video.level === 'AVANCADO' && completedCount < 3;
@@ -4890,6 +5183,7 @@ router.get(
             progressPercent: progress.progressPercent,
             completed: progress.completed,
             xpEarnedWatch: progress.xpEarnedWatch,
+            quizXpEarned: quizXpEarned, // XP ganho do quiz se passou
           } : null,
           // Quiz info
           quiz: video.quiz ? {
@@ -4899,10 +5193,39 @@ router.get(
             maxAttempts: video.quiz.maxAttempts,
             attemptCount: quizAttemptsList.length,
             passed: passedQuiz,
+            xpEarned: quizXpEarned, // XP ganho do quiz
             canAttempt: !passedQuiz && (video.quiz.maxAttempts === 0 || quizAttemptsList.length < video.quiz.maxAttempts),
           } : null,
         };
       });
+
+      // Calculate total XP earned from videos (watching + quizzes)
+      let totalXPEarned = 0;
+      videosWithProgress.forEach(video => {
+        if (video.progress) {
+          totalXPEarned += video.progress.xpEarnedWatch || 0;
+          totalXPEarned += video.progress.quizXpEarned || 0;
+        }
+      });
+
+      // Calculate level based on XP earned from academy
+      // Level 1: 0-999 XP, Level 2: 1000-2499 XP, Level 3: 2500-4999 XP, etc.
+      const levelThresholds = [0, 1000, 2500, 5000, 10000, 20000, 35000, 50000, 75000, 100000];
+      let level = 1;
+      let nextLevelXP = 1000;
+      for (let i = levelThresholds.length - 1; i >= 0; i--) {
+        if (totalXPEarned >= levelThresholds[i]) {
+          level = i + 1;
+          nextLevelXP = levelThresholds[i + 1] || levelThresholds[i] * 2;
+          break;
+        }
+      }
+
+      // Calculate progress percent to next level
+      const prevLevelXP = levelThresholds[level - 1] || 0;
+      const xpInCurrentLevel = totalXPEarned - prevLevelXP;
+      const xpNeededForNextLevel = nextLevelXP - prevLevelXP;
+      const progressPercent = Math.min(100, Math.round((xpInCurrentLevel / xpNeededForNextLevel) * 100));
 
       res.json({
         success: true,
@@ -4911,6 +5234,10 @@ router.get(
           stats: {
             totalVideos: videos.length,
             completedVideos: completedCount,
+            xpTotal: totalXPEarned,
+            level,
+            nextLevelXP,
+            progressPercent,
           },
         },
       });
@@ -5175,6 +5502,7 @@ router.get(
     try {
       const userId = req.user!.sub;
       const videoId = req.params.id;
+      const isReviewMode = req.query.review === 'true';
 
       // Check video progress - quiz only available after 90%
       const progress = await prisma.videoProgress.findUnique({
@@ -5189,7 +5517,7 @@ router.get(
         );
       }
 
-      // Get video with quiz
+      // Get video with quiz - include isCorrect only in review mode
       const video = await prisma.educationalVideo.findFirst({
         where: { id: videoId, isActive: true },
         include: {
@@ -5204,7 +5532,7 @@ router.get(
                       id: true,
                       answerText: true,
                       sortOrder: true,
-                      // Note: NOT including isCorrect
+                      isCorrect: isReviewMode, // Include isCorrect only in review mode
                     },
                   },
                 },
@@ -5227,16 +5555,24 @@ router.get(
         where: { userId, quizId: video.quiz.id, passed: true },
       });
 
-      if (passed) {
-        throw new AppError('Voce ja passou neste quiz', 400, 'ALREADY_PASSED');
-      }
+      // In review mode, user must have already passed
+      if (isReviewMode) {
+        if (!passed) {
+          throw new AppError('Voce precisa passar no quiz antes de revisar', 400, 'NOT_PASSED_YET');
+        }
+      } else {
+        // Normal mode - block if already passed
+        if (passed) {
+          throw new AppError('Voce ja passou neste quiz', 400, 'ALREADY_PASSED');
+        }
 
-      if (video.quiz.maxAttempts > 0 && attempts >= video.quiz.maxAttempts) {
-        throw new AppError(
-          `Voce ja esgotou suas ${video.quiz.maxAttempts} tentativas`,
-          400,
-          'MAX_ATTEMPTS_REACHED'
-        );
+        if (video.quiz.maxAttempts > 0 && attempts >= video.quiz.maxAttempts) {
+          throw new AppError(
+            `Voce ja esgotou suas ${video.quiz.maxAttempts} tentativas`,
+            400,
+            'MAX_ATTEMPTS_REACHED'
+          );
+        }
       }
 
       res.json({
@@ -5246,13 +5582,15 @@ router.get(
           title: video.quiz.title || `Quiz: ${video.title}`,
           passingScore: video.quiz.passingScore,
           xpReward: video.quiz.xpReward,
-          attemptNumber: attempts + 1,
+          attemptNumber: isReviewMode ? 0 : attempts + 1,
           maxAttempts: video.quiz.maxAttempts,
+          reviewMode: isReviewMode,
           questions: video.quiz.questions.map(q => ({
             id: q.id,
             questionText: q.questionText,
             questionType: q.questionType,
             imageUrl: q.imageUrl,
+            explanation: isReviewMode ? q.explanation : undefined, // Include explanation in review mode
             answers: q.answers,
           })),
         },

@@ -393,6 +393,10 @@ router.get(
   validate,
   async (req, res, next) => {
     try {
+      // Get optional date filter (default: today)
+      const targetDate = req.query.date ? new Date(req.query.date as string) : new Date();
+      targetDate.setHours(0, 0, 0, 0);
+
       const assignments = await prisma.projectAssignment.findMany({
         where: {
           projectId: req.params.id,
@@ -433,15 +437,40 @@ router.get(
         ])
       );
 
+      // Get absences for target date
+      const userIds = assignments.map((a) => a.user.id);
+      const absences = await prisma.absenceNotice.findMany({
+        where: {
+          userId: { in: userIds },
+          absenceDate: targetDate,
+          status: 'CONFIRMED',
+        },
+        select: {
+          userId: true,
+          reason: true,
+          wasAdvanceNotice: true,
+        },
+      });
+
+      const absenceMap = new Map(
+        absences.map((a) => [a.userId, { reason: a.reason, wasAdvanceNotice: a.wasAdvanceNotice }])
+      );
+
       res.json({
         success: true,
-        data: assignments.map((a) => ({
-          ...a.user,
-          projectRole: a.projectRole,
-          assignedAt: a.assignedAt,
-          hoursOnProject: hoursMap.get(a.user.id)?.hours || 0,
-          checkinsCount: hoursMap.get(a.user.id)?.checkins || 0,
-        })),
+        data: assignments.map((a) => {
+          const absence = absenceMap.get(a.user.id);
+          return {
+            ...a.user,
+            projectRole: a.projectRole,
+            assignedAt: a.assignedAt,
+            hoursOnProject: hoursMap.get(a.user.id)?.hours || 0,
+            checkinsCount: hoursMap.get(a.user.id)?.checkins || 0,
+            hasAbsenceToday: !!absence,
+            absenceReason: absence?.reason || null,
+            absenceWasAdvanceNotice: absence?.wasAdvanceNotice || null,
+          };
+        }),
       });
     } catch (error) {
       next(error);
@@ -1274,6 +1303,102 @@ router.post(
           applicatorsCount: users.length,
           phonesNotified: project.responsiblePhones,
           results,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================
+// FINALIZE PROJECT
+// =============================================
+
+/**
+ * POST /api/admin/projects/:id/finalize
+ * Mark a project as CONCLUIDO (finalized)
+ * - Checks if all tasks are COMPLETED
+ * - Updates project status to CONCLUIDO
+ * - Sets completedAt timestamp
+ */
+router.post(
+  '/:id/finalize',
+  adminAuth,
+  [param('id').isUUID()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+
+      // Check if project exists
+      const project = await prisma.project.findUnique({
+        where: { id },
+        include: {
+          tasks: {
+            select: { id: true, title: true, status: true },
+          },
+        },
+      });
+
+      if (!project) {
+        throw new AppError('Projeto não encontrado', 404, 'PROJECT_NOT_FOUND');
+      }
+
+      // Check if already finalized
+      if (project.status === 'CONCLUIDO') {
+        return res.json({
+          success: true,
+          data: {
+            message: 'Projeto já está finalizado',
+            project,
+          },
+        });
+      }
+
+      // Check if all tasks are completed
+      const pendingTasks = project.tasks.filter(t => t.status !== 'COMPLETED');
+
+      if (pendingTasks.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'TASKS_NOT_COMPLETED',
+            message: `Ainda existem ${pendingTasks.length} tarefa(s) não concluída(s)`,
+            pendingTasks: pendingTasks.map(t => ({ id: t.id, title: t.title, status: t.status })),
+          },
+        });
+      }
+
+      // Finalize the project
+      const updatedProject = await prisma.project.update({
+        where: { id },
+        data: {
+          status: 'CONCLUIDO',
+          completedAt: new Date(),
+        },
+      });
+
+      // Create audit log
+      await prisma.auditLog.create({
+        data: {
+          adminUserId: req.user!.sub,
+          action: 'FINALIZE_PROJECT',
+          entityType: 'Project',
+          entityId: id,
+          oldValues: { status: project.status },
+          newValues: { status: 'CONCLUIDO', completedAt: updatedProject.completedAt },
+          description: `Finalized project "${project.title}"`,
+        },
+      });
+
+      console.log(`[Admin] Project ${id} finalized by admin ${req.user!.sub}`);
+
+      res.json({
+        success: true,
+        data: {
+          message: 'Projeto finalizado com sucesso!',
+          project: updatedProject,
         },
       });
     } catch (error) {

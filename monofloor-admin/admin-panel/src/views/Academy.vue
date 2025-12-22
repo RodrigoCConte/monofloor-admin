@@ -1240,6 +1240,8 @@ const saveQuiz = async () => {
 
   savingQuiz.value = true;
   try {
+    console.log('DEBUG: Saving quiz with data:', JSON.stringify(quizForm.value, null, 2));
+    console.log('DEBUG: Video ID:', selectedVideoForQuiz.value.id);
     await academyApi.saveQuiz(selectedVideoForQuiz.value.id, quizForm.value);
     closeQuizModal();
     await loadVideos();

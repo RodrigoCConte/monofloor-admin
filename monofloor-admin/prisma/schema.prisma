@@ -1143,6 +1143,10 @@ model ProjectTask {
   publishedToApp  Boolean       @default(false) @map("published_to_app")
   publishedAt     DateTime?     @map("published_at")
 
+  // CURA (curing) auto-completion
+  curaStartedAt   DateTime?     @map("cura_started_at")  // When CURA task was started (auto-completes after 24h)
+  curaAutoCompletedAt DateTime? @map("cura_auto_completed_at")  // When CURA was auto-completed
+
   // Timestamps
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")

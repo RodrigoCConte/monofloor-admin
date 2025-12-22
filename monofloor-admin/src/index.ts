@@ -10,6 +10,7 @@ import { processScheduledReminders } from './services/report-reminder.service';
 import { processScheduledLunchAlerts, cleanupOldLunchAlerts } from './services/lunch-alert.service';
 import { processAllDailyWorktime } from './services/worktime.service';
 import { processGPSAutoCheckouts } from './services/gps-autocheckout.service';
+import { startCuraScheduler } from './services/cura-scheduler.service';
 
 const prisma = new PrismaClient();
 
@@ -76,6 +77,9 @@ async function main() {
 
       // Start lunch reminder scheduler
       startLunchScheduler();
+
+      // Start CURA auto-completion scheduler
+      startCuraScheduler();
 
       // Start video job worker
       videoJobWorker.start();

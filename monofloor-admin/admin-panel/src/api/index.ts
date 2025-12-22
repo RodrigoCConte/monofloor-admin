@@ -143,6 +143,9 @@ export const projectsApi = {
     api.put(`/api/admin/projects/${projectId}/tasks/${taskId}/assignments`, { userIds }),
   bulkUpdateTaskAssignments: (projectId: string, taskIds: string[], userIds: string[]) =>
     api.put(`/api/admin/projects/${projectId}/tasks/bulk-assignments`, { taskIds, userIds }),
+  // Finalize project
+  finalize: (projectId: string) =>
+    api.post(`/api/admin/projects/${projectId}/finalize`),
 };
 
 // Tasks API (standalone for task-types)

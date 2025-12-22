@@ -6526,17 +6526,41 @@ function renderNearbyProjects() {
         return;
     }
 
+    // Phase names and icons for display
+    const phaseNames = {
+        PREPARO: 'Preparo',
+        APLICACAO: 'Aplicacao',
+        ACABAMENTO: 'Acabamento'
+    };
+
+    const phaseIcons = {
+        PREPARO: '🔧',
+        APLICACAO: '🎨',
+        ACABAMENTO: '✨'
+    };
+
     container.innerHTML = nearbyProjects.map(project => {
         const m2Total = project.m2Total || 0;
         const teamSize = project.teamSize || 0;
         const distance = project.distanceFormatted || formatDistance(project.distance);
+        const currentPhase = project.currentPhase || 'PREPARO';
+        const phaseName = phaseNames[currentPhase] || 'Preparo';
+        const phaseIcon = phaseIcons[currentPhase] || '🔧';
+        const currentTask = project.currentTask;
 
         return `
             <div class="nearby-project-card">
                 <div class="nearby-project-header">
                     <span class="nearby-project-icon">📍</span>
                     <span class="nearby-project-name">${project.name || project.cliente || 'Projeto'}</span>
+                    <span class="nearby-phase-badge ${currentPhase.toLowerCase()}">${phaseIcon} ${phaseName}</span>
                 </div>
+                ${currentTask ? `
+                    <div class="nearby-current-task">
+                        <span class="task-label">📋 Tarefa atual:</span>
+                        <span class="task-name">${currentTask.title}</span>
+                    </div>
+                ` : ''}
                 <div class="nearby-project-info">
                     <span class="nearby-project-distance">${distance}</span>
                     <span class="nearby-project-separator">•</span>
@@ -8750,7 +8774,22 @@ document.addEventListener('DOMContentLoaded', function() {
 // XP RANKING
 // =============================================
 
-async function loadXPRanking() {
+let currentRankingTab = 'month'; // Default to month
+
+function switchRankingTab(tab) {
+    currentRankingTab = tab;
+
+    // Update tab buttons
+    const monthTab = document.getElementById('ranking-tab-month');
+    const totalTab = document.getElementById('ranking-tab-total');
+    if (monthTab) monthTab.classList.toggle('active', tab === 'month');
+    if (totalTab) totalTab.classList.toggle('active', tab === 'total');
+
+    // Reload ranking with new tab
+    loadXPRanking(tab);
+}
+
+async function loadXPRanking(type = 'month') {
     const container = document.getElementById('xp-ranking-list');
     if (!container) return;
 
@@ -8765,7 +8804,7 @@ async function loadXPRanking() {
             return;
         }
 
-        const response = await fetch(`${API_URL}/api/mobile/ranking/top10`, {
+        const response = await fetch(`${API_URL}/api/mobile/ranking/top10?type=${type}`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -8783,13 +8822,18 @@ async function loadXPRanking() {
                 return;
             }
 
+            // Get XP field based on type
+            const xpField = type === 'month' ? 'xpMonth' : 'xpTotal';
+            const xpLabel = type === 'month' ? 'XP este mês' : 'XP total';
+
             // Find max XP for percentage calculation
-            const maxXP = users.length > 0 ? users[0].xpTotal : 0;
+            const maxXP = users.length > 0 ? (users[0][xpField] || 0) : 0;
 
             // Render ranking items
             container.innerHTML = users.map((user, index) => {
                 const position = index + 1;
-                const xpPercentage = maxXP > 0 ? ((user.xpTotal || 0) / maxXP) * 100 : 0;
+                const userXP = user[xpField] || 0;
+                const xpPercentage = maxXP > 0 ? (userXP / maxXP) * 100 : 0;
 
                 return `
                     <div class="xp-ranking-item">
@@ -8800,7 +8844,7 @@ async function loadXPRanking() {
                                 <div class="xp-bar" style="width: ${xpPercentage}%"></div>
                             </div>
                         </div>
-                        <div class="xp-value">${(user.xpTotal || 0).toLocaleString()} XP</div>
+                        <div class="xp-value-single">${userXP.toLocaleString()} XP</div>
                     </div>
                 `;
             }).join('');
@@ -8813,7 +8857,7 @@ async function loadXPRanking() {
         container.innerHTML = `
             <div class="error-state">
                 <span>Erro ao carregar ranking</span>
-                <button onclick="loadXPRanking()">Tentar novamente</button>
+                <button onclick="loadXPRanking('${type}')">Tentar novamente</button>
             </div>
         `;
     }
@@ -9021,20 +9065,68 @@ function renderTaskBlockSection(tasksData) {
             pendingTasks.forEach((task) => {
                 const isPartial = task.status === 'IN_PROGRESS' || task.completionType === 'PARTIAL';
                 const taskProgress = task.progress || 0;
+                const isCura = task.taskType === 'CURA';
+                const isInProgress = task.status === 'IN_PROGRESS';
+
+                // Calculate CURA progress if applicable
+                let curaInfo = null;
+                if (isCura && isInProgress && task.curaStartedAt) {
+                    const startTime = new Date(task.curaStartedAt).getTime();
+                    const now = Date.now();
+                    const elapsed = now - startTime;
+                    const total = 24 * 60 * 60 * 1000; // 24 hours in ms
+                    const remaining = Math.max(0, total - elapsed);
+                    const hoursRemaining = Math.floor(remaining / (60 * 60 * 1000));
+                    const minutesRemaining = Math.floor((remaining % (60 * 60 * 1000)) / (60 * 1000));
+                    const percentComplete = Math.min(100, Math.round((elapsed / total) * 100));
+
+                    curaInfo = {
+                        hoursRemaining,
+                        minutesRemaining,
+                        percentComplete,
+                        canCompleteEarly: true
+                    };
+                }
 
                 html += `
-                    <div class="task-block-item-simple ${isPartial ? 'partial' : ''}"
+                    <div class="task-block-item-simple ${isPartial ? 'partial' : ''} ${isCura && isInProgress ? 'cura-active' : ''}"
                          data-task-id="${task.id}"
-                         data-progress="${taskProgress}">
+                         data-progress="${taskProgress}"
+                         data-is-cura="${isCura}">
                         <div class="task-color-bar" style="background-color: ${task.color || '#c9a962'}"></div>
                         <div class="task-info">
-                            <div class="task-name">${escapeHtml(task.title)}</div>
+                            <div class="task-name">
+                                ${isCura && isInProgress ? '<span class="cura-icon">⏳</span>' : ''}
+                                ${escapeHtml(task.title)}
+                            </div>
                             ${task.surface && task.surface !== 'GERAL' ? `
                                 <span class="task-surface-tag ${task.surface.toLowerCase()}">${task.surface}</span>
                             ` : ''}
+                            ${curaInfo ? `
+                                <div class="cura-countdown">
+                                    <div class="cura-progress-bar">
+                                        <div class="cura-progress-fill" style="width: ${curaInfo.percentComplete}%"></div>
+                                    </div>
+                                    <span class="cura-time-remaining">
+                                        ${curaInfo.hoursRemaining}h ${curaInfo.minutesRemaining}min restantes
+                                    </span>
+                                </div>
+                            ` : ''}
+                            ${isCura && !task.curaStartedAt && task.status === 'PENDING' ? `
+                                <div class="cura-waiting-badge">
+                                    <span class="cura-waiting-icon">🕐</span>
+                                    Aguardando inicio (24h de cura)
+                                </div>
+                            ` : ''}
                         </div>
-                        ${isPartial ? `
+                        ${isPartial && !isCura ? `
                             <div class="task-partial-badge">${taskProgress}%</div>
+                        ` : ''}
+                        ${curaInfo && curaInfo.canCompleteEarly ? `
+                            <button class="cura-complete-early-btn" onclick="event.stopPropagation(); completeCuraEarly('${task.id}');">
+                                <span class="btn-icon">⚡</span>
+                                Concluir
+                            </button>
                         ` : ''}
                     </div>
                 `;
@@ -9253,6 +9345,47 @@ async function completeTaskWithType(taskId, completionType, progress) {
         }
     } catch (error) {
         console.error('Error completing task:', error);
+        showToast('Erro de conexao');
+    }
+}
+
+/**
+ * Complete CURA task early (for hot days when curing finishes faster)
+ */
+async function completeCuraEarly(taskId) {
+    const token = getAuthToken();
+    if (!token) {
+        showToast('Voce precisa estar logado');
+        return;
+    }
+
+    // Confirm with user
+    const confirmed = confirm('Deseja concluir a cura antecipadamente?\n\nEm dias quentes, a cura pode terminar mais rapido.');
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch(`${API_URL}/api/mobile/tasks/${taskId}/complete-cura-early`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(data.message || 'Cura concluida!');
+
+            // Refresh tasks
+            if (selectedProject) {
+                await loadProjectTasks(selectedProject.id);
+            }
+        } else {
+            showToast(data.error?.message || 'Erro ao concluir cura');
+        }
+    } catch (error) {
+        console.error('Error completing CURA early:', error);
         showToast('Erro de conexao');
     }
 }
@@ -12647,6 +12780,7 @@ let currentQuiz = null;
 let currentQuestionIndex = 0;
 let quizAnswers = [];
 let videoProgressInterval = null;
+let isQuizReviewMode = false; // Quiz review mode (read-only, no XP)
 
 // Switch between academy tabs
 function switchAcademyTab(tab) {
@@ -12694,44 +12828,44 @@ async function loadAcademyVideos() {
         const responseData = data.data || data;
         academyVideos = responseData.videos || [];
 
-        // Update user stats
-        updateAcademyUserStats(responseData.stats);
-
         // Render videos
         renderAcademyVideos(academyVideos);
 
-        // Update videos count
-        const countEl = document.getElementById('academyVideosCount');
-        if (countEl) {
-            countEl.textContent = `${academyVideos.length} videos`;
+        // Calculate total XP available and earned from trilha
+        let totalXPAvailable = 0;
+        let totalXPEarned = 0;
+        academyVideos.forEach(video => {
+            // XP available = watching XP + quiz XP
+            totalXPAvailable += (video.xpForWatching || 0) + (video.quiz?.xpReward || 0);
+            // XP earned
+            const progress = video.progress || {};
+            totalXPEarned += (progress.xpEarnedWatch || 0) + (progress.quizXpEarned || 0);
+        });
+
+        // Update trilha XP display
+        console.log('[Academy] XP Stats:', { totalXPEarned, totalXPAvailable, videosCount: academyVideos.length });
+        const xpEarnedEl = document.getElementById('trilhaXPEarned');
+        const xpTotalEl = document.getElementById('trilhaXPTotal');
+        const xpFillEl = document.getElementById('trilhaXPFill');
+        console.log('[Academy] Elements:', { xpEarnedEl: !!xpEarnedEl, xpTotalEl: !!xpTotalEl, xpFillEl: !!xpFillEl });
+
+        if (xpEarnedEl) {
+            xpEarnedEl.textContent = totalXPEarned.toLocaleString();
+            console.log('[Academy] Updated xpEarned to:', totalXPEarned);
+        }
+        if (xpTotalEl) {
+            xpTotalEl.textContent = totalXPAvailable.toLocaleString();
+            console.log('[Academy] Updated xpTotal to:', totalXPAvailable);
+        }
+        if (xpFillEl) {
+            const percent = totalXPAvailable > 0 ? Math.round((totalXPEarned / totalXPAvailable) * 100) : 0;
+            xpFillEl.style.width = `${percent}%`;
         }
 
     } catch (error) {
         console.error('[Academy] Error loading videos:', error);
         container.innerHTML = '<div class="academy-loading">Erro ao carregar videos. Tente novamente.</div>';
     }
-}
-
-// Update user academy stats
-function updateAcademyUserStats(stats) {
-    if (!stats) return;
-
-    const levelEl = document.getElementById('academyUserLevel');
-    const currentXPEl = document.getElementById('academyCurrentXP');
-    const nextLevelXPEl = document.getElementById('academyNextLevelXP');
-    const xpNeededEl = document.getElementById('academyXPNeeded');
-    const progressFill = document.getElementById('academyProgressFill');
-
-    const level = stats.level || 1;
-    const currentXP = stats.xpTotal || 0;
-    const nextLevelXP = stats.nextLevelXP || 1000;
-    const progressPercent = stats.progressPercent || 0;
-
-    if (levelEl) levelEl.textContent = level;
-    if (currentXPEl) currentXPEl.textContent = currentXP.toLocaleString();
-    if (nextLevelXPEl) nextLevelXPEl.textContent = nextLevelXP.toLocaleString();
-    if (xpNeededEl) xpNeededEl.textContent = (nextLevelXP - currentXP).toLocaleString();
-    if (progressFill) progressFill.style.width = `${progressPercent}%`;
 }
 
 // Extract YouTube video ID from various URL formats
@@ -12800,6 +12934,10 @@ function renderAcademyVideos(videos) {
         const quizPassed = video.quiz?.passed || progress.quizPassed || false;
         const quizXP = video.quiz?.xpReward || video.quizXP || 0;
         const totalXP = (video.xpForWatching || 0) + quizXP;
+        // XP ganho: video + quiz (se passou)
+        const earnedWatchXP = progress.xpEarnedWatch || 0;
+        const earnedQuizXP = progress.quizXpEarned || video.quiz?.xpEarned || 0;
+        const earnedXP = earnedWatchXP + earnedQuizXP;
         const thumbnail = getVideoThumbnail(video);
 
         const levelLabels = {
@@ -12807,6 +12945,9 @@ function renderAcademyVideos(videos) {
             'INTERMEDIARIO': 'Intermediario',
             'AVANCADO': 'Avancado'
         };
+
+        // Determinar classe CSS do XP (verde se ganhou tudo, dourado se parcial, cinza se nada)
+        const xpClass = earnedXP >= totalXP ? 'xp-complete' : earnedXP > 0 ? 'xp-partial' : 'xp-none';
 
         return `
             <div class="academy-video-card ${completed ? 'completed' : ''}" onclick="openVideo('${video.id}')">
@@ -12823,7 +12964,7 @@ function renderAcademyVideos(videos) {
                     <div class="video-card-title">${video.title}</div>
                     <div class="video-card-meta">
                         <span class="video-card-level">${levelLabels[video.level] || video.level}</span>
-                        <span class="video-card-xp">+${totalXP} XP</span>
+                        <span class="video-card-xp ${xpClass}">${earnedXP} / ${totalXP} XP</span>
                     </div>
                     <div class="video-card-progress">
                         <div class="video-card-progress-bar">
@@ -13367,20 +13508,24 @@ function setupQuizSection(video) {
     // Check quiz passed status from video.quiz object or progress
     const quizPassed = video.quiz?.passed || progress.quizPassed || false;
 
-    // Check if already passed
+    // Check if already passed - allow review mode
     if (quizPassed) {
-        quizBtn.disabled = true;
+        quizBtn.disabled = false;
+        quizBtn.removeAttribute('onclick'); // Remove HTML onclick attribute
+        quizBtn.onclick = () => startQuizReview();
         quizBtn.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-                <path d="M9 11l3 3L22 4"/>
-                <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
             </svg>
-            <span>Quiz Concluido</span>
+            <span>Revisar Quiz</span>
             <span class="quiz-xp-badge claimed">✓ XP Resgatado</span>
         `;
         unlockInfo.style.display = 'none';
     } else if (progressPercent >= 90) {
         quizBtn.disabled = false;
+        quizBtn.setAttribute('onclick', 'startVideoQuiz()'); // Restore normal onclick
+        quizBtn.onclick = null; // Clear any JS onclick
         quizBtn.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                 <path d="M9 11l3 3L22 4"/>
@@ -13399,6 +13544,8 @@ function setupQuizSection(video) {
         `;
     } else {
         quizBtn.disabled = true;
+        quizBtn.setAttribute('onclick', 'startVideoQuiz()'); // Restore normal onclick
+        quizBtn.onclick = null; // Clear any JS onclick
         quizBtn.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                 <path d="M9 11l3 3L22 4"/>
@@ -13500,6 +13647,7 @@ async function startVideoQuiz() {
         // Reset quiz state
         currentQuestionIndex = 0;
         quizAnswers = [];
+        isQuizReviewMode = false; // Ensure we're in normal mode
 
         // Setup quiz UI
         document.getElementById('quizHeaderTitle').textContent = currentQuiz.title || 'Quiz';
@@ -13513,6 +13661,65 @@ async function startVideoQuiz() {
 
     } catch (error) {
         console.error('[Academy] Error loading quiz:', error);
+        showToast('Erro ao carregar quiz', 'error');
+    }
+}
+
+// Start quiz in review mode (read-only, shows correct answers)
+async function startQuizReview() {
+    const hasQuiz = !!(currentVideo?.quiz || currentVideo?.hasQuiz);
+    if (!currentVideo || !hasQuiz) return;
+
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            showToast('Faca login para revisar o quiz', 'error');
+            return;
+        }
+
+        // Fetch quiz with review=true to get correct answers
+        const response = await fetch(`${API_URL}/api/mobile/academy/videos/${currentVideo.id}/quiz?review=true`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMsg = errorData.error?.message || 'Erro ao carregar quiz';
+            showToast(errorMsg, 'error');
+            return;
+        }
+
+        const data = await response.json();
+        currentQuiz = data.data || data.quiz;
+
+        if (!currentQuiz || !currentQuiz.questions || currentQuiz.questions.length === 0) {
+            showToast('Quiz nao disponivel', 'error');
+            return;
+        }
+
+        // Set review mode
+        isQuizReviewMode = true;
+
+        // Pause video
+        const videoPlayer = document.getElementById('academyVideoPlayer');
+        if (videoPlayer) videoPlayer.pause();
+
+        // Reset quiz state
+        currentQuestionIndex = 0;
+        quizAnswers = [];
+
+        // Setup quiz UI with review indicator
+        document.getElementById('quizHeaderTitle').textContent = (currentQuiz.title || 'Quiz') + ' (Revisao)';
+        document.getElementById('quizTotalQuestions').textContent = currentQuiz.questions.length;
+
+        // Render first question in review mode
+        renderQuizQuestion(0);
+
+        // Navigate to quiz screen
+        navigateTo('screen-quiz');
+
+    } catch (error) {
+        console.error('[Academy] Error loading quiz for review:', error);
         showToast('Erro ao carregar quiz', 'error');
     }
 }
@@ -13537,22 +13744,63 @@ function renderQuizQuestion(index) {
         imageEl.style.display = 'none';
     }
 
+    // Find correct answer for review mode
+    const correctAnswer = question.answers.find(a => a.isCorrect);
+
     // Render answer options
     const optionsContainer = document.getElementById('quizAnswerOptions');
-    optionsContainer.innerHTML = question.answers.map((answer, i) => `
-        <div class="quiz-answer-option" onclick="selectQuizAnswer(${index}, '${answer.id}', this)">
-            <div class="answer-indicator">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                    <polyline points="20 6 9 17 4 12"/>
-                </svg>
-            </div>
-            <span class="answer-text">${answer.answerText}</span>
-        </div>
-    `).join('');
 
-    // Hide explanation and next button
-    document.getElementById('quizExplanation').style.display = 'none';
-    document.getElementById('quizNextBtn').style.display = 'none';
+    if (isQuizReviewMode) {
+        // Review mode: show all answers with correct one highlighted, no onclick
+        optionsContainer.innerHTML = question.answers.map((answer, i) => {
+            const isCorrectAnswer = answer.isCorrect || answer.id === correctAnswer?.id;
+            return `
+                <div class="quiz-answer-option disabled ${isCorrectAnswer ? 'correct' : ''}">
+                    <div class="answer-indicator">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                    </div>
+                    <span class="answer-text">${answer.answerText}</span>
+                    ${isCorrectAnswer ? '<span class="review-correct-badge">Correta</span>' : ''}
+                </div>
+            `;
+        }).join('');
+
+        // Show explanation if available
+        if (question.explanation) {
+            document.getElementById('quizExplanationText').textContent = question.explanation;
+            document.getElementById('quizExplanation').style.display = 'block';
+        } else {
+            document.getElementById('quizExplanation').style.display = 'none';
+        }
+
+        // Show next button immediately in review mode
+        const nextBtn = document.getElementById('quizNextBtn');
+        const nextBtnText = document.getElementById('quizNextBtnText');
+        nextBtn.style.display = 'flex';
+        if (index === currentQuiz.questions.length - 1) {
+            nextBtnText.textContent = 'Fechar Revisao';
+        } else {
+            nextBtnText.textContent = 'Proxima';
+        }
+    } else {
+        // Normal quiz mode
+        optionsContainer.innerHTML = question.answers.map((answer, i) => `
+            <div class="quiz-answer-option" onclick="selectQuizAnswer(${index}, '${answer.id}', this)">
+                <div class="answer-indicator">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                </div>
+                <span class="answer-text">${answer.answerText}</span>
+            </div>
+        `).join('');
+
+        // Hide explanation and next button
+        document.getElementById('quizExplanation').style.display = 'none';
+        document.getElementById('quizNextBtn').style.display = 'none';
+    }
 
     // Render progress dots
     renderQuizProgressDots(index);
@@ -13564,8 +13812,15 @@ function renderQuizProgressDots(currentIndex) {
     dotsContainer.innerHTML = currentQuiz.questions.map((_, i) => {
         let dotClass = 'quiz-dot';
         if (i === currentIndex) dotClass += ' current';
-        if (quizAnswers[i]) {
-            dotClass += quizAnswers[i].isCorrect ? ' correct' : ' incorrect';
+
+        if (isQuizReviewMode) {
+            // In review mode, show past questions as "reviewed"
+            if (i < currentIndex) dotClass += ' reviewed';
+        } else {
+            // Normal mode - show correct/incorrect based on answers
+            if (quizAnswers[i]) {
+                dotClass += quizAnswers[i].isCorrect ? ' correct' : ' incorrect';
+            }
         }
         return `<div class="${dotClass}"></div>`;
     }).join('');
@@ -13631,8 +13886,13 @@ function nextQuizQuestion() {
     currentQuestionIndex++;
 
     if (currentQuestionIndex >= currentQuiz.questions.length) {
-        // Submit quiz and show results
-        submitQuiz();
+        if (isQuizReviewMode) {
+            // Review mode: just close the quiz
+            closeQuiz();
+        } else {
+            // Normal mode: submit quiz and show results
+            submitQuiz();
+        }
     } else {
         renderQuizQuestion(currentQuestionIndex);
     }
@@ -13661,7 +13921,8 @@ async function submitQuiz() {
         if (!response.ok) throw new Error('Erro ao enviar respostas');
 
         const result = await response.json();
-        showQuizResult(result);
+        // API returns data inside result.data
+        showQuizResult(result.data || result);
 
     } catch (error) {
         console.error('[Academy] Error submitting quiz:', error);
@@ -13742,6 +14003,7 @@ function retryQuiz() {
     document.getElementById('quizResultOverlay').classList.remove('active');
     currentQuestionIndex = 0;
     quizAnswers = [];
+    isQuizReviewMode = false; // Ensure we're in normal mode
     renderQuizQuestion(0);
 }
 
@@ -13756,6 +14018,7 @@ function closeQuiz() {
     currentQuiz = null;
     currentQuestionIndex = 0;
     quizAnswers = [];
+    isQuizReviewMode = false; // Reset review mode
     navigateTo('screen-video-player');
 
     // Refresh video progress (quiz status may have changed)

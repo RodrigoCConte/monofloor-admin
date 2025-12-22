@@ -1055,27 +1055,15 @@
 
                 <!-- Videos Section -->
                 <div id="academy-videos-section" class="academy-section">
-                    <!-- User Academy Stats -->
-                    <div class="academy-user-stats">
-                        <div class="academy-level-badge">
-                            <span class="level-number" id="academyUserLevel">1</span>
+                    <!-- Trilha XP Progress -->
+                    <div class="trilha-xp-card">
+                        <div class="trilha-xp-header">
+                            <span class="trilha-xp-title">Trilha de Aprendizado</span>
+                            <span class="trilha-xp-value"><span id="trilhaXPEarned">0</span> / <span id="trilhaXPTotal">0</span> XP</span>
                         </div>
-                        <div class="academy-progress-info">
-                            <div class="academy-xp-row">
-                                <span class="academy-xp-current" id="academyCurrentXP">0</span>
-                                <span class="academy-xp-next">/ <span id="academyNextLevelXP">1000</span> XP</span>
-                            </div>
-                            <div class="academy-progress-bar">
-                                <div class="academy-progress-fill" id="academyProgressFill" style="width: 0%"></div>
-                            </div>
-                            <span class="academy-level-hint">Proximo nivel em <span id="academyXPNeeded">1000</span> XP</span>
+                        <div class="trilha-xp-bar">
+                            <div class="trilha-xp-fill" id="trilhaXPFill" style="width: 0%"></div>
                         </div>
-                    </div>
-
-                    <!-- Videos List -->
-                    <div class="academy-videos-header">
-                        <h3>Trilha de Aprendizado</h3>
-                        <span class="academy-videos-count" id="academyVideosCount">0 videos</span>
                     </div>
                     <div id="academy-videos-list" class="academy-videos-list">
                         <!-- Videos populated by loadAcademyVideos() -->
@@ -1085,6 +1073,15 @@
 
                 <!-- Ranking Section (Hidden by default) -->
                 <div id="academy-ranking-section" class="academy-section" style="display: none;">
+                    <!-- Ranking Tabs -->
+                    <div class="ranking-tabs">
+                        <button class="ranking-tab active" onclick="switchRankingTab('month')" id="ranking-tab-month">
+                            Mês
+                        </button>
+                        <button class="ranking-tab" onclick="switchRankingTab('total')" id="ranking-tab-total">
+                            Total
+                        </button>
+                    </div>
                     <div id="xp-ranking-list" class="xp-ranking-list">
                         <!-- Populated by loadXPRanking() -->
                     </div>

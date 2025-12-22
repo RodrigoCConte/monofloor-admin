@@ -65,6 +65,9 @@ const selectedForEntry = ref<string[]>([]);
 const sendingEntryRequest = ref(false);
 const newResponsiblePhone = ref('');
 
+// Finalize project
+const finalizingProject = ref(false);
+
 // Team management
 const team = ref<any[]>([]);
 const loadingTeam = ref(false);
@@ -1490,6 +1493,33 @@ const sendEntryRequest = async () => {
   }
 };
 
+// Finalize project function
+const finalizeProject = async () => {
+  if (!confirm('Tem certeza que deseja finalizar este projeto? Esta ação não pode ser desfeita.')) {
+    return;
+  }
+
+  finalizingProject.value = true;
+  try {
+    const response = await projectsApi.finalize(route.params.id as string);
+    if (response.data.success) {
+      alert(response.data.data.message || 'Projeto finalizado com sucesso!');
+      // Reload project to update status
+      await loadProject();
+    }
+  } catch (error: any) {
+    const errData = error.response?.data?.error;
+    if (errData?.code === 'TASKS_NOT_COMPLETED') {
+      const pendingCount = errData.pendingTasks?.length || 0;
+      alert(`Não é possível finalizar: ${errData.message}\n\nTarefas pendentes: ${pendingCount}`);
+    } else {
+      alert(errData?.message || 'Erro ao finalizar projeto');
+    }
+  } finally {
+    finalizingProject.value = false;
+  }
+};
+
 const loadTeam = async () => {
   loadingTeam.value = true;
   try {
@@ -2410,6 +2440,20 @@ onMounted(async () => {
             </div>
           </div>
           <div class="project-actions">
+            <!-- Finalize button - only show if not already finalized -->
+            <button
+              v-if="!editMode && project.status !== 'CONCLUIDO'"
+              @click="finalizeProject"
+              class="btn btn-success"
+              :disabled="finalizingProject"
+            >
+              <div v-if="finalizingProject" class="btn-spinner"></div>
+              <svg v-else class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              {{ finalizingProject ? 'Finalizando...' : 'Finalizar Projeto' }}
+            </button>
             <button v-if="!editMode" @click="openEntryRequestModal" class="btn btn-entry">
               <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -4690,18 +4734,21 @@ onMounted(async () => {
   background: var(--bg-card-hover);
 }
 
-.btn-accent {
+.btn-accent,
+.btn-success {
   background: linear-gradient(135deg, #22c55e, #16a34a);
   color: #fff;
   border: none;
 }
 
-.btn-accent:hover:not(:disabled) {
+.btn-accent:hover:not(:disabled),
+.btn-success:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
 }
 
-.btn-accent:disabled {
+.btn-accent:disabled,
+.btn-success:disabled {
   opacity: 0.7;
   cursor: not-allowed;
 }
