@@ -850,15 +850,18 @@ const initMap = async () => {
 // Character types based on roles in the project
 type CharacterType = 'lider' | 'aplicador_1' | 'aplicador_2' | 'aplicador_3' | 'lider_preparacao' | 'preparador' | 'auxiliar';
 
+// Base URL for assets (handles /admin/ prefix in production)
+const BASE_URL = import.meta.env.BASE_URL || '/';
+
 // Character config with PNG icons, labels, and original dimensions for proper aspect ratio
 const characterConfig: Record<CharacterType, { label: string; icon: string; color: string; width: number; height: number }> = {
-  lider: { label: 'Líder', icon: '/icons/lider.png', color: '#FF6B35', width: 359, height: 289 },
-  aplicador_1: { label: 'Aplicador 1', icon: '/icons/aplicador-1.png', color: '#9B5DE5', width: 250, height: 223 },
-  aplicador_2: { label: 'Aplicador 2', icon: '/icons/aplicador-2.png', color: '#9B5DE5', width: 317, height: 212 },
-  aplicador_3: { label: 'Aplicador 3', icon: '/icons/aplicador-3.png', color: '#9B5DE5', width: 411, height: 259 },
-  lider_preparacao: { label: 'Líder Prep', icon: '/icons/lider-preparacao.png', color: '#3B82F6', width: 314, height: 262 },
-  preparador: { label: 'Preparador', icon: '/icons/preparador.png', color: '#00D4FF', width: 281, height: 216 },
-  auxiliar: { label: 'Ajudante', icon: '/icons/ajudante.png', color: '#8B7355', width: 187, height: 228 },
+  lider: { label: 'Líder', icon: `${BASE_URL}icons/lider.png`, color: '#FF6B35', width: 359, height: 289 },
+  aplicador_1: { label: 'Aplicador 1', icon: `${BASE_URL}icons/aplicador-1.png`, color: '#9B5DE5', width: 250, height: 223 },
+  aplicador_2: { label: 'Aplicador 2', icon: `${BASE_URL}icons/aplicador-2.png`, color: '#9B5DE5', width: 317, height: 212 },
+  aplicador_3: { label: 'Aplicador 3', icon: `${BASE_URL}icons/aplicador-3.png`, color: '#9B5DE5', width: 411, height: 259 },
+  lider_preparacao: { label: 'Líder Prep', icon: `${BASE_URL}icons/lider-preparacao.png`, color: '#3B82F6', width: 314, height: 262 },
+  preparador: { label: 'Preparador', icon: `${BASE_URL}icons/preparador.png`, color: '#00D4FF', width: 281, height: 216 },
+  auxiliar: { label: 'Ajudante', icon: `${BASE_URL}icons/ajudante.png`, color: '#8B7355', width: 187, height: 228 },
 };
 
 // Get character type based on role

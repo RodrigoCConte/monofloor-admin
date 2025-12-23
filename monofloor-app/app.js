@@ -1084,6 +1084,8 @@ function initSocketConnection() {
                 console.log('[Campaign] Showing campaign directly from socket data');
                 showCampaign(data);
             }, 2000);
+        } else {
+            console.warn('[Campaign] Cannot show campaign - missing data:', { id: data.id, bannerUrl: data.bannerUrl });
         }
 
         // Also refresh the cache in the background for future use
