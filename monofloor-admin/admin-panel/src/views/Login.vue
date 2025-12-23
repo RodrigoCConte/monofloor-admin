@@ -209,4 +209,163 @@ const handleSubmit = async () => {
   font-size: 12px;
   color: var(--text-tertiary);
 }
+
+/* Tablet Responsive Styles (768px and below) */
+@media (max-width: 768px) {
+  .login-container {
+    padding: 16px;
+  }
+
+  .login-card {
+    padding: 40px 32px;
+    max-width: 100%;
+    box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.4);
+  }
+
+  .login-header {
+    margin-bottom: 32px;
+  }
+
+  .logo-image {
+    height: 50px;
+  }
+
+  .admin-badge {
+    font-size: 11px;
+    padding: 5px 14px;
+  }
+
+  .form-group label {
+    font-size: 13px;
+  }
+
+  .form-group input {
+    padding: 14px;
+    font-size: 15px;
+  }
+
+  .login-button {
+    padding: 14px;
+    font-size: 15px;
+  }
+
+  .footer-text {
+    margin-top: 28px;
+    padding-top: 20px;
+  }
+
+  .footer-text span {
+    font-size: 11px;
+  }
+}
+
+/* Mobile Responsive Styles (480px and below) */
+@media (max-width: 480px) {
+  .login-container {
+    padding: 12px;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .login-card {
+    padding: 32px 24px;
+    border-radius: var(--border-radius-lg);
+    box-shadow: 0 10px 25px -8px rgba(0, 0, 0, 0.3);
+  }
+
+  .login-header {
+    margin-bottom: 28px;
+  }
+
+  .logo {
+    margin-bottom: 12px;
+  }
+
+  .logo-image {
+    height: 45px;
+  }
+
+  .admin-badge {
+    font-size: 10px;
+    padding: 4px 12px;
+    border-radius: 16px;
+  }
+
+  .login-form {
+    gap: 18px;
+  }
+
+  .form-group {
+    gap: 6px;
+  }
+
+  .form-group label {
+    font-size: 12px;
+  }
+
+  .form-group input {
+    padding: 12px;
+    font-size: 14px;
+    border-radius: 8px;
+  }
+
+  .form-group input::placeholder {
+    font-size: 13px;
+  }
+
+  .error-message {
+    padding: 10px 14px;
+    font-size: 12px;
+  }
+
+  .login-button {
+    padding: 12px;
+    font-size: 14px;
+    margin-top: 6px;
+    border-radius: 8px;
+  }
+
+  .footer-text {
+    margin-top: 24px;
+    padding-top: 18px;
+  }
+
+  .footer-text span {
+    font-size: 10px;
+    display: block;
+    line-height: 1.4;
+  }
+}
+
+/* Extra Small Mobile (360px and below) */
+@media (max-width: 360px) {
+  .login-container {
+    padding: 8px;
+  }
+
+  .login-card {
+    padding: 24px 20px;
+  }
+
+  .logo-image {
+    height: 40px;
+  }
+
+  .admin-badge {
+    font-size: 9px;
+    padding: 4px 10px;
+  }
+
+  .form-group input {
+    padding: 11px;
+    font-size: 13px;
+  }
+
+  .login-button {
+    padding: 11px;
+    font-size: 13px;
+  }
+}
 </style>
