@@ -2472,8 +2472,9 @@ router.post(
         quantity: quantity || undefined,
         description: description || undefined,
         audioTranscription: finalAudioTranscription || undefined,
-        audioFilePath: audioFile?.path || undefined,  // Pass file path for Base64 conversion
-        videoFilePath: videoFile?.path || undefined,  // Pass file path for Base64 conversion
+        // Pass video buffer directly (multer memory storage has no file path)
+        videoBuffer: videoFile?.buffer,
+        videoMimetype: videoFile?.mimetype,
       }).catch((error) => {
         console.error('[WhatsApp] Failed to send notification:', error);
       });

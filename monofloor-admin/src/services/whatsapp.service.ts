@@ -36,8 +36,11 @@ interface RequestNotification {
   description?: string;
   // Fields for media and transcription
   audioTranscription?: string;
-  audioFilePath?: string;  // Local file path for Base64 conversion
-  videoFilePath?: string;  // Local file path for Base64 conversion
+  audioFilePath?: string;  // Local file path for Base64 conversion (deprecated)
+  videoFilePath?: string;  // Local file path for Base64 conversion (deprecated)
+  // Buffer-based media (for multer memory storage)
+  videoBuffer?: Buffer;
+  videoMimetype?: string;
 }
 
 interface EntryRequestParams {
@@ -335,15 +338,24 @@ export async function sendRequestNotification(
     // Audio is NOT sent as file - only transcription is included in the text message above
     // This is intentional: audio content is transcribed and sent as text
 
-    // Send video file as Base64 if available
-    if (notification.videoFilePath) {
-      const videoBase64 = fileToBase64(notification.videoFilePath);
-      if (videoBase64) {
-        console.log(`[WhatsApp] Sending video as Base64 to ${phone}`);
-        sendWhatsAppVideo(phone, videoBase64, `📹 Vídeo de ${notification.userName}`).catch((err) => {
-          console.error(`[WhatsApp] Failed to send video to ${phone}:`, err);
-        });
-      }
+    // Send video as Base64 if available (buffer or file path)
+    let videoBase64: string | null = null;
+
+    // Prefer buffer (from multer memory storage) over file path
+    if (notification.videoBuffer && notification.videoMimetype) {
+      const base64Data = notification.videoBuffer.toString('base64');
+      videoBase64 = `data:${notification.videoMimetype};base64,${base64Data}`;
+      console.log(`[WhatsApp] Converted video buffer to Base64 (${notification.videoMimetype})`);
+    } else if (notification.videoFilePath) {
+      // Fallback to file path (deprecated)
+      videoBase64 = fileToBase64(notification.videoFilePath);
+    }
+
+    if (videoBase64) {
+      console.log(`[WhatsApp] Sending video as Base64 to ${phone}`);
+      sendWhatsAppVideo(phone, videoBase64, `📹 Vídeo de ${notification.userName}`).catch((err) => {
+        console.error(`[WhatsApp] Failed to send video to ${phone}:`, err);
+      });
     }
   }
 
