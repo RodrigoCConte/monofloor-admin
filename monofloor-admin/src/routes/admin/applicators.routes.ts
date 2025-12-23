@@ -1,12 +1,21 @@
 import { Router } from 'express';
-import { PrismaClient, UserStatus, UserRole } from '@prisma/client';
+import { UserStatus, UserRole, PendingNotificationType } from '@prisma/client';
+import { prisma } from '../../lib/prisma';
 import { body, param, query, validationResult } from 'express-validator';
 import { adminAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
 import { emitRoleEvolution, emitXPGained, emitXPLost } from '../../services/socket.service';
 
 const router = Router();
-const prisma = new PrismaClient();
+
+// Role hierarchy for determining promotion vs demotion
+const ROLE_HIERARCHY: UserRole[] = ['AUXILIAR', 'PREPARADOR', 'LIDER_PREPARACAO', 'APLICADOR_I', 'APLICADOR_II', 'APLICADOR_III', 'LIDER'];
+
+function isPromotion(oldRole: UserRole, newRole: UserRole): boolean {
+  const oldIndex = ROLE_HIERARCHY.indexOf(oldRole);
+  const newIndex = ROLE_HIERARCHY.indexOf(newRole);
+  return newIndex > oldIndex;
+}
 
 // Validation middleware
 const validate = (req: any, res: any, next: any) => {
@@ -382,6 +391,28 @@ router.put(
           description: `Changed role from ${oldRole} to ${newRole}`,
         },
       });
+
+      // Only create notification if role actually changed
+      if (oldRole !== newRole) {
+        // Determine if it's a promotion or demotion
+        const promotion = isPromotion(oldRole, newRole);
+        const notificationType = promotion ? PendingNotificationType.ROLE_PROMOTION : PendingNotificationType.ROLE_DEMOTION;
+
+        // Create pending notification (will be fetched when user opens app)
+        await prisma.pendingNotification.create({
+          data: {
+            userId: user.id,
+            type: notificationType,
+            payload: {
+              oldRole: oldRole,
+              newRole: newRole,
+              timestamp: new Date().toISOString(),
+            },
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Expires in 7 days
+          },
+        });
+        console.log(`[PendingNotification] Created ${notificationType} for user ${user.id}`);
+      }
 
       // Emit role evolution event via Socket.io for real-time notification
       emitRoleEvolution({

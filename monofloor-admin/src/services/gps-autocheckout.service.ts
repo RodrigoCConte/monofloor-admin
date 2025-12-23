@@ -9,11 +9,9 @@
  * - Cron runs every 30 seconds
  */
 
-import { PrismaClient } from '@prisma/client';
 import { sendGPSAutoCheckoutPush } from './push.service';
 import { emitGPSAutoCheckout } from './socket.service';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 // Configuration
 const LOCATION_STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes without location update = stale

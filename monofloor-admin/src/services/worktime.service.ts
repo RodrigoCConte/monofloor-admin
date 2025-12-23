@@ -9,7 +9,7 @@
  * - Travel mode overtime (>8h): travelOvertimeRate (+40%)
  */
 
-import { PrismaClient, CheckoutReason } from '@prisma/client';
+import { CheckoutReason } from '@prisma/client';
 import {
   getRoleRates,
   calculateLunchDeduction,
@@ -18,8 +18,7 @@ import {
   WORKDAY,
 } from '../config/payroll.config';
 import { sendXPPenaltyPush } from './push.service';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 // Distance threshold for "distant" check-ins (meters)
 const DISTANT_CHECKIN_THRESHOLD = 80;

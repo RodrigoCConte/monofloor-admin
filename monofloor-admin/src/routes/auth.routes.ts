@@ -1,14 +1,14 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { body, validationResult } from 'express-validator';
 import { hashPassword, comparePassword } from '../utils/password';
 import { generateAdminToken, generateMobileToken } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
+import { config } from '../config';
 import multer from 'multer';
 import { saveProfilePhoto, saveDocument } from '../services/db-storage.service';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Configure multer for memory storage (files saved to PostgreSQL)
 const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
@@ -55,7 +55,15 @@ router.post(
     body('email').isEmail().normalizeEmail(),
     body('password').isLength({ min: 6 }),
     body('name').trim().isLength({ min: 2 }),
-    body('setupKey').equals('MONOFLOOR_SETUP_2024'),
+    body('setupKey').custom((value) => {
+      if (!config.setupKey) {
+        throw new Error('Setup is disabled in production');
+      }
+      if (value !== config.setupKey) {
+        throw new Error('Invalid setup key');
+      }
+      return true;
+    }),
   ],
   validate,
   async (req, res, next) => {

@@ -75,7 +75,7 @@ model User {
 
   // Punctuality System
   punctualityStreak     Int      @default(0) @map("punctuality_streak")      // Dias consecutivos pontuais
-  punctualityMultiplier Decimal  @default(1.0) @map("punctuality_multiplier") @db.Decimal(3, 1)  // Multiplicador atual (1.0 - 5.0)
+  punctualityMultiplier Decimal  @default(1.1) @map("punctuality_multiplier") @db.Decimal(3, 1)  // Multiplicador atual (1.1 - 5.0)
   lastPunctualDate      DateTime? @map("last_punctual_date")  // Última data que foi pontual
 
   // Statistics (denormalized for performance)
@@ -112,6 +112,7 @@ model User {
   taskAssignments       TaskAssignment[]
   videoProgress         VideoProgress[]
   quizAttempts          QuizAttempt[]
+  pendingNotifications  PendingNotification[]
 
   @@map("users")
 }
@@ -1312,6 +1313,7 @@ enum XpTransactionType {
   PENALTY           // Penalidade (XP negativo)
   TASK_COMPLETED    // Tarefa concluída
   QUIZ_PASSED       // Quiz aprovado
+  LUNCH_SKIPPED     // Almoço pulado (penalidade)
 }
 
 // =============================================
@@ -1767,4 +1769,39 @@ model QuizAttempt {
   @@index([userId, quizId])
   @@index([quizId, passed])
   @@map("quiz_attempts")
+}
+
+// =============================================
+// PENDING NOTIFICATIONS (Notificações pendentes para usuários offline)
+// =============================================
+model PendingNotification {
+  id              String                    @id @default(uuid())
+  userId          String                    @map("user_id")
+  user            User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Tipo e dados da notificação
+  type            PendingNotificationType
+  payload         Json                      // Dados da notificação (oldRole, newRole, etc)
+
+  // Status
+  isDelivered     Boolean                   @default(false) @map("is_delivered")
+  deliveredAt     DateTime?                 @map("delivered_at")
+
+  // Timestamps
+  createdAt       DateTime                  @default(now()) @map("created_at")
+  expiresAt       DateTime?                 @map("expires_at")
+
+  @@index([userId, isDelivered])
+  @@index([createdAt])
+  @@map("pending_notifications")
+}
+
+enum PendingNotificationType {
+  ROLE_PROMOTION      // Promoção de cargo
+  ROLE_DEMOTION       // Rebaixamento de cargo
+  CONTRIBUTION_APPROVED
+  CONTRIBUTION_REJECTED
+  PROJECT_ASSIGNED
+  XP_PENALTY
+  LUNCH_SKIPPED       // Almoço pulado (desconto de horas)
 }

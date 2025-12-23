@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { projectsApi } from '../api';
+import { useToast } from '../composables/useToast';
 
 const router = useRouter();
 const authStore = useAuthStore();
+const toast = useToast();
+
+// Mobile menu state
+const mobileMenuOpen = ref(false);
+const toggleMobileMenu = () => { mobileMenuOpen.value = !mobileMenuOpen.value; };
+const closeMobileMenu = () => { mobileMenuOpen.value = false; };
+const handleResizeMobile = () => { if (window.innerWidth >= 768) mobileMenuOpen.value = false; };
 
 // API URL for building photo URLs
 const API_URL = import.meta.env.VITE_API_URL || 'https://devoted-wholeness-production.up.railway.app';
@@ -241,10 +249,10 @@ const handleFileUpload = async (event: Event) => {
   importing.value = true;
   try {
     const response = await projectsApi.importExcel(file);
-    alert(`Importacao concluida! ${response.data.data?.imported || 0} projetos importados.`);
+    toast.success(`Importacao concluida! ${response.data.data?.imported || 0} projetos importados.`);
     await loadProjects();
   } catch (error: any) {
-    alert('Erro ao importar: ' + (error.response?.data?.error?.message || 'Erro desconhecido'));
+    toast.error('Erro ao importar: ' + (error.response?.data?.error?.message || 'Erro desconhecido'));
   } finally {
     importing.value = false;
     target.value = '';
@@ -284,7 +292,7 @@ const confirmDelete = async () => {
     await loadProjects();
     closeDeleteModal();
   } catch (error: any) {
-    alert('Erro ao deletar: ' + (error.response?.data?.error || 'Erro desconhecido'));
+    toast.error('Erro ao deletar: ' + (error.response?.data?.error || 'Erro desconhecido'));
   } finally {
     deleting.value = null;
   }
@@ -297,7 +305,7 @@ const confirmDeleteAll = async () => {
     await loadProjects();
     showDeleteAllModal.value = false;
   } catch (error: any) {
-    alert('Erro ao deletar: ' + (error.response?.data?.error || 'Erro desconhecido'));
+    toast.error('Erro ao deletar: ' + (error.response?.data?.error || 'Erro desconhecido'));
   } finally {
     deletingAll.value = false;
   }
@@ -331,7 +339,7 @@ const closeCreateModal = () => {
 
 const createProject = async () => {
   if (!newProject.value.title.trim()) {
-    alert('O nome do projeto e obrigatorio');
+    toast.warning('O nome do projeto e obrigatorio');
     return;
   }
 
@@ -365,7 +373,7 @@ const createProject = async () => {
     await loadProjects();
     closeCreateModal();
   } catch (error: any) {
-    alert('Erro ao criar projeto: ' + (error.response?.data?.error?.message || 'Erro desconhecido'));
+    toast.error('Erro ao criar projeto: ' + (error.response?.data?.error?.message || 'Erro desconhecido'));
   } finally {
     creating.value = false;
   }
@@ -408,7 +416,7 @@ const closeEditModal = () => {
 
 const updateProject = async () => {
   if (!editProject.value.title.trim()) {
-    alert('O nome do projeto e obrigatorio');
+    toast.warning('O nome do projeto e obrigatorio');
     return;
   }
 
@@ -437,23 +445,49 @@ const updateProject = async () => {
     await loadProjects();
     closeEditModal();
   } catch (error: any) {
-    alert('Erro ao atualizar projeto: ' + (error.response?.data?.error?.message || 'Erro desconhecido'));
+    toast.error('Erro ao atualizar projeto: ' + (error.response?.data?.error?.message || 'Erro desconhecido'));
   } finally {
     editing.value = false;
   }
 };
 
-onMounted(loadProjects);
+onMounted(() => { loadProjects(); window.addEventListener('resize', handleResizeMobile); });
+onUnmounted(() => { window.removeEventListener('resize', handleResizeMobile); });
 </script>
 
 <template>
   <div class="page">
+    <!-- Mobile Menu Overlay -->
+    <div v-if="mobileMenuOpen" class="mobile-overlay" @click="closeMobileMenu"></div>
+    <!-- Mobile Sidebar -->
+    <aside class="mobile-sidebar" :class="{ open: mobileMenuOpen }">
+      <div class="mobile-sidebar-header">
+        <img src="/logo.png" alt="Monofloor" class="header-logo" />
+        <button class="close-menu-btn" @click="closeMobileMenu"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <nav class="mobile-nav">
+        <router-link to="/" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Dashboard</router-link>
+        <router-link to="/applicators" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Aplicadores</router-link>
+        <router-link to="/projects" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Projetos</router-link>
+        <router-link to="/reports" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Relatorios</router-link>
+        <router-link to="/requests" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>Solicitacoes</router-link>
+        <router-link to="/campaigns" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>Campanhas</router-link>
+        <router-link to="/academy" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>Academia</router-link>
+        <router-link to="/map" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>Mapa</router-link>
+      </nav>
+      <div class="mobile-sidebar-footer">
+        <div class="mobile-user-info"><div class="user-avatar"><img v-if="getPhotoUrl(authStore.user?.photoUrl)" :src="getPhotoUrl(authStore.user?.photoUrl)!" alt="Avatar" class="avatar-img" /><span v-else>{{ getInitials(authStore.user?.name) }}</span></div><span class="user-name">{{ authStore.user?.name }}</span></div>
+        <button @click="logout" class="mobile-logout-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sair</button>
+      </div>
+    </aside>
+
     <header class="header">
       <div class="header-left">
+        <button class="hamburger-btn" @click="toggleMobileMenu"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
         <img src="/logo.png" alt="Monofloor" class="header-logo" />
         <span class="logo-badge">ADMIN</span>
       </div>
-      <nav class="nav">
+      <nav class="nav desktop-nav">
         <router-link to="/" class="nav-link">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
@@ -1871,5 +1905,41 @@ onMounted(loadProjects);
   font-weight: 600;
   cursor: not-allowed;
   border-color: rgba(201, 169, 98, 0.3) !important;
+}
+
+/* ===== MOBILE RESPONSIVE STYLES ===== */
+.hamburger-btn { display: none; background: none; border: none; color: var(--text-primary); cursor: pointer; padding: 8px; border-radius: var(--border-radius); }
+.hamburger-btn:hover { background-color: var(--bg-secondary); }
+.mobile-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 998; }
+.mobile-sidebar { display: none; position: fixed; top: 0; left: -280px; width: 280px; height: 100vh; background-color: var(--bg-card); border-right: 1px solid var(--border-color); z-index: 999; transition: left 0.3s ease; flex-direction: column; }
+.mobile-sidebar.open { left: 0; }
+.mobile-sidebar-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-color); }
+.close-menu-btn { background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 8px; border-radius: var(--border-radius); }
+.close-menu-btn:hover { background-color: var(--bg-secondary); color: var(--text-primary); }
+.mobile-nav { flex: 1; padding: 16px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.mobile-nav-link { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--border-radius); text-decoration: none; color: var(--text-secondary); font-weight: 500; font-size: 15px; transition: all 0.2s; }
+.mobile-nav-link:hover { background-color: var(--bg-secondary); color: var(--text-primary); }
+.mobile-nav-link.router-link-active { background-color: rgba(201, 169, 98, 0.15); color: var(--accent-primary); }
+.mobile-sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border-color); }
+.mobile-user-info { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.mobile-user-info .user-name { font-size: 14px; color: var(--text-primary); font-weight: 500; }
+.mobile-logout-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 16px; background-color: rgba(239, 68, 68, 0.1); color: var(--accent-red); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: var(--border-radius); cursor: pointer; font-weight: 500; font-size: 14px; }
+.mobile-logout-btn:hover { background-color: rgba(239, 68, 68, 0.2); }
+
+@media (max-width: 768px) {
+  .hamburger-btn { display: flex; }
+  .mobile-overlay { display: block; }
+  .mobile-sidebar { display: flex; }
+  .desktop-nav { display: none !important; }
+  .header-right { display: none; }
+  .header { padding: 12px 16px; }
+  .header-left { gap: 8px; }
+  .header-logo { height: 28px; }
+  .logo-badge { font-size: 9px; padding: 3px 6px; }
+  .main { padding: 16px; }
+  .page-header { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .page-title h2 { font-size: 20px; }
+  .search-box { width: 100%; }
+  .search-input { width: 100%; }
 }
 </style>

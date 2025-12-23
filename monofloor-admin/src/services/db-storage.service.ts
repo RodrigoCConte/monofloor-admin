@@ -4,9 +4,8 @@
  * This solves the ephemeral storage issue on Railway
  */
 
-import { PrismaClient, UploadType } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { UploadType } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 
 interface SaveFileOptions {
   filename: string;

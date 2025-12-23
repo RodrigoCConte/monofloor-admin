@@ -6,10 +6,9 @@
  * - Max attempts: 3 (then expires)
  */
 
-import { PrismaClient, ReminderStatus } from '@prisma/client';
+import { ReminderStatus } from '@prisma/client';
 import { sendReportReminderPush, sendXPPenaltyPush } from './push.service';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 const MAX_REMINDER_ATTEMPTS = 3;
 const RETRY_INTERVAL_MINUTES = 30;

@@ -1,13 +1,12 @@
 import { Router } from 'express';
 import { body, param, query, validationResult } from 'express-validator';
 import multer from 'multer';
-import { PrismaClient } from '@prisma/client';
 import { adminAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
 import { saveFile, deleteFile, UploadType } from '../../services/db-storage.service';
+import prisma from '../../lib/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Multer configuration with memory storage
 const uploadVideo = multer({

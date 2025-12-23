@@ -3,10 +3,8 @@
  * Sends reminders at 12:00, 12:30, and 13:00 (São Paulo timezone)
  */
 
-import { PrismaClient } from '@prisma/client';
 import { emitLunchReminder } from './socket.service';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 // Lunch reminder times (in minutes from midnight, São Paulo timezone)
 const LUNCH_TIMES = [

@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { adminAuth } from '../../middleware/auth';
+import prisma from '../../lib/prisma';
 
-const prisma = new PrismaClient();
 const router = Router();
 
 // Unified request types

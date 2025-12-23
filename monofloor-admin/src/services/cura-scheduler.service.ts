@@ -3,9 +3,8 @@
  * Auto-completes CURA tasks after 24 hours and moves to next task
  */
 
-import { PrismaClient, TaskType, TaskStatus } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { TaskType, TaskStatus } from '@prisma/client';
+import prisma from '../lib/prisma';
 
 // Constants
 const CURA_DURATION_HOURS = 24; // 24 hours for curing

@@ -1,9 +1,8 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma';
 import { adminAuth } from '../../middleware/auth';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // GET /api/admin/dashboard/stats (OPTIMIZED with parallel queries)
 router.get('/stats', adminAuth, async (req, res, next) => {

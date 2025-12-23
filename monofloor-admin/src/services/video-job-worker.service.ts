@@ -1,9 +1,7 @@
-import { PrismaClient } from '@prisma/client';
 import { SimpleVideoReportService } from './simple-video-report.service';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 const simpleVideoService = new SimpleVideoReportService();
 
 // Intervalo de verificação de jobs (5 segundos)

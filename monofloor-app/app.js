@@ -1,6 +1,6 @@
 // API Configuration
 const API_URL = 'https://devoted-wholeness-production.up.railway.app'; // Production
-// const API_URL = 'http://localhost:3000'; // Local server for testing
+// const API_URL = 'http://localhost:3001'; // Local server for testing
 
 // =============================================
 // CHARACTER ICONS BY ROLE
@@ -98,6 +98,103 @@ function closeEvolutionNotification() {
     }
 }
 
+// Show demotion notification (when role is lowered) - Dramatic version
+function showDemotionNotification(oldRole, newRole) {
+    const overlay = document.getElementById('demotionOverlay');
+    const oldIcon = document.getElementById('demotionOldIcon');
+    const newIcon = document.getElementById('demotionNewIcon');
+    const oldRoleSpan = document.getElementById('demotionOldRole');
+    const newRoleSpan = document.getElementById('demotionNewRole');
+
+    if (!overlay || !oldIcon || !newIcon || !oldRoleSpan || !newRoleSpan) {
+        console.error('[Demotion] Modal elements not found');
+        return;
+    }
+
+    // Set both icons and text
+    oldIcon.src = getCharacterIcon(oldRole);
+    newIcon.src = getCharacterIcon(newRole);
+    oldRoleSpan.textContent = getCharacterLabel(oldRole);
+    newRoleSpan.textContent = getCharacterLabel(newRole);
+
+    // Reset animations by removing and re-adding the active class
+    overlay.classList.remove('active');
+
+    // Force reflow to restart animations
+    void overlay.offsetWidth;
+
+    // Show overlay with animations
+    overlay.classList.add('active');
+
+    console.log(`[Demotion] Showing dramatic demotion from ${oldRole} to ${newRole}`);
+}
+
+// Close demotion notification
+function closeDemotionNotification() {
+    const overlay = document.getElementById('demotionOverlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+    }
+}
+
+// Show lunch skipped notification
+function showLunchSkippedNotification(projectName, timeStr, date, message) {
+    console.log(`[LunchSkipped] Showing notification: ${timeStr} deducted from ${projectName}`);
+
+    // Create modal if it doesn't exist
+    let overlay = document.getElementById('lunchSkippedOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'lunchSkippedOverlay';
+        overlay.className = 'lunch-skipped-overlay';
+        overlay.innerHTML = `
+            <div class="lunch-skipped-modal">
+                <div class="lunch-skipped-icon">🍽️</div>
+                <h2 class="lunch-skipped-title">Almoço Não Registrado</h2>
+                <div class="lunch-skipped-message">
+                    <p id="lunchSkippedMessage"></p>
+                </div>
+                <div class="lunch-skipped-details">
+                    <div class="lunch-skipped-detail">
+                        <span class="detail-icon">📅</span>
+                        <span id="lunchSkippedDate"></span>
+                    </div>
+                    <div class="lunch-skipped-detail">
+                        <span class="detail-icon">🏗️</span>
+                        <span id="lunchSkippedProject"></span>
+                    </div>
+                    <div class="lunch-skipped-detail warning">
+                        <span class="detail-icon">⏱️</span>
+                        <span id="lunchSkippedTime">-${timeStr} descontado</span>
+                    </div>
+                </div>
+                <p class="lunch-skipped-tip">💡 Lembre-se: pela CLT, jornadas acima de 6h exigem 1h de intervalo.</p>
+                <button class="lunch-skipped-btn" onclick="closeLunchSkippedNotification()">
+                    Entendi
+                </button>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    // Update content
+    document.getElementById('lunchSkippedMessage').textContent = message || `Você pulou seu almoço em ${date}. Foi descontado ${timeStr} do seu banco de horas.`;
+    document.getElementById('lunchSkippedDate').textContent = date;
+    document.getElementById('lunchSkippedProject').textContent = projectName;
+    document.getElementById('lunchSkippedTime').textContent = `-${timeStr} descontado`;
+
+    // Show with animation
+    overlay.classList.add('active');
+}
+
+// Close lunch skipped notification
+function closeLunchSkippedNotification() {
+    const overlay = document.getElementById('lunchSkippedOverlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+    }
+}
+
 // Check for role changes on login/profile update
 function checkForRoleEvolution(newProfile) {
     const storedProfile = localStorage.getItem('user_profile');
@@ -105,12 +202,15 @@ function checkForRoleEvolution(newProfile) {
         try {
             const oldProfile = JSON.parse(storedProfile);
             if (oldProfile.role && newProfile.role && oldProfile.role !== newProfile.role) {
-                if (isPromotion(oldProfile.role, newProfile.role)) {
-                    // Delay to ensure page is loaded
-                    setTimeout(() => {
+                // Delay to ensure page is loaded
+                setTimeout(() => {
+                    if (isPromotion(oldProfile.role, newProfile.role)) {
                         showEvolutionNotification(oldProfile.role, newProfile.role);
-                    }, 1000);
-                }
+                    } else {
+                        // It's a demotion
+                        showDemotionNotification(oldProfile.role, newProfile.role);
+                    }
+                }, 1000);
             }
         } catch (e) {
             console.error('[Evolution] Error parsing stored profile:', e);
@@ -126,6 +226,170 @@ function checkForRoleEvolution(newProfile) {
 // Test function for evolution (call from console: testEvolution('AUXILIAR', 'PREPARADOR'))
 function testEvolution(oldRole, newRole) {
     showEvolutionNotification(oldRole || 'AUXILIAR', newRole || 'PREPARADOR');
+}
+
+// Test function for demotion (call from console: testDemotion('APLICADOR_I', 'AUXILIAR'))
+function testDemotion(oldRole, newRole) {
+    showDemotionNotification(oldRole || 'APLICADOR_I', newRole || 'AUXILIAR');
+}
+
+// =============================================
+// PENDING NOTIFICATIONS SYSTEM
+// =============================================
+
+/**
+ * Fetch and process pending notifications from the server
+ * This is called when the app opens to show any notifications
+ * that were missed while the user was offline
+ */
+async function fetchAndProcessPendingNotifications() {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        console.log('[PendingNotifications] Fetching pending notifications...');
+
+        const response = await fetch(`${API_URL}/api/mobile/pending-notifications`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            console.log('[PendingNotifications] Failed to fetch:', response.status);
+            return;
+        }
+
+        const data = await response.json();
+
+        if (!data.success || !data.data || data.data.length === 0) {
+            console.log('[PendingNotifications] No pending notifications');
+            return;
+        }
+
+        console.log(`[PendingNotifications] Found ${data.data.length} pending notification(s)`);
+
+        // Process each notification with a delay between them
+        for (let i = 0; i < data.data.length; i++) {
+            const notification = data.data[i];
+
+            // Wait a bit before showing each notification
+            await new Promise(resolve => setTimeout(resolve, i === 0 ? 1500 : 3000));
+
+            await processPendingNotification(notification);
+        }
+
+    } catch (error) {
+        console.error('[PendingNotifications] Error fetching:', error);
+    }
+}
+
+/**
+ * Process a single pending notification
+ */
+async function processPendingNotification(notification) {
+    console.log('[PendingNotifications] Processing:', notification.type, notification.payload);
+
+    try {
+        // Handle different notification types
+        switch (notification.type) {
+            case 'ROLE_PROMOTION':
+                // Show promotion notification
+                showEvolutionNotification(
+                    notification.payload.oldRole,
+                    notification.payload.newRole
+                );
+                // Update local profile
+                updateLocalRole(notification.payload.newRole);
+                break;
+
+            case 'ROLE_DEMOTION':
+                // Show demotion notification
+                showDemotionNotification(
+                    notification.payload.oldRole,
+                    notification.payload.newRole
+                );
+                // Update local profile
+                updateLocalRole(notification.payload.newRole);
+                break;
+
+            case 'LUNCH_SKIPPED':
+                // Show lunch skipped notification
+                showLunchSkippedNotification(
+                    notification.payload.projectName,
+                    notification.payload.timeStr,
+                    notification.payload.date,
+                    notification.payload.message
+                );
+                break;
+
+            // Add more notification types as needed
+            default:
+                console.log('[PendingNotifications] Unknown type:', notification.type);
+        }
+
+        // Mark notification as delivered
+        await markNotificationDelivered(notification.id);
+
+    } catch (error) {
+        console.error('[PendingNotifications] Error processing:', notification.id, error);
+    }
+}
+
+/**
+ * Update local role in all localStorage keys
+ */
+function updateLocalRole(newRole) {
+    // Update 'user' key
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+        try {
+            const user = JSON.parse(storedUser);
+            user.role = newRole;
+            localStorage.setItem('user', JSON.stringify(user));
+        } catch (e) {}
+    }
+
+    // Update 'userProfile' key
+    const storedProfile = localStorage.getItem('userProfile');
+    if (storedProfile) {
+        try {
+            const profile = JSON.parse(storedProfile);
+            profile.role = newRole;
+            localStorage.setItem('userProfile', JSON.stringify(profile));
+        } catch (e) {}
+    }
+
+    // Update 'user_profile' key
+    const storedUserProfile = localStorage.getItem('user_profile');
+    if (storedUserProfile) {
+        try {
+            const profile = JSON.parse(storedUserProfile);
+            profile.role = newRole;
+            localStorage.setItem('user_profile', JSON.stringify(profile));
+        } catch (e) {}
+    }
+}
+
+/**
+ * Mark a notification as delivered on the server
+ */
+async function markNotificationDelivered(notificationId) {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        await fetch(`${API_URL}/api/mobile/pending-notifications/${notificationId}/delivered`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        console.log('[PendingNotifications] Marked as delivered:', notificationId);
+    } catch (error) {
+        console.error('[PendingNotifications] Error marking delivered:', error);
+    }
 }
 
 // =============================================
@@ -247,6 +511,13 @@ function finishOnboarding() {
     setTimeout(() => {
         checkAndShowCampaigns(true); // true = new user, will delay 5 minutes
     }, 1000);
+
+    // Offer tutorial for new users after onboarding (if not completed)
+    setTimeout(() => {
+        if (!tutorialState.hasCompletedTutorial) {
+            showTutorialPrompt();
+        }
+    }, 2000);
 }
 
 // Open help from onboarding (placeholder - will configure later)
@@ -303,8 +574,9 @@ async function fetchCampaignsFromAPI() {
         }
 
         const data = await response.json();
-        cachedCampaigns = data.campaigns || [];
-        totalApplicators = data.totalApplicators || 0;
+        // API returns { success: true, data: [...] }
+        cachedCampaigns = data.data || [];
+        totalApplicators = cachedCampaigns[0]?.totalApplicators || 0;
         console.log('[Campaign] Fetched campaigns from API:', cachedCampaigns.length);
         return cachedCampaigns;
     } catch (error) {
@@ -1016,9 +1288,9 @@ function initSocketConnection() {
         showContributionRejectedNotification(data);
     });
 
-    // Listen for role evolution (promotion) - Pokemon style notification
+    // Listen for role evolution (promotion or demotion) - Pokemon style notification
     socket.on('role:evolution', (data) => {
-        console.log('[Socket] Role evolution received:', data);
+        console.log('[Socket] Role change received:', data);
         const currentUserId = getCurrentUserId();
         // Only show notification if it's for the current user
         if (data.userId === currentUserId) {
@@ -1044,14 +1316,34 @@ function initSocketConnection() {
                     console.error('[Evolution] Error updating stored profile:', e);
                 }
             }
-            // Show the evolution notification (in-app)
-            showEvolutionNotification(data.oldRole, data.newRole);
-            // Also show browser notification
-            showBrowserNotification(
-                'Parabens! Voce evoluiu!',
-                `Voce passou de ${getRoleDisplayName(data.oldRole)} para ${getRoleDisplayName(data.newRole)}!`,
-                { type: 'role:evolution', oldRole: data.oldRole, newRole: data.newRole }
-            );
+            // Also update user_profile for checkForRoleEvolution
+            localStorage.setItem('user_profile', JSON.stringify({
+                role: data.newRole,
+                name: data.userName
+            }));
+
+            // Check if it's a promotion or demotion
+            const promotion = isPromotion(data.oldRole, data.newRole);
+
+            if (promotion) {
+                // Show the evolution notification (in-app)
+                showEvolutionNotification(data.oldRole, data.newRole);
+                // Also show browser notification
+                showBrowserNotification(
+                    'Parabens! Voce evoluiu!',
+                    `Voce passou de ${getRoleDisplayName(data.oldRole)} para ${getRoleDisplayName(data.newRole)}!`,
+                    { type: 'role:evolution', oldRole: data.oldRole, newRole: data.newRole }
+                );
+            } else {
+                // Show the demotion notification (in-app)
+                showDemotionNotification(data.oldRole, data.newRole);
+                // Also show browser notification with different message
+                showBrowserNotification(
+                    'Seu cargo foi alterado',
+                    `Voce passou de ${getRoleDisplayName(data.oldRole)} para ${getRoleDisplayName(data.newRole)}.`,
+                    { type: 'role:demotion', oldRole: data.oldRole, newRole: data.newRole }
+                );
+            }
         }
     });
 
@@ -2930,12 +3222,27 @@ async function doLogin() {
             localStorage.setItem('token', data.data.token);
             localStorage.setItem('user', JSON.stringify(data.data.user));
 
-            // Salvar credenciais para auto-preenchimento futuro
+            // Salvar apenas email para auto-preenchimento futuro (NUNCA salvar senha)
             localStorage.setItem('savedEmail', email);
-            localStorage.setItem('savedPassword', password);
+
+            // Salvar user_profile para comparação de mudança de cargo
+            localStorage.setItem('user_profile', JSON.stringify({
+                role: data.data.user.role,
+                name: data.data.user.name
+            }));
 
             navigateTo('screen-projects');
             loadProjects();
+
+            // Inicializar/reconectar socket e entrar na sala do usuário
+            if (typeof initSocket === 'function') {
+                initSocket();
+            }
+
+            // Buscar notificações pendentes (mudança de cargo, etc.)
+            setTimeout(() => {
+                fetchAndProcessPendingNotifications();
+            }, 2000);
 
             // Start onboarding after a delay (if not completed before)
             setTimeout(() => {
@@ -2955,30 +3262,26 @@ async function doLogin() {
             if (data.error?.code === 'PENDING_APPROVAL') {
                 navigateTo('screen-pending-approval');
             } else {
-                alert(data.error?.message || 'Credenciais invalidas');
+                showToast(data.error?.message || 'Credenciais inválidas', 'error');
             }
         }
     } catch (error) {
         console.error('Login error:', error);
-        // For demo, allow login anyway
-        navigateTo('screen-projects');
+        showToast('Erro de conexão. Verifique sua internet.', 'error');
     }
 }
 
-// Preencher campos de login com credenciais salvas
+// Preencher campos de login com email salvo (senha nunca é salva por segurança)
 function fillSavedCredentials() {
     const savedEmail = localStorage.getItem('savedEmail');
-    const savedPassword = localStorage.getItem('savedPassword');
-
     const emailInput = document.getElementById('loginEmail');
-    const passwordInput = document.getElementById('loginPassword');
 
     if (savedEmail && emailInput) {
         emailInput.value = savedEmail;
     }
-    if (savedPassword && passwordInput) {
-        passwordInput.value = savedPassword;
-    }
+
+    // Limpar qualquer senha que possa ter sido salva anteriormente (migração de segurança)
+    localStorage.removeItem('savedPassword');
 }
 
 // =============================================
@@ -3670,8 +3973,7 @@ async function executeAutoCheckout() {
             stopGPSBackgroundVerification();
 
             // Atualizar UI
-            updateCheckInButton();
-            stopActiveCheckinTimer();
+            updateCheckinUI(false);
 
             console.log('[Auto-checkout] Checkout automático realizado com sucesso');
 
@@ -3722,8 +4024,7 @@ async function doCheckoutWithReason(reason, isAutoCheckout = false) {
             stopGPSBackgroundVerification();
 
             // Atualizar UI
-            updateCheckInButton();
-            stopActiveCheckinTimer();
+            updateCheckinUI(false);
 
             // Feedback visual
             const messages = {
@@ -7077,6 +7378,56 @@ function formatHours(hours) {
     return m > 0 ? `${h}h${m.toString().padStart(2, '0')}` : `${h}h`;
 }
 
+// Renderizar tabela completa de cargos
+function renderRolesTable(allRolesTable) {
+    const container = document.getElementById('rolesTable');
+    if (!container) return;
+
+    if (!allRolesTable || allRolesTable.length === 0) {
+        container.innerHTML = '<div class="empty-state-small"><p>Tabela nao disponivel</p></div>';
+        return;
+    }
+
+    const html = allRolesTable.map(role => `
+        <div class="role-table-row ${role.isCurrent ? 'current' : ''}">
+            <span class="role-table-name">${role.label}${role.isCurrent ? ' (Voce)' : ''}</span>
+            <div class="role-table-rates">
+                <span class="role-table-daily">${formatCurrency(role.dailyRate)}/dia</span>
+                <span class="role-table-hourly">${formatCurrency(role.hourlyRate)}/h</span>
+            </div>
+        </div>
+    `).join('');
+
+    container.innerHTML = html;
+}
+
+// Renderizar breakdown por cargo (se mudou de cargo durante o mês)
+function renderRoleBreakdown(byRole) {
+    const container = document.getElementById('roleBreakdownCard');
+    const list = document.getElementById('roleBreakdownList');
+    if (!container || !list) return;
+
+    // Só mostra se houver mais de um cargo no período
+    if (!byRole || byRole.length <= 1) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'block';
+
+    const html = byRole.map(entry => `
+        <div class="role-breakdown-item">
+            <div class="role-breakdown-info">
+                <span class="role-breakdown-name">${entry.label}</span>
+                <span class="role-breakdown-details">${entry.days} dia${entry.days > 1 ? 's' : ''} - ${formatHours(entry.hours)}</span>
+            </div>
+            <span class="role-breakdown-value">${formatCurrency(entry.earnings)}</span>
+        </div>
+    `).join('');
+
+    list.innerHTML = html;
+}
+
 function renderEarnings(earningsData) {
     // Atualizar texto do periodo
     const periodText = document.getElementById('hoursPeriodText');
@@ -7102,11 +7453,11 @@ function renderEarnings(earningsData) {
         totalHoursEl.textContent = formatHours(earningsData.summary?.totalHours);
     }
 
-    // Atualizar valor/hora atual
-    const hourlyRateEl = document.getElementById('earningsHourlyRate');
-    if (hourlyRateEl && earningsData.currentRates) {
-        hourlyRateEl.textContent = formatCurrency(earningsData.currentRates.hourlyRate);
-    }
+    // Renderizar tabela completa de cargos
+    renderRolesTable(earningsData.allRolesTable || []);
+
+    // Renderizar breakdown por cargo (se mudou de cargo durante o mês)
+    renderRoleBreakdown(earningsData.byRole || []);
 
     // Atualizar breakdown de horas
     const hoursNormalEl = document.getElementById('hoursNormalValue');
@@ -7912,6 +8263,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Initialize location and battery tracking system
         initLocationSystem();
 
+        // Fetch and process any pending notifications (role changes, etc.)
+        fetchAndProcessPendingNotifications();
+
         // Check URL parameters for campaign to show (from push notification)
         const urlParams = new URLSearchParams(window.location.search);
         const forceShowCampaignId = urlParams.get('forceShowCampaign');
@@ -7988,6 +8342,22 @@ document.addEventListener('DOMContentLoaded', async function() {
 
 // Recarregar dados ao navegar para certas telas
 function navigateTo(screenId) {
+    // Validate screenId
+    const targetScreen = document.getElementById(screenId);
+    if (!targetScreen) {
+        console.error(`[navigateTo] Screen not found: ${screenId}`);
+        showToast('Tela não encontrada', 'error');
+        return;
+    }
+
+    // Ensure onboarding overlay is hidden if completed (prevent ghost overlays)
+    if (hasCompletedOnboarding()) {
+        const onboardingOverlay = document.getElementById('onboardingOverlay');
+        if (onboardingOverlay && onboardingOverlay.classList.contains('active')) {
+            onboardingOverlay.classList.remove('active');
+        }
+    }
+
     // Parar monitoramento de geolocalização se saindo da tela de detalhes do projeto
     const currentScreen = document.querySelector('.screen.active');
     if (currentScreen && currentScreen.id === 'screen-project-detail' && screenId !== 'screen-project-detail') {
@@ -7997,7 +8367,7 @@ function navigateTo(screenId) {
     document.querySelectorAll('.screen').forEach(screen => {
         screen.classList.remove('active');
     });
-    document.getElementById(screenId).classList.add('active');
+    targetScreen.classList.add('active');
     updateBottomNav(screenId);
 
     // Scroll to top when navigating
@@ -9994,8 +10364,8 @@ async function doCheckoutWithTasksAndReminder(reportOption = 'SKIP') {
                 taskCompletions: taskCompletionsArray,
                 checkoutReason: checkoutReasonToSend,
                 reportOption: apiReportOption,
-                latitude,
-                longitude
+                // Only include lat/lng if they are valid numbers (not null)
+                ...(latitude !== null && longitude !== null ? { latitude, longitude } : {})
             })
         });
 
@@ -12501,6 +12871,21 @@ async function syncTimelineEvents() {
                     }
 
                     console.log('[Timeline] Eventos sincronizados');
+                } else {
+                    // Log error response for debugging
+                    const errorData = await response.json().catch(() => ({}));
+                    console.warn(`[Timeline] Erro ${response.status}:`, errorData);
+
+                    // If events are invalid, mark them as synced to prevent retry loop
+                    if (response.status === 400 && errorData?.error?.code === 'INVALID_EVENTS') {
+                        console.warn('[Timeline] Eventos inválidos, limpando...');
+                        const cleanupTx = locationDB.transaction([TIMELINE_STORE_NAME], 'readwrite');
+                        const cleanupStore = cleanupTx.objectStore(TIMELINE_STORE_NAME);
+                        for (const event of events) {
+                            event.synced = true; // Mark as synced to stop retries
+                            cleanupStore.put(event);
+                        }
+                    }
                 }
             } catch (error) {
                 console.log('[Timeline] Erro ao sincronizar:', error);
@@ -14053,3 +14438,1276 @@ window.debugAcademy = {
     getCurrentVideo: () => currentVideo,
     getCurrentQuiz: () => currentQuiz
 };
+
+// =============================================
+// SETTINGS FUNCTIONS
+// =============================================
+
+// Load settings from localStorage
+function loadSettings() {
+    const settings = JSON.parse(localStorage.getItem('appSettings') || '{}');
+
+    // Set default values
+    const defaults = {
+        pushNotifications: true,
+        reportReminders: true,
+        locationSharing: true,
+        backgroundGPS: true,
+        dataSaver: false
+    };
+
+    // Merge with defaults
+    Object.keys(defaults).forEach(key => {
+        if (settings[key] === undefined) {
+            settings[key] = defaults[key];
+        }
+    });
+
+    // Update UI checkboxes
+    const pushEl = document.getElementById('settingsPushNotifications');
+    const reminderEl = document.getElementById('settingsReportReminders');
+    const locationEl = document.getElementById('settingsLocation');
+    const gpsEl = document.getElementById('settingsBackgroundGPS');
+    const dataEl = document.getElementById('settingsDataSaver');
+
+    if (pushEl) pushEl.checked = settings.pushNotifications;
+    if (reminderEl) reminderEl.checked = settings.reportReminders;
+    if (locationEl) locationEl.checked = settings.locationSharing;
+    if (gpsEl) gpsEl.checked = settings.backgroundGPS;
+    if (dataEl) dataEl.checked = settings.dataSaver;
+
+    return settings;
+}
+
+// Save setting to localStorage
+function saveSetting(key, value) {
+    const settings = JSON.parse(localStorage.getItem('appSettings') || '{}');
+    settings[key] = value;
+    localStorage.setItem('appSettings', JSON.stringify(settings));
+}
+
+// Toggle Push Notifications
+function togglePushNotifications(checkbox) {
+    saveSetting('pushNotifications', checkbox.checked);
+    if (checkbox.checked) {
+        // Request notification permission
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+        showToast('Notificações ativadas', 'success');
+    } else {
+        showToast('Notificações desativadas', 'info');
+    }
+}
+
+// Toggle Report Reminders
+function toggleReportReminders(checkbox) {
+    saveSetting('reportReminders', checkbox.checked);
+    showToast(checkbox.checked ? 'Lembretes ativados' : 'Lembretes desativados', 'info');
+}
+
+// Toggle Location Sharing
+function toggleLocationSharing(checkbox) {
+    saveSetting('locationSharing', checkbox.checked);
+    if (!checkbox.checked) {
+        showToast('Atenção: Check-in requer localização', 'warning');
+    } else {
+        showToast('Compartilhamento de localização ativado', 'success');
+    }
+}
+
+// Toggle Background GPS
+function toggleBackgroundGPS(checkbox) {
+    saveSetting('backgroundGPS', checkbox.checked);
+    showToast(checkbox.checked ? 'GPS em segundo plano ativado' : 'GPS em segundo plano desativado', 'info');
+}
+
+// Toggle Data Saver
+function toggleDataSaver(checkbox) {
+    saveSetting('dataSaver', checkbox.checked);
+    showToast(checkbox.checked ? 'Modo economia ativado' : 'Modo economia desativado', 'info');
+}
+
+// Clear App Cache
+function clearAppCache() {
+    if (confirm('Limpar cache irá remover dados temporários. Deseja continuar?')) {
+        // Clear caches
+        localStorage.removeItem('cached_projects');
+        localStorage.removeItem('cached_feed');
+        localStorage.removeItem('cached_hours');
+        localStorage.removeItem('cached_profile');
+
+        // Clear service worker caches
+        if ('caches' in window) {
+            caches.keys().then(names => {
+                names.forEach(name => {
+                    caches.delete(name);
+                });
+            });
+        }
+
+        showToast('Cache limpo com sucesso', 'success');
+    }
+}
+
+// =============================================
+// HELP FUNCTIONS
+// =============================================
+
+// Toggle help item expansion
+function toggleHelpItem(element) {
+    element.classList.toggle('expanded');
+}
+
+// Initialize settings when navigating to settings screen
+document.addEventListener('DOMContentLoaded', () => {
+    // Load settings when app starts
+    loadSettings();
+});
+
+// =============================================
+// TUTORIAL INTERATIVO / ONBOARDING SYSTEM
+// =============================================
+
+// Tutorial state
+const tutorialState = {
+    isActive: false,
+    currentStep: 0,
+    hasCompletedTutorial: localStorage.getItem('tutorialCompleted') === 'true',
+    isDemoMode: false,
+    demoProject: null,
+    steps: []
+};
+
+// Demo project for tutorial (não existe no backend)
+const DEMO_PROJECT = {
+    id: 'demo-project-tutorial',
+    name: 'PROJETO DEMONSTRAÇÃO',
+    client: 'Cliente Exemplo LTDA',
+    address: 'Av. Paulista, 1000 - Bela Vista, São Paulo/SP',
+    status: 'Em Execução',
+    phase: 'Aplicação STELION',
+    m2Total: 150,
+    m2Piso: 120,
+    m2Parede: 30,
+    products: ['STELION', 'PRIMER'],
+    team: [
+        { name: 'João Silva', role: 'LIDER', avatar: 'JS' },
+        { name: 'Maria Santos', role: 'APLICADOR_II', avatar: 'MS' }
+    ],
+    lat: -23.5505,
+    lng: -46.6333,
+    isDemo: true
+};
+
+// Demo scenarios
+const DEMO_SCENARIOS = {
+    ON_TIME: { distance: 50, label: 'Dentro da área (50m)', canCheckin: true, icon: '✅' },
+    CLOSE: { distance: 180, label: 'Próximo (180m)', canCheckin: true, icon: '⚠️' },
+    FAR: { distance: 500, label: 'Fora da área (500m)', canCheckin: false, icon: '❌' },
+    VERY_FAR: { distance: 2000, label: 'Muito longe (2km)', canCheckin: false, icon: '🚫' },
+    GPS_OFF: { distance: null, label: 'GPS desligado', canCheckin: false, icon: '📍' }
+};
+
+// Tutorial steps - PARTE 1: Tour pelos menus
+const TUTORIAL_STEPS = [
+    // Tour pelos menus principais
+    {
+        id: 'menu-projetos',
+        target: '[data-nav="projects"]', // Seletor do item do menu
+        targetFallback: '.bottom-nav > div:nth-child(1)',
+        title: 'Projetos',
+        content: 'Aqui você vê todos os <strong>seus projetos</strong> e faz check-in quando chegar na obra.',
+        position: 'top'
+    },
+    {
+        id: 'menu-feed',
+        target: '[data-nav="feed"]',
+        targetFallback: '.bottom-nav > div:nth-child(2)',
+        title: 'Feed',
+        content: 'Acompanhe as <strong>novidades da equipe</strong>, poste fotos e interaja com os colegas.',
+        position: 'top'
+    },
+    {
+        id: 'menu-horas',
+        target: '[data-nav="hours"]',
+        targetFallback: '.bottom-nav > div:nth-child(3)',
+        title: 'Horas',
+        content: 'Veja quanto você está <strong>recebendo por mês</strong> e por projeto. Acompanhe suas horas trabalhadas.',
+        position: 'top'
+    },
+    {
+        id: 'menu-xp',
+        target: '[data-nav="xp"]',
+        targetFallback: '.bottom-nav > div:nth-child(4)',
+        title: '+XP',
+        content: 'Acumule <strong>XP e evolua sua posição</strong>. Complete vídeos e quizzes para ganhar mais.',
+        position: 'top'
+    },
+    {
+        id: 'menu-perfil',
+        target: '[data-nav="profile"]',
+        targetFallback: '.bottom-nav > div:nth-child(5)',
+        title: 'Perfil',
+        content: 'Edite suas <strong>informações pessoais</strong>, veja conquistas e configure o app.',
+        position: 'top'
+    },
+    // Explicação do check-in
+    {
+        id: 'checkin-intro',
+        target: null, // Sem target = modal centralizado
+        title: 'Como funciona o Check-in?',
+        content: 'Agora vamos mostrar como funciona o <strong>check-in por localização</strong>. Você precisa estar perto da obra para registrar sua chegada.',
+        position: 'center',
+        isTransition: true
+    }
+];
+
+// PARTE 2: Simulação de Check-in (será mostrada após o tour)
+const CHECKIN_SIMULATION_STEPS = [
+    {
+        id: 'sim-intro',
+        scenario: 'INTRO',
+        title: '⏰ Horário de Entrada',
+        content: 'O <strong>horário de entrada</strong> do projeto está no descritivo. Você não pode fazer check-in muito antes do horário previsto.',
+        distance: '---'
+    },
+    {
+        id: 'sim-far',
+        scenario: 'FAR',
+        title: '📍 Longe da obra',
+        content: 'Quando você está <strong>longe</strong> (mais de 200m), o botão de check-in fica desabilitado.',
+        distance: '500m'
+    },
+    {
+        id: 'sim-approaching',
+        scenario: 'APPROACHING',
+        title: '🚶 Se aproximando...',
+        content: 'Conforme você se aproxima da obra, a distância vai diminuindo automaticamente.',
+        distance: '150m'
+    },
+    {
+        id: 'sim-inside',
+        scenario: 'ON_TIME',
+        title: '✅ Dentro da área!',
+        content: 'O check-in funciona quando você está a <strong>menos de 50 metros</strong> do projeto. Agora você pode registrar sua chegada!',
+        distance: '50m'
+    },
+    {
+        id: 'sim-ontime-bonus',
+        scenario: 'BONUS_INFO',
+        title: '⭐ Bônus de Pontualidade',
+        content: 'Chegou <strong>no horário</strong>? Você ganha um <strong>multiplicador diário de XP</strong>! Quanto mais dias seguidos no horário, maior o bônus.',
+        distance: '50m'
+    },
+    {
+        id: 'sim-late-penalty',
+        scenario: 'LATE_INFO',
+        title: '⚠️ Chegou Atrasado?',
+        content: 'Se chegar <strong>atrasado</strong>, seu <strong>multiplicador ACUMULADO reseta</strong>! Todo o bônus que você construiu será perdido. Chegue sempre no horário!',
+        distance: '50m'
+    },
+    {
+        id: 'sim-checkin',
+        scenario: 'CHECKIN',
+        title: '👆 Fazendo Check-in',
+        content: 'Toque no botão para registrar sua chegada. O timer começa a contar suas horas!',
+        action: 'checkin'
+    },
+    {
+        id: 'sim-leaving-area',
+        scenario: 'LEAVING_INFO',
+        title: '🚪 Saindo da Área?',
+        content: 'Se sair da área, você precisa <strong>justificar o motivo</strong>. Sem justificativa, o <strong>checkout será automático</strong> e você pode ser <strong>penalizado</strong> - isso pode afetar <strong>todas as suas horas</strong> no projeto!',
+        distance: '50m'
+    },
+    {
+        id: 'sim-buttons',
+        scenario: 'BUTTONS_INFO',
+        title: '🔧 Botões de Ajuda',
+        content: 'Precisa de <strong>liberação na portaria</strong>? Clique em PORTARIA. Precisa de <strong>material</strong> ou tem algum <strong>problema</strong>? Clique em MATERIAL para solicitar!',
+        distance: '50m',
+        highlightButtons: true
+    },
+    {
+        id: 'sim-checkout',
+        scenario: 'CHECKOUT',
+        title: '🏁 Check-out',
+        content: 'Ao finalizar, faça <strong>check-out</strong>. Uma pessoa da equipe será <strong>responsável pelo relatório</strong> com <strong>fotos</strong> e o que aconteceu no dia. Também é preciso <strong>atualizar a etapa</strong> do projeto que foi executada!',
+        action: 'checkout'
+    },
+    {
+        id: 'sim-absence-button',
+        scenario: 'ABSENCE_BUTTON',
+        title: '📅 Botão Avisar Falta',
+        content: 'Use o botão <strong>"AVISAR FALTA"</strong> para comunicar ausências. Ele está sempre disponível na tela de projetos!',
+        distance: '---',
+        highlightFalta: true
+    },
+    {
+        id: 'sim-absence-warning',
+        scenario: 'ABSENCE_INFO',
+        title: '⚠️ Avise com Antecedência!',
+        content: 'Quanto <strong>mais cedo</strong> você avisar a falta, melhor! Avise com o <strong>máximo de antecedência possível</strong> para não prejudicar a equipe.',
+        distance: '---'
+    },
+    {
+        id: 'sim-absence-sameday',
+        scenario: 'ABSENCE_SAMEDAY',
+        title: '😕 Avisou no Mesmo Dia?',
+        content: 'Se avisar a falta <strong>no mesmo dia</strong>, você já recebe uma <strong>penalidade de XP</strong>. É melhor que não avisar, mas ainda prejudica a equipe.',
+        distance: '---'
+    },
+    {
+        id: 'sim-absence-auto',
+        scenario: 'ABSENCE_AUTO',
+        title: '🚨 Não Avisou? Penalidade Máxima!',
+        content: 'Se você <strong>não aparecer e não avisar</strong>, a falta será <strong>detectada automaticamente</strong> e você receberá a <strong>penalidade MÁXIMA</strong> de XP.',
+        distance: '---'
+    }
+];
+
+// Initialize tutorial
+function initTutorial() {
+    tutorialState.steps = TUTORIAL_STEPS;
+    createTutorialElements();
+}
+
+// Create tutorial DOM elements - NOVO DESIGN
+function createTutorialElements() {
+    if (document.getElementById('tutorialContainer')) return;
+
+    const tutorialHTML = `
+        <div id="tutorialOverlay" class="tutorial-overlay"></div>
+        <div id="tutorialPulse" class="tutorial-pulse">
+            <div class="tutorial-pulse-ring" style="width:60px;height:60px;"></div>
+            <div class="tutorial-pulse-ring" style="width:60px;height:60px;"></div>
+            <div class="tutorial-pulse-ring" style="width:60px;height:60px;"></div>
+            <div class="tutorial-pulse-center" style="width:60px;height:60px;"></div>
+        </div>
+        <div id="tutorialTooltip" class="tutorial-tooltip">
+            <div class="tutorial-title" id="tutorialTitle">Título</div>
+            <div class="tutorial-content" id="tutorialContent">Conteúdo</div>
+            <div class="tutorial-footer" style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.1);">
+                <button class="tutorial-btn-skip" onclick="skipTutorial()" style="background:none;border:none;color:#888;font-size:13px;cursor:pointer;">Pular</button>
+                <button class="tutorial-btn-next" id="tutorialNextBtn" onclick="nextTutorialStep()" style="background:var(--accent-primary);color:#000;border:none;padding:8px 20px;border-radius:8px;font-weight:600;cursor:pointer;">Próximo</button>
+            </div>
+        </div>
+        <div id="tutorialComplete" class="tutorial-complete">
+            <div class="tutorial-complete-icon">🎉</div>
+            <h3>Tutorial Concluído!</h3>
+            <p>Você está pronto para usar o app!</p>
+            <button class="tutorial-complete-btn" onclick="closeTutorialComplete()">Começar</button>
+        </div>
+        <div id="tutorialConfetti" class="tutorial-confetti"></div>
+    `;
+
+    const container = document.createElement('div');
+    container.id = 'tutorialContainer';
+    container.innerHTML = tutorialHTML;
+
+    // Anexar ao body para não ser afetado pelo overflow do phone-frame
+    document.body.appendChild(container);
+}
+
+// Start tutorial - NOVO
+function startTutorial() {
+    console.log('[Tutorial] Starting visual tutorial');
+    tutorialState.isActive = true;
+    tutorialState.currentStep = 0;
+    tutorialState.steps = TUTORIAL_STEPS;
+
+    // Fechar modais abertos
+    document.querySelectorAll('.modal-overlay.active').forEach(el => el.classList.remove('active'));
+    const welcomeModal = document.getElementById('welcomeModal');
+    if (welcomeModal) welcomeModal.classList.remove('active');
+
+    // Fechar onboarding
+    const onboardingModal = document.querySelector('.onboarding-modal');
+    const onboardingOverlay = document.querySelector('.onboarding-overlay');
+    if (onboardingModal) onboardingModal.style.display = 'none';
+    if (onboardingOverlay) onboardingOverlay.style.display = 'none';
+
+    navigateTo('screen-projects');
+
+    setTimeout(() => showTutorialStep(0), 300);
+}
+
+// Show tutorial step - NOVO com spotlight pulsante
+function showTutorialStep(stepIndex) {
+    const step = tutorialState.steps[stepIndex];
+    if (!step) return;
+
+    console.log(`[Tutorial] Step ${stepIndex + 1}/${tutorialState.steps.length}: ${step.id}`);
+    tutorialState.currentStep = stepIndex;
+
+    const overlay = document.getElementById('tutorialOverlay');
+    const pulse = document.getElementById('tutorialPulse');
+    const tooltip = document.getElementById('tutorialTooltip');
+    const title = document.getElementById('tutorialTitle');
+    const content = document.getElementById('tutorialContent');
+    const nextBtn = document.getElementById('tutorialNextBtn');
+
+    if (!tooltip) return;
+
+    // Atualizar conteúdo
+    title.textContent = step.title;
+    content.innerHTML = step.content;
+    nextBtn.textContent = stepIndex === tutorialState.steps.length - 1 ? 'Finalizar' : 'Próximo';
+
+    // Mostrar overlay
+    if (overlay) overlay.classList.add('active');
+
+    // Encontrar elemento alvo
+    let targetElement = null;
+    if (step.target) {
+        targetElement = document.querySelector(step.target) || document.querySelector(step.targetFallback);
+    }
+
+    if (targetElement && step.position !== 'center') {
+        // Posicionar spotlight pulsante no elemento (coordenadas do viewport)
+        const rect = targetElement.getBoundingClientRect();
+        const phoneFrame = document.querySelector('.phone-frame');
+        const phoneRect = phoneFrame ? phoneFrame.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+
+        const pulseSize = 60;
+        // Usar coordenadas do viewport diretamente
+        let centerX = rect.left + rect.width / 2 - pulseSize / 2;
+        let centerY = rect.top + rect.height / 2 - pulseSize / 2;
+
+        pulse.style.position = 'fixed';
+        pulse.style.left = centerX + 'px';
+        pulse.style.top = centerY + 'px';
+        pulse.classList.add('active');
+
+        // Posicionar tooltip acima do elemento
+        positionTooltipNear(tooltip, rect, phoneRect, step.position || 'top');
+        tooltip.classList.add('active');
+    } else {
+        // Modal centralizado (sem spotlight)
+        pulse.classList.remove('active');
+        tooltip.style.left = '50%';
+        tooltip.style.top = '40%';
+        tooltip.style.transform = 'translate(-50%, -50%)';
+        tooltip.className = 'tutorial-tooltip active';
+    }
+}
+
+// Posicionar tooltip próximo ao elemento (coordenadas do viewport)
+function positionTooltipNear(tooltip, targetRect, phoneRect, position) {
+    // Remover classes de seta anteriores
+    tooltip.classList.remove('arrow-up', 'arrow-down', 'arrow-left', 'arrow-right');
+    tooltip.style.transform = 'none';
+    tooltip.style.position = 'fixed';
+
+    const margin = 90; // Margem maior para não cobrir o ícone e o spotlight
+    const tooltipWidth = 300;
+    const tooltipHeight = 140;
+    let top, left;
+
+    // Centro do elemento alvo
+    const targetCenterX = targetRect.left + targetRect.width / 2;
+
+    if (position === 'top') {
+        // Tooltip bem acima do elemento para não cobrir o spotlight
+        top = targetRect.top - tooltipHeight - margin;
+        left = targetRect.left + targetRect.width / 2 - tooltipWidth / 2;
+        tooltip.classList.add('arrow-down');
+    } else if (position === 'bottom') {
+        top = targetRect.bottom + margin;
+        left = targetRect.left + targetRect.width / 2 - tooltipWidth / 2;
+        tooltip.classList.add('arrow-up');
+    } else {
+        // Default: centralizado na tela
+        top = window.innerHeight / 2 - tooltipHeight / 2;
+        left = window.innerWidth / 2 - tooltipWidth / 2;
+    }
+
+    // Guardar left original antes de aplicar constraints
+    const originalLeft = left;
+
+    // Garantir que não saia da tela (mas com margem mínima do topo)
+    left = Math.max(phoneRect.left + 10, Math.min(left, phoneRect.right - tooltipWidth - 10));
+    top = Math.max(phoneRect.top + 60, Math.min(top, phoneRect.bottom - tooltipHeight - 100));
+
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+
+    // Calcular posição da seta para apontar para o ícone
+    // A seta deve estar na posição horizontal do centro do target, relativa à tooltip
+    const arrowPosition = targetCenterX - left;
+    // Limitar a seta para não sair da tooltip (com margem de 20px)
+    const clampedArrowPos = Math.max(20, Math.min(arrowPosition, tooltipWidth - 20));
+    tooltip.style.setProperty('--arrow-left', clampedArrowPos + 'px');
+}
+
+// Next tutorial step
+function nextTutorialStep() {
+    const nextIndex = tutorialState.currentStep + 1;
+
+    if (nextIndex >= tutorialState.steps.length) {
+        completeTutorial();
+    } else {
+        showTutorialStep(nextIndex);
+    }
+}
+
+// Previous tutorial step
+function prevTutorialStep() {
+    const prevIndex = tutorialState.currentStep - 1;
+    if (prevIndex >= 0) {
+        showTutorialStep(prevIndex);
+    }
+}
+
+// Skip tutorial
+function skipTutorial() {
+    console.log('[Tutorial] Tutorial skipped');
+    removeDemoProject();
+    closeTutorial();
+    localStorage.setItem('tutorialCompleted', 'true');
+    tutorialState.hasCompletedTutorial = true;
+}
+
+// Close tutorial
+function closeTutorial() {
+    tutorialState.isActive = false;
+    tutorialState.isDemoMode = false;
+
+    const overlay = document.getElementById('tutorialOverlay');
+    const pulse = document.getElementById('tutorialPulse');
+    const tooltip = document.getElementById('tutorialTooltip');
+
+    if (overlay) overlay.classList.remove('active');
+    if (pulse) pulse.classList.remove('active');
+    if (tooltip) tooltip.classList.remove('active');
+}
+
+// Close tutorial complete screen
+function closeTutorialComplete() {
+    const complete = document.getElementById('tutorialComplete');
+    if (complete) complete.classList.remove('active');
+    localStorage.setItem('tutorialCompleted', 'true');
+    tutorialState.hasCompletedTutorial = true;
+}
+
+// =============================================
+// DEMO ACTION FUNCTIONS
+// =============================================
+
+// Show demo project in the projects list
+function showDemoProject(step) {
+    console.log('[Tutorial Demo] Showing demo project');
+    tutorialState.demoProject = DEMO_PROJECT;
+
+    // Add demo project card to the projects list
+    const projectsList = document.querySelector('#screen-projects .content');
+    if (projectsList) {
+        // Check if demo card already exists
+        let demoCard = document.getElementById('demo-project-card');
+        if (!demoCard) {
+            demoCard = document.createElement('div');
+            demoCard.id = 'demo-project-card';
+            demoCard.className = 'project-card demo-project-card';
+            demoCard.style.cssText = 'border: 2px dashed var(--accent-primary); position: relative;';
+            demoCard.innerHTML = `
+                <div style="position: absolute; top: -12px; left: 12px; background: var(--accent-primary); color: #000; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700;">
+                    DEMONSTRAÇÃO
+                </div>
+                <span class="project-status">Em Execução</span>
+                <h3 class="project-name">${DEMO_PROJECT.name}</h3>
+                <span class="project-phase">${DEMO_PROJECT.phase}</span>
+                <p class="project-address">${DEMO_PROJECT.address}</p>
+                <div class="project-products">
+                    ${DEMO_PROJECT.products.map(p => `<span class="product-tag">${p}</span>`).join('')}
+                </div>
+                <div class="project-metrics">
+                    <div class="metric">
+                        <span class="metric-value">${DEMO_PROJECT.m2Total}</span>
+                        m² total
+                    </div>
+                    <div class="metric">
+                        <span class="metric-value">${DEMO_PROJECT.m2Piso}</span>
+                        m² piso
+                    </div>
+                    <div class="metric">
+                        <span class="metric-value">${DEMO_PROJECT.m2Parede}</span>
+                        m² parede
+                    </div>
+                </div>
+            `;
+
+            // Insert at the beginning of the projects list
+            const firstProject = projectsList.querySelector('.project-card');
+            if (firstProject) {
+                firstProject.parentNode.insertBefore(demoCard, firstProject);
+            } else {
+                projectsList.appendChild(demoCard);
+            }
+        }
+    }
+}
+
+// Show check-in scenario demonstration
+function showCheckinScenario(step) {
+    const scenario = DEMO_SCENARIOS[step.scenario];
+    if (!scenario) return;
+
+    console.log(`[Tutorial Demo] Showing scenario: ${step.scenario}`);
+
+    const demo = document.getElementById('tutorialDemo');
+    if (demo) {
+        let buttonStyle = '';
+        let buttonText = '';
+        let statusColor = '';
+
+        if (scenario.canCheckin) {
+            if (step.scenario === 'CLOSE') {
+                buttonStyle = 'background: linear-gradient(135deg, #f97316, #ea580c); color: #fff;';
+                buttonText = 'Fazer Check-in (próximo do limite)';
+                statusColor = '#f97316';
+            } else {
+                buttonStyle = 'background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff;';
+                buttonText = 'Fazer Check-in';
+                statusColor = '#22c55e';
+            }
+        } else {
+            if (step.scenario === 'GPS_OFF') {
+                buttonStyle = 'background: #333; color: #666; cursor: not-allowed;';
+                buttonText = 'GPS desligado';
+                statusColor = '#888';
+            } else {
+                buttonStyle = 'background: #333; color: #666; cursor: not-allowed;';
+                buttonText = `Você está a ${scenario.distance}m`;
+                statusColor = '#ef4444';
+            }
+        }
+
+        demo.innerHTML = `
+            <div style="background: var(--bg-card); border-radius: 12px; padding: 16px; margin-top: 16px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                    <span style="font-size: 24px;">${scenario.icon}</span>
+                    <span style="color: ${statusColor}; font-weight: 600;">${scenario.label}</span>
+                </div>
+                <button style="width: 100%; padding: 14px; border: none; border-radius: 8px; font-weight: 600; ${buttonStyle}">
+                    ${buttonText}
+                </button>
+            </div>
+        `;
+    }
+}
+
+// Show late arrival demonstration
+function showLateArrival(step) {
+    console.log('[Tutorial Demo] Showing late arrival');
+
+    const demo = document.getElementById('tutorialDemo');
+    if (demo) {
+        demo.innerHTML = `
+            <div style="background: var(--bg-card); border-radius: 12px; padding: 16px; margin-top: 16px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                    <span style="font-size: 24px;">⏰</span>
+                    <span style="color: #f97316; font-weight: 600;">Check-in às 08:47 (Atraso: 47min)</span>
+                </div>
+                <div style="background: rgba(249, 115, 22, 0.1); border: 1px solid rgba(249, 115, 22, 0.3); border-radius: 8px; padding: 12px;">
+                    <p style="color: #f97316; font-size: 13px; margin: 0;">
+                        <strong>Horário esperado:</strong> 08:00<br>
+                        <strong>Horário do check-in:</strong> 08:47<br>
+                        <strong>Atraso registrado:</strong> 47 minutos
+                    </p>
+                </div>
+            </div>
+        `;
+    }
+}
+
+// Show checkout demonstration
+function showCheckout(step) {
+    console.log('[Tutorial Demo] Showing checkout');
+
+    const demo = document.getElementById('tutorialDemo');
+    if (demo) {
+        demo.innerHTML = `
+            <div style="background: var(--bg-card); border-radius: 12px; padding: 16px; margin-top: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <span style="color: var(--text-secondary); font-size: 13px;">Tempo trabalhado hoje</span>
+                    <span style="color: var(--accent-primary); font-weight: 700; font-size: 18px;">07h 32min</span>
+                </div>
+                <button style="width: 100%; padding: 14px; border: none; border-radius: 8px; font-weight: 600; background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff;">
+                    🚪 Fazer Check-out
+                </button>
+                <p style="color: var(--text-tertiary); font-size: 11px; text-align: center; margin-top: 8px;">
+                    Check-in: 08:00 • Agora: 15:32
+                </p>
+            </div>
+        `;
+    }
+}
+
+// Remove demo project from the list
+function removeDemoProject(step) {
+    console.log('[Tutorial Demo] Removing demo project');
+    tutorialState.demoProject = null;
+    tutorialState.isDemoMode = false;
+
+    const demoCard = document.getElementById('demo-project-card');
+    if (demoCard) {
+        demoCard.remove();
+    }
+}
+
+// Expose demo functions globally
+window.showDemoProject = showDemoProject;
+window.showCheckinScenario = showCheckinScenario;
+window.showLateArrival = showLateArrival;
+window.showCheckout = showCheckout;
+window.removeDemoProject = removeDemoProject;
+
+// Complete tutorial - Agora inicia a simulação de check-in (Parte 2)
+function completeTutorial() {
+    console.log('[Tutorial] Part 1 complete, starting check-in simulation...');
+    closeTutorial();
+
+    // Iniciar simulação de check-in (Parte 2)
+    setTimeout(() => {
+        startCheckinSimulation();
+    }, 300);
+}
+
+// Mostrar tela de conclusão final (após simulação)
+function showFinalCompletion() {
+    console.log('[Tutorial] All parts completed!');
+
+    // Fechar simulação
+    const simulation = document.getElementById('checkinSimulation');
+    if (simulation) simulation.classList.remove('active');
+
+    // Mostrar tela de conclusão
+    const completeScreen = document.getElementById('tutorialComplete');
+    const confetti = document.getElementById('tutorialConfetti');
+
+    if (completeScreen) {
+        completeScreen.classList.add('active');
+    }
+
+    // Show confetti
+    if (confetti) {
+        showConfetti(confetti);
+    }
+
+    // Mark as completed
+    localStorage.setItem('tutorialCompleted', 'true');
+    tutorialState.hasCompletedTutorial = true;
+}
+
+// =============================================
+// SIMULAÇÃO DE CHECK-IN - PARTE 2 DO TUTORIAL
+// =============================================
+
+// Estado da simulação
+let simulationState = {
+    currentStep: 0,
+    isActive: false,
+    timerInterval: null
+};
+
+// Iniciar simulação de check-in
+function startCheckinSimulation() {
+    console.log('[Simulation] Starting check-in simulation');
+    simulationState.isActive = true;
+    simulationState.currentStep = 0;
+
+    // Criar elementos da simulação se não existirem
+    createSimulationElements();
+
+    // Mostrar simulação
+    const simulation = document.getElementById('checkinSimulation');
+    if (simulation) {
+        simulation.classList.add('active');
+    }
+
+    // Mostrar primeiro step
+    setTimeout(() => showSimulationStep(0), 500);
+}
+
+// Criar elementos DOM da simulação
+function createSimulationElements() {
+    if (document.getElementById('checkinSimulation')) return;
+
+    const simulationHTML = `
+        <div id="checkinSimulation" class="checkin-simulation">
+            <div class="sim-phone">
+                <div class="sim-phone-notch"></div>
+                <div class="sim-header">
+                    <div class="sim-project-name">Residência Demo</div>
+                    <div class="sim-project-address">Rua Exemplo, 123 - São Paulo</div>
+                </div>
+                <div class="sim-map">
+                    <div class="sim-map-pin"></div>
+                </div>
+                <div class="sim-distance-container">
+                    <div class="sim-distance-label">Distância da obra</div>
+                    <div id="simDistanceValue" class="sim-distance-value far">500m</div>
+                </div>
+                <div id="simActiveCheckin" class="sim-active-checkin">
+                    <div id="simTimer" class="sim-checkin-timer">00:00:15</div>
+                    <div class="sim-checkin-status">Check-in ativo</div>
+                </div>
+                <div id="simCheckinBtn" class="sim-checkin-btn disabled">
+                    Fazer Check-in
+                </div>
+                <div class="sim-action-buttons">
+                    <div id="simPortariaBtn" class="sim-action-btn">
+                        <span class="sim-action-icon">🚪</span>
+                        <span>PORTARIA</span>
+                    </div>
+                    <div id="simMaterialBtn" class="sim-action-btn">
+                        <span class="sim-action-icon">📦</span>
+                        <span>MATERIAL</span>
+                    </div>
+                </div>
+                <div id="simFaltaBtn" class="sim-falta-btn">
+                    <span class="sim-falta-icon">📅</span>
+                    <span>AVISAR FALTA</span>
+                </div>
+                <div id="simCursor" class="sim-cursor">
+                    <span class="sim-cursor-finger">👆</span>
+                </div>
+                <div id="simRipple" class="sim-ripple"></div>
+            </div>
+            <div id="simMessage" class="sim-message">
+                <div id="simMessageTitle" class="sim-message-title">Longe da obra</div>
+                <div id="simMessageContent" class="sim-message-content">
+                    Quando você está <strong>longe</strong> (mais de 200m), o botão de check-in fica desabilitado.
+                </div>
+            </div>
+            <div class="sim-controls">
+                <button class="sim-btn sim-btn-skip" onclick="skipSimulation()">Pular</button>
+                <button id="simNextBtn" class="sim-btn sim-btn-next" onclick="nextSimulationStep()">Próximo</button>
+            </div>
+        </div>
+    `;
+
+    const container = document.createElement('div');
+    container.innerHTML = simulationHTML;
+    document.body.appendChild(container.firstElementChild);
+}
+
+// Mostrar step da simulação
+function showSimulationStep(stepIndex) {
+    const steps = CHECKIN_SIMULATION_STEPS;
+    if (stepIndex >= steps.length) {
+        showFinalCompletion();
+        return;
+    }
+
+    const step = steps[stepIndex];
+    simulationState.currentStep = stepIndex;
+    console.log(`[Simulation] Step ${stepIndex + 1}/${steps.length}: ${step.id}`);
+
+    const distanceValue = document.getElementById('simDistanceValue');
+    const checkinBtn = document.getElementById('simCheckinBtn');
+    const activeCheckin = document.getElementById('simActiveCheckin');
+    const messageTitle = document.getElementById('simMessageTitle');
+    const messageContent = document.getElementById('simMessageContent');
+    const cursor = document.getElementById('simCursor');
+    const nextBtn = document.getElementById('simNextBtn');
+
+    // Atualizar texto do botão
+    nextBtn.textContent = stepIndex === steps.length - 1 ? 'Finalizar' : 'Próximo';
+
+    // Atualizar mensagem
+    messageTitle.textContent = step.title;
+    messageContent.innerHTML = step.content;
+
+    // Esconder cursor inicialmente
+    cursor.classList.remove('active', 'tapping');
+
+    // Atualizar estado baseado no cenário
+    switch(step.scenario) {
+        case 'INTRO':
+            // Tela informativa inicial
+            distanceValue.textContent = '---';
+            distanceValue.className = 'sim-distance-value';
+            checkinBtn.className = 'sim-checkin-btn disabled';
+            checkinBtn.textContent = 'Fazer Check-in';
+            activeCheckin.classList.remove('show');
+            break;
+
+        case 'FAR':
+            distanceValue.textContent = '500m';
+            distanceValue.className = 'sim-distance-value far';
+            checkinBtn.className = 'sim-checkin-btn disabled';
+            checkinBtn.textContent = 'Fazer Check-in';
+            activeCheckin.classList.remove('show');
+            break;
+
+        case 'APPROACHING':
+            // Animar a distância diminuindo
+            animateDistance(distanceValue, 500, 150);
+            distanceValue.className = 'sim-distance-value approaching';
+            checkinBtn.className = 'sim-checkin-btn disabled';
+            checkinBtn.textContent = 'Fazer Check-in';
+            activeCheckin.classList.remove('show');
+            break;
+
+        case 'ON_TIME':
+            distanceValue.textContent = '50m';
+            distanceValue.className = 'sim-distance-value inside';
+            checkinBtn.className = 'sim-checkin-btn enabled';
+            checkinBtn.textContent = 'Fazer Check-in';
+            activeCheckin.classList.remove('show');
+            break;
+
+        case 'BONUS_INFO':
+        case 'LATE_INFO':
+            // Telas informativas sobre pontualidade
+            distanceValue.textContent = '50m';
+            distanceValue.className = 'sim-distance-value inside';
+            checkinBtn.className = 'sim-checkin-btn enabled';
+            checkinBtn.textContent = 'Fazer Check-in';
+            activeCheckin.classList.remove('show');
+            break;
+
+        case 'CHECKIN':
+            distanceValue.textContent = '50m';
+            distanceValue.className = 'sim-distance-value inside';
+            checkinBtn.className = 'sim-checkin-btn enabled';
+            checkinBtn.textContent = 'Fazer Check-in';
+            activeCheckin.classList.remove('show');
+
+            // Mostrar cursor e simular clique
+            setTimeout(() => {
+                animateCursorToButton(cursor, checkinBtn, () => {
+                    // Após o clique, mostrar estado de check-in ativo
+                    checkinBtn.className = 'sim-checkin-btn checkout';
+                    checkinBtn.textContent = 'Fazer Check-out';
+                    activeCheckin.classList.add('show');
+                    startSimulatedTimer();
+                });
+            }, 500);
+            break;
+
+        case 'LEAVING_INFO':
+            // Tela informativa sobre sair da área
+            distanceValue.textContent = '50m';
+            distanceValue.className = 'sim-distance-value inside';
+            checkinBtn.className = 'sim-checkin-btn checkout';
+            checkinBtn.textContent = 'Fazer Check-out';
+            activeCheckin.classList.add('show');
+            // Remover highlights dos botões de ação
+            document.getElementById('simPortariaBtn')?.classList.remove('highlight');
+            document.getElementById('simMaterialBtn')?.classList.remove('highlight');
+            break;
+
+        case 'BUTTONS_INFO':
+            // Tela informativa sobre botões de ajuda
+            distanceValue.textContent = '50m';
+            distanceValue.className = 'sim-distance-value inside';
+            checkinBtn.className = 'sim-checkin-btn checkout';
+            checkinBtn.textContent = 'Fazer Check-out';
+            activeCheckin.classList.add('show');
+            // Destacar os botões de Portaria e Material
+            const portariaBtn = document.getElementById('simPortariaBtn');
+            const materialBtn = document.getElementById('simMaterialBtn');
+            if (portariaBtn) portariaBtn.classList.add('highlight');
+            if (materialBtn) materialBtn.classList.add('highlight');
+            break;
+
+        case 'CHECKOUT':
+            distanceValue.textContent = '50m';
+            distanceValue.className = 'sim-distance-value inside';
+            checkinBtn.className = 'sim-checkin-btn checkout';
+            checkinBtn.textContent = 'Fazer Check-out';
+            activeCheckin.classList.add('show');
+            // Remover highlights dos botões de ação
+            document.getElementById('simPortariaBtn')?.classList.remove('highlight');
+            document.getElementById('simMaterialBtn')?.classList.remove('highlight');
+
+            // Mostrar cursor e simular clique de checkout
+            setTimeout(() => {
+                animateCursorToButton(cursor, checkinBtn, () => {
+                    // Após checkout
+                    stopSimulatedTimer();
+                    activeCheckin.classList.remove('show');
+                    checkinBtn.className = 'sim-checkin-btn enabled';
+                    checkinBtn.textContent = 'Fazer Check-in';
+                });
+            }, 500);
+            break;
+
+        case 'ABSENCE_BUTTON':
+            // Mostrar e destacar o botão de avisar falta
+            distanceValue.textContent = '---';
+            distanceValue.className = 'sim-distance-value';
+            checkinBtn.className = 'sim-checkin-btn disabled';
+            checkinBtn.textContent = 'Fazer Check-in';
+            activeCheckin.classList.remove('show');
+            // Destacar o botão de falta
+            const faltaBtnHighlight = document.getElementById('simFaltaBtn');
+            if (faltaBtnHighlight) {
+                faltaBtnHighlight.classList.add('highlight');
+            }
+            break;
+
+        case 'ABSENCE_INFO':
+        case 'ABSENCE_SAMEDAY':
+        case 'ABSENCE_AUTO':
+            // Telas informativas sobre faltas
+            distanceValue.textContent = '---';
+            distanceValue.className = 'sim-distance-value';
+            checkinBtn.className = 'sim-checkin-btn disabled';
+            checkinBtn.textContent = 'Fazer Check-in';
+            activeCheckin.classList.remove('show');
+            // Remover highlight do botão de falta
+            const faltaBtnRemove = document.getElementById('simFaltaBtn');
+            if (faltaBtnRemove) {
+                faltaBtnRemove.classList.remove('highlight');
+            }
+            break;
+    }
+}
+
+// Animar mudança de distância
+function animateDistance(element, from, to) {
+    const duration = 1500;
+    const startTime = Date.now();
+
+    const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
+        const currentValue = Math.round(from - (from - to) * easeProgress);
+        element.textContent = currentValue + 'm';
+
+        if (progress < 1) {
+            requestAnimationFrame(animate);
+        }
+    };
+
+    animate();
+}
+
+// Animar cursor até o botão e simular clique
+function animateCursorToButton(cursor, button, callback) {
+    const phoneContainer = document.querySelector('.sim-phone');
+    const phoneRect = phoneContainer.getBoundingClientRect();
+    const buttonRect = button.getBoundingClientRect();
+
+    // Posição inicial (fora da tela, à direita)
+    cursor.style.left = '250px';
+    cursor.style.top = '200px';
+    cursor.classList.add('active');
+
+    // Calcular posição final relativa ao container
+    const targetX = buttonRect.left - phoneRect.left + buttonRect.width / 2 - 20;
+    const targetY = buttonRect.top - phoneRect.top + buttonRect.height / 2 - 20;
+
+    // Mover cursor para o botão
+    setTimeout(() => {
+        cursor.style.left = targetX + 'px';
+        cursor.style.top = targetY + 'px';
+
+        // Simular clique após movimento
+        setTimeout(() => {
+            cursor.classList.add('tapping');
+            button.classList.add('clicked');
+
+            // Mostrar ripple
+            const ripple = document.getElementById('simRipple');
+            ripple.style.left = (targetX + 5) + 'px';
+            ripple.style.top = (targetY + 5) + 'px';
+            ripple.classList.add('active');
+
+            setTimeout(() => {
+                button.classList.remove('clicked');
+                cursor.classList.remove('tapping');
+                ripple.classList.remove('active');
+
+                if (callback) callback();
+            }, 300);
+        }, 800);
+    }, 100);
+}
+
+// Timer simulado
+function startSimulatedTimer() {
+    let seconds = 15;
+    const timerElement = document.getElementById('simTimer');
+
+    simulationState.timerInterval = setInterval(() => {
+        seconds++;
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        timerElement.textContent = `00:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }, 1000);
+}
+
+function stopSimulatedTimer() {
+    if (simulationState.timerInterval) {
+        clearInterval(simulationState.timerInterval);
+        simulationState.timerInterval = null;
+    }
+}
+
+// Próximo step da simulação
+function nextSimulationStep() {
+    const nextIndex = simulationState.currentStep + 1;
+
+    if (nextIndex >= CHECKIN_SIMULATION_STEPS.length) {
+        showFinalCompletion();
+    } else {
+        showSimulationStep(nextIndex);
+    }
+}
+
+// Pular simulação
+function skipSimulation() {
+    console.log('[Simulation] Skipped');
+    stopSimulatedTimer();
+
+    const simulation = document.getElementById('checkinSimulation');
+    if (simulation) simulation.classList.remove('active');
+
+    // Ir direto para conclusão
+    showFinalCompletion();
+}
+
+// Expor funções globais
+window.startCheckinSimulation = startCheckinSimulation;
+window.nextSimulationStep = nextSimulationStep;
+window.skipSimulation = skipSimulation;
+
+// Show confetti animation
+function showConfetti(container) {
+    container.classList.add('active');
+    container.innerHTML = '';
+
+    const colors = ['#c9a962', '#22c55e', '#3b82f6', '#f97316', '#ef4444', '#ffffff'];
+    const phoneFrame = document.querySelector('.phone-frame');
+    const frameRect = phoneFrame ? phoneFrame.getBoundingClientRect() : { left: 0, width: window.innerWidth };
+
+    for (let i = 0; i < 50; i++) {
+        const piece = document.createElement('div');
+        piece.className = 'confetti-piece';
+        piece.style.left = `${frameRect.left + Math.random() * frameRect.width}px`;
+        piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+        piece.style.animationDelay = `${Math.random() * 2}s`;
+        piece.style.animationDuration = `${2 + Math.random() * 2}s`;
+        container.appendChild(piece);
+    }
+
+    // Remove confetti after animation
+    setTimeout(() => {
+        container.classList.remove('active');
+        container.innerHTML = '';
+    }, 4000);
+}
+
+// Close completion screen
+function closeTutorialComplete() {
+    const completeScreen = document.getElementById('tutorialComplete');
+    if (completeScreen) {
+        completeScreen.classList.remove('active');
+    }
+
+    // Navigate to projects
+    navigateTo('screen-projects');
+}
+
+// Initialize tutorial elements when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    initTutorial();
+
+    // Auto-start tutorial for first-time users (after login)
+    // This is triggered from the login flow instead
+});
+
+// Check if should show tutorial after login
+function checkShowTutorial() {
+    if (!tutorialState.hasCompletedTutorial) {
+        // Show tutorial prompt in welcome modal
+        const welcomeModal = document.getElementById('welcomeModal');
+        if (welcomeModal) {
+            // Add tutorial button to welcome modal if not exists
+            const modalContent = welcomeModal.querySelector('.welcome-content');
+            if (modalContent && !document.getElementById('startTutorialFromWelcome')) {
+                const tutorialBtn = document.createElement('button');
+                tutorialBtn.id = 'startTutorialFromWelcome';
+                tutorialBtn.className = 'tutorial-start-btn';
+                tutorialBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4m0-4h.01"/>
+                    </svg>
+                    Ver Tutorial do App
+                `;
+                tutorialBtn.onclick = () => {
+                    welcomeModal.classList.remove('active');
+                    startTutorial();
+                };
+
+                // Insert before the continue button
+                const continueBtn = modalContent.querySelector('.welcome-btn');
+                if (continueBtn) {
+                    continueBtn.parentNode.insertBefore(tutorialBtn, continueBtn);
+                }
+            }
+        }
+    }
+}
+
+// Show tutorial prompt modal
+function showTutorialPrompt() {
+    // Create prompt modal if it doesn't exist
+    if (!document.getElementById('tutorialPromptModal')) {
+        const promptHTML = `
+            <div id="tutorialPromptModal" class="modal-overlay">
+                <div class="modal-content" style="max-width: 320px; text-align: center;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">🎓</div>
+                    <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 12px; color: var(--text-primary);">
+                        Quer conhecer o app?
+                    </h3>
+                    <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 24px; line-height: 1.6;">
+                        Temos um tutorial rápido de 2 minutos que mostra como usar as principais funções do app.
+                    </p>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <button onclick="closeTutorialPrompt(); startTutorial();" class="btn-primary" style="width: 100%; padding: 14px; font-size: 15px; font-weight: 600;">
+                            Ver Tutorial
+                        </button>
+                        <button onclick="closeTutorialPrompt();" class="btn-secondary" style="width: 100%; padding: 12px; font-size: 14px; background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary);">
+                            Agora não
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        const container = document.createElement('div');
+        container.innerHTML = promptHTML;
+        document.body.appendChild(container.firstElementChild);
+    }
+
+    // Show the modal
+    const modal = document.getElementById('tutorialPromptModal');
+    if (modal) {
+        modal.classList.add('active');
+    }
+}
+
+// Close tutorial prompt modal
+function closeTutorialPrompt() {
+    const modal = document.getElementById('tutorialPromptModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+// Expose functions globally
+window.startTutorial = startTutorial;
+window.skipTutorial = skipTutorial;
+window.nextTutorialStep = nextTutorialStep;
+window.prevTutorialStep = prevTutorialStep;
+window.closeTutorialComplete = closeTutorialComplete;
+window.checkShowTutorial = checkShowTutorial;
+window.showTutorialPrompt = showTutorialPrompt;
+window.closeTutorialPrompt = closeTutorialPrompt;

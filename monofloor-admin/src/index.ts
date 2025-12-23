@@ -2,7 +2,6 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { app } from './app';
 import { config } from './config';
-import { PrismaClient } from '@prisma/client';
 import { setSocketServer } from './services/socket.service';
 import { startLunchScheduler } from './services/lunch-scheduler.service';
 import { videoJobWorker, cleanupOldJobs } from './services/video-job-worker.service';
@@ -11,8 +10,8 @@ import { processScheduledLunchAlerts, cleanupOldLunchAlerts } from './services/l
 import { processAllDailyWorktime } from './services/worktime.service';
 import { processGPSAutoCheckouts } from './services/gps-autocheckout.service';
 import { startCuraScheduler } from './services/cura-scheduler.service';
-
-const prisma = new PrismaClient();
+import { detectAndProcessLunchSkips } from './services/lunch-skipped-detection.service';
+import prisma from './lib/prisma';
 
 // Create HTTP server for Socket.io
 const httpServer = createServer(app);
@@ -192,6 +191,37 @@ async function main() {
       };
 
       scheduleAbsenceDetection();
+
+      // Schedule lunch skip detection at 06:00 daily (checks previous day)
+      const scheduleLunchSkipDetection = () => {
+        const now = new Date();
+        const nextRun = new Date(now);
+        nextRun.setHours(6, 0, 0, 0);
+
+        // If it's already past 06:00 today, schedule for tomorrow
+        if (now >= nextRun) {
+          nextRun.setDate(nextRun.getDate() + 1);
+        }
+
+        const msUntilRun = nextRun.getTime() - now.getTime();
+
+        setTimeout(async () => {
+          try {
+            console.log('🍽️ Running lunch skip detection...');
+            const results = await detectAndProcessLunchSkips();
+            console.log(`🍽️ Lunch skip detection complete: ${results.length} skips found`);
+          } catch (error) {
+            console.error('❌ Error in lunch skip detection:', error);
+          }
+
+          // Schedule next run
+          scheduleLunchSkipDetection();
+        }, msUntilRun);
+
+        console.log(`🍽️ Lunch skip detection scheduled for ${nextRun.toISOString()}`);
+      };
+
+      scheduleLunchSkipDetection();
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);

@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import { PrismaClient, HelpRequestStatus, HelpRequestType } from '@prisma/client';
+import { HelpRequestStatus, HelpRequestType } from '@prisma/client';
 import { body, param, query, validationResult } from 'express-validator';
 import { adminAuth } from '../../middleware/auth';
 import { getSocketServer } from '../../services/socket.service';
+import prisma from '../../lib/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Validation middleware
 const validate = (req: any, res: any, next: any) => {

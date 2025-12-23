@@ -1,3 +1,19 @@
+/* Custom Fonts */
+@font-face {
+  font-family: 'NITECLUB';
+  src: url('/NITECLUB.TTF') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Brand product names - use NITECLUB font with 20% larger size */
+.brand-product-name {
+  font-family: 'NITECLUB', sans-serif;
+  font-size: 1.2em;
+  letter-spacing: 0.5px;
+}
+
 :root {
   /* Colors from Mobile App */
   --bg-primary: #000000;

@@ -3,9 +3,35 @@
     <!-- Ambient background -->
     <div class="ambient-bg"></div>
 
+    <!-- Mobile Menu Overlay -->
+    <div v-if="mobileMenuOpen" class="mobile-overlay" @click="closeMobileMenu"></div>
+
+    <!-- Mobile Sidebar -->
+    <aside class="mobile-sidebar" :class="{ open: mobileMenuOpen }">
+      <div class="mobile-sidebar-header">
+        <img src="/logo.png" alt="Monofloor" class="header-logo" />
+        <button class="close-menu-btn" @click="closeMobileMenu"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <nav class="mobile-nav">
+        <router-link to="/" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Dashboard</router-link>
+        <router-link to="/applicators" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Aplicadores</router-link>
+        <router-link to="/projects" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Projetos</router-link>
+        <router-link to="/reports" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Relatorios</router-link>
+        <router-link to="/requests" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Solicitacoes</router-link>
+        <router-link to="/campaigns" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/></svg>Campanhas</router-link>
+        <router-link to="/academy" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/></svg>Academia</router-link>
+        <router-link to="/map" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/></svg>Mapa</router-link>
+      </nav>
+      <div class="mobile-sidebar-footer">
+        <div class="mobile-user-info"><div class="user-avatar"><span>A</span></div><span class="user-name">Admin</span></div>
+        <button @click="logout" class="mobile-logout-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>Sair</button>
+      </div>
+    </aside>
+
     <!-- Header -->
     <header class="page-header">
       <div class="header-content">
+        <button class="hamburger-btn" @click="toggleMobileMenu"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
         <div class="title-section">
           <div class="icon-wrapper">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -854,8 +880,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { useRouter } from 'vue-router';
+import { useAuthStore } from '../stores/auth';
 import { academyApi } from '../api';
+
+const router = useRouter();
+const authStore = useAuthStore();
 
 // State
 const loading = ref(false);
@@ -863,6 +894,18 @@ const videos = ref<any[]>([]);
 const selectedCategory = ref('');
 const selectedLevel = ref('');
 const searchQuery = ref('');
+
+// Mobile menu state
+const mobileMenuOpen = ref(false);
+const toggleMobileMenu = () => { mobileMenuOpen.value = !mobileMenuOpen.value; };
+const closeMobileMenu = () => { mobileMenuOpen.value = false; };
+const handleResizeMobile = () => { if (window.innerWidth >= 768) mobileMenuOpen.value = false; };
+
+// Logout
+const logout = () => {
+  authStore.logout();
+  router.push('/login');
+};
 
 // Video Modal
 const showVideoModal = ref(false);
@@ -1314,6 +1357,11 @@ watch([selectedCategory, selectedLevel], () => {
 
 onMounted(() => {
   loadVideos();
+  window.addEventListener('resize', handleResizeMobile);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResizeMobile);
 });
 </script>
 
@@ -3505,5 +3553,168 @@ onMounted(() => {
   .action-btn.publish-btn {
     padding: 10px;
   }
+}
+
+/* ===== MOBILE RESPONSIVE STYLES ===== */
+.hamburger-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  align-items: center;
+  justify-content: center;
+}
+.hamburger-btn:hover { background-color: var(--bg-hover); }
+.hamburger-btn:active { transform: scale(0.95); }
+
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 998;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.mobile-sidebar {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: -280px;
+  width: 280px;
+  height: 100vh;
+  background-color: var(--bg-card);
+  border-right: 1px solid var(--border);
+  z-index: 999;
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-direction: column;
+  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.3);
+}
+.mobile-sidebar.open { left: 0; }
+.mobile-sidebar-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.mobile-sidebar-header .header-logo { height: 32px; width: auto; }
+
+.close-menu-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+.close-menu-btn:hover { background-color: var(--bg-hover); }
+
+.mobile-nav { flex: 1; padding: 16px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.mobile-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 15px;
+  transition: all 0.2s;
+}
+.mobile-nav-link:hover { background-color: var(--bg-hover); }
+.mobile-nav-link.router-link-active {
+  background-color: rgba(201, 169, 98, 0.15);
+  color: var(--gold);
+}
+.mobile-sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border); }
+.mobile-user-info { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.user-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--gold), var(--gold-dark)); display: flex; align-items: center; justify-content: center; color: var(--bg-primary); font-weight: 600; font-size: 14px; }
+.user-name { color: var(--text-primary); font-weight: 500; font-size: 14px; }
+.mobile-logout-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 16px; background-color: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; cursor: pointer; font-weight: 500; transition: all 0.2s; }
+.mobile-logout-btn:hover { background-color: rgba(239, 68, 68, 0.15); }
+
+@media (max-width: 768px) {
+  .hamburger-btn { display: flex; }
+  .mobile-overlay { display: block; }
+  .mobile-sidebar { display: flex; }
+  .desktop-nav { display: none !important; }
+
+  /* Academy page specific mobile styles */
+  .academy-page { padding: 0; }
+
+  .page-header { padding: 12px 16px; }
+  .header-content { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .title-section { flex-direction: row; gap: 12px; }
+  .icon-wrapper { width: 36px; height: 36px; }
+  .title-section h1 { font-size: 20px; }
+  .subtitle { font-size: 13px; }
+
+  .btn-create { width: 100%; justify-content: center; }
+
+  .stats-bar {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .stat-card { padding: 14px; }
+  .stat-value { font-size: 20px; }
+  .stat-label { font-size: 12px; }
+
+  .filters-section { padding: 0 16px 16px; }
+  .filter-tabs {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .filter-tab {
+    font-size: 13px;
+    padding: 8px 12px;
+    min-width: auto;
+  }
+
+  .search-bar { margin-top: 12px; }
+
+  .videos-grid {
+    grid-template-columns: 1fr;
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .video-card { padding: 14px; }
+  .video-header h3 { font-size: 15px; }
+  .video-description { font-size: 13px; }
+
+  .video-footer { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .video-actions { width: 100%; justify-content: space-between; }
+
+  .action-btn { padding: 8px 12px; font-size: 13px; }
+  .action-btn svg { width: 16px; height: 16px; }
+
+  /* Modals */
+  .modal-content {
+    width: 95vw;
+    max-width: 95vw;
+    max-height: 90vh;
+    padding: 20px;
+    overflow-y: auto;
+  }
+
+  .modal-header h2 { font-size: 20px; }
+  .modal-body { padding: 16px 0; }
+
+  .form-row { flex-direction: column; }
+  .form-group { width: 100%; }
+
+  .quiz-question { padding: 14px; }
+  .question-header h4 { font-size: 14px; }
 }
 </style>

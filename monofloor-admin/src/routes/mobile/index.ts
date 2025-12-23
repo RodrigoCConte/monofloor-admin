@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma';
 import { body, param, query, validationResult } from 'express-validator';
 import { mobileAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
@@ -22,7 +22,6 @@ import { saveFile, deleteFile, UploadType } from '../../services/db-storage.serv
 import { updateGPSStatus, getGPSStatus, resetGPSConfirmations } from '../../services/gps-autocheckout.service';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Multer configuration with memory storage (files saved to PostgreSQL)
 const uploadProfilePhoto = multer({
@@ -250,6 +249,96 @@ router.put(
     }
   }
 );
+
+// =============================================
+// PENDING NOTIFICATIONS
+// =============================================
+
+// GET /api/mobile/pending-notifications - Buscar notificações pendentes
+router.get('/pending-notifications', mobileAuth, async (req, res, next) => {
+  try {
+    const userId = req.user!.sub;
+
+    // Buscar notificações pendentes não entregues
+    const notifications = await prisma.pendingNotification.findMany({
+      where: {
+        userId,
+        isDelivered: false,
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: new Date() } }
+        ]
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({
+      success: true,
+      data: notifications
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/mobile/pending-notifications/:id/delivered - Marcar como entregue
+router.post('/pending-notifications/:id/delivered', mobileAuth, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.sub;
+
+    // Verificar se a notificação pertence ao usuário
+    const notification = await prisma.pendingNotification.findFirst({
+      where: { id, userId }
+    });
+
+    if (!notification) {
+      throw new AppError('Notification not found', 404);
+    }
+
+    // Marcar como entregue
+    await prisma.pendingNotification.update({
+      where: { id },
+      data: {
+        isDelivered: true,
+        deliveredAt: new Date()
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Notification marked as delivered'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/mobile/pending-notifications/delivered-all - Marcar todas como entregues
+router.post('/pending-notifications/delivered-all', mobileAuth, async (req, res, next) => {
+  try {
+    const userId = req.user!.sub;
+
+    // Marcar todas as notificações do usuário como entregues
+    const result = await prisma.pendingNotification.updateMany({
+      where: {
+        userId,
+        isDelivered: false
+      },
+      data: {
+        isDelivered: true,
+        deliveredAt: new Date()
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `${result.count} notifications marked as delivered`
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // =============================================
 // PROJECTS (User's assigned projects)
@@ -1558,6 +1647,36 @@ router.get(
       // Get current role rates for display
       const currentRates = getRoleRates(user.role);
 
+      // Import full role rates table
+      const { ROLE_RATES } = await import('../../config/payroll.config');
+
+      // Build full rates table for all roles
+      const allRolesTable = Object.entries(ROLE_RATES).map(([role, rates]) => ({
+        role,
+        label: rates.label,
+        dailyRate: rates.dailyRate,
+        hourlyRate: rates.hourlyRate,
+        overtimeRate: rates.overtimeRate,
+        travelRate: rates.travelRate,
+        isCurrent: role === user.role,
+      }));
+
+      // Calculate breakdown by role (if user changed roles during the month)
+      const roleBreakdown = new Map<string, { role: string; label: string; days: number; hours: number; earnings: number }>();
+      for (const summary of dailySummaries) {
+        const role = summary.userRole;
+        const label = (ROLE_RATES as any)[role]?.label || role;
+        let entry = roleBreakdown.get(role);
+        if (!entry) {
+          entry = { role, label, days: 0, hours: 0, earnings: 0 };
+          roleBreakdown.set(role, entry);
+        }
+        entry.days += 1;
+        entry.hours += Number(summary.totalHoursWorked) || 0;
+        entry.earnings += Number(summary.totalPayment) || 0;
+      }
+      const byRole = Array.from(roleBreakdown.values());
+
       res.json({
         success: true,
         data: {
@@ -1571,6 +1690,8 @@ router.get(
             travelRate: currentRates.travelRate,
             travelOvertimeRate: currentRates.travelOvertimeRate,
           } : null,
+          allRolesTable, // Tabela completa de todos os cargos
+          byRole, // Breakdown por cargo (se mudou durante o mês)
           summary: {
             totalEarnings: Math.round((totalEarnings + todayEarnings) * 100) / 100,
             totalHours: Math.round((totalHoursNormal + totalHoursOvertime + totalHoursTravelMode + totalHoursTravel + totalHoursSupplies + todayHours) * 100) / 100,

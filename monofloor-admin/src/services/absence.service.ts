@@ -8,9 +8,7 @@
  * - Unreported absence: Detected at end of day, notification sent to ask user
  */
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 // Configuration
 const SAME_DAY_XP_PENALTY = 15000; // Penalidade por falta sem aviso antecipado
@@ -97,7 +95,7 @@ export async function registerAbsenceNotice(
         data: {
           xpTotal: { decrement: xpPenalty },
           punctualityStreak: 0,
-          punctualityMultiplier: 1.0,
+          punctualityMultiplier: 1.1,
         },
       });
 
@@ -359,7 +357,7 @@ export async function handleAbsenceResponse(
       data: {
         xpTotal: { decrement: xpPenalty },
         punctualityStreak: 0,
-        punctualityMultiplier: 1.0,
+        punctualityMultiplier: 1.1,
       },
     });
 

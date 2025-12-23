@@ -10,15 +10,13 @@
  * - Campaign multipliers are added on top of punctuality multiplier
  */
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 // Configuration
 const PUNCTUALITY_TOLERANCE_MINUTES = 10;
 const PUNCTUALITY_BONUS_XP = 50;
-const INITIAL_MULTIPLIER = 1.0;
-const MULTIPLIER_INCREMENT = 0.1;
+const MIN_MULTIPLIER = 1.1; // Multiplicador mínimo (mesmo quando atrasado)
+const MULTIPLIER_INCREMENT = 0.1; // P.A. de 0.1 por dia pontual
 const MAX_MULTIPLIER = 5.0;
 
 interface PunctualityResult {
@@ -95,12 +93,12 @@ function isPunctualCheckin(minutesLate: number): boolean {
 
 /**
  * Calculate new multiplier based on streak
- * Streak 0 = 1.0x, Streak 1 = 1.1x, ..., Streak 40+ = 5.0x
+ * Streak 0 = 1.1x, Streak 1 = 1.2x, ..., Streak 39+ = 5.0x
+ * P.A. de 0.1 por dia sem atraso, começando em 1.1x
  */
 function calculateMultiplier(streak: number): number {
-  if (streak <= 0) return INITIAL_MULTIPLIER;
-
-  const multiplier = INITIAL_MULTIPLIER + (streak * MULTIPLIER_INCREMENT);
+  // Multiplicador = 1.1 + (streak * 0.1), limitado a 5.0
+  const multiplier = MIN_MULTIPLIER + (streak * MULTIPLIER_INCREMENT);
   return Math.min(multiplier, MAX_MULTIPLIER);
 }
 
@@ -260,14 +258,14 @@ export async function processPunctuality(
     }
 
     newStreak = 0;
-    newMultiplier = INITIAL_MULTIPLIER;
+    newMultiplier = MIN_MULTIPLIER;
 
     // Update user to reset streak
     await prisma.user.update({
       where: { id: userId },
       data: {
         punctualityStreak: 0,
-        punctualityMultiplier: INITIAL_MULTIPLIER,
+        punctualityMultiplier: MIN_MULTIPLIER,
       },
     });
 
@@ -307,7 +305,7 @@ export async function getPunctualityStats(userId: string): Promise<{
   });
 
   if (!user) {
-    return { streak: 0, multiplier: 1.0, lastPunctualDate: null };
+    return { streak: 0, multiplier: MIN_MULTIPLIER, lastPunctualDate: null };
   }
 
   return {
@@ -346,7 +344,7 @@ export async function getTotalXpMultiplier(userId: string): Promise<{
     },
   });
 
-  const punctualityMultiplier = Number(user?.punctualityMultiplier) || 1.0;
+  const punctualityMultiplier = Number(user?.punctualityMultiplier) || MIN_MULTIPLIER;
 
   // Sum all campaign multipliers (subtracting 1 because 2x means +1x bonus)
   const campaignBonus = activeCampaignParticipations.reduce((sum, p) => {
@@ -370,5 +368,6 @@ export async function getTotalXpMultiplier(userId: string): Promise<{
 export {
   PUNCTUALITY_TOLERANCE_MINUTES,
   PUNCTUALITY_BONUS_XP,
+  MIN_MULTIPLIER,
   MAX_MULTIPLIER,
 };

@@ -124,13 +124,13 @@ async function testPunctuality() {
 
   // 5. Calcular próximo multiplicador
   const nextStreak = user.punctualityStreak + 1;
-  const nextMultiplier = Math.min(1.0 + (nextStreak * 0.1), 5.0);
+  const nextMultiplier = Math.min(1.1 + (nextStreak * 0.1), 5.0);
 
   console.log('\n=== PREVISÃO ===');
   console.log(`Se for pontual amanhã: streak ${nextStreak} dias, ${nextMultiplier.toFixed(1)}x multiplicador`);
 
   if (user.punctualityStreak > 0) {
-    console.log(`Se atrasar: streak 0 dias, 1.0x multiplicador (perde ${Number(user.punctualityMultiplier) - 1}x)`);
+    console.log(`Se atrasar: streak 0 dias, 1.1x multiplicador (perde ${(Number(user.punctualityMultiplier) - 1.1).toFixed(1)}x)`);
   }
 
   await prisma.$disconnect();

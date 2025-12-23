@@ -19,9 +19,34 @@ app.use((req, res, next) => {
   next();
 });
 
-// CORS configuration - allow all origins for video processing
+// CORS configuration - whitelist allowed origins
+const allowedOrigins = [
+  config.cors.adminPanelUrl,
+  config.cors.mobileAppUrl,
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:8080',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  // Production URLs
+  'https://monofloor.com.br',
+  'https://app.monofloor.com.br',
+  'https://admin.monofloor.com.br',
+  'https://devoted-wholeness-production.up.railway.app',
+].filter(Boolean);
+
 app.use(cors({
-  origin: true, // Allow all origins
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS blocked origin: ${origin}`);
+      callback(null, false);
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],

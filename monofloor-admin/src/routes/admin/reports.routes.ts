@@ -1,12 +1,11 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { body, param, query, validationResult } from 'express-validator';
 import { adminAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
 import { gptService } from '../../services/ai/gpt.service';
+import prisma from '../../lib/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Validation middleware
 const validate = (req: any, res: any, next: any) => {

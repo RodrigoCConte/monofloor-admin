@@ -3,11 +3,10 @@
  * Handles alerts for prolonged lunch breaks (1h10, 1h20, 1h30)
  */
 
-import { PrismaClient, CheckoutReason } from '@prisma/client';
+import { CheckoutReason } from '@prisma/client';
 import { sendPushToUser } from './push.service';
 import { LUNCH_ALERT_TIMES } from '../config/payroll.config';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 /**
  * Create lunch break alerts when user does lunch checkout

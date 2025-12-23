@@ -3537,7 +3537,7 @@ onMounted(async () => {
                               class="template-color-dot"
                               :style="{ backgroundColor: template.color }"
                             ></div>
-                            <span class="template-title">{{ template.title }}</span>
+                            <span class="template-title" :class="{ 'brand-product-name': ['primer', 'lilit', 'leona', 'stelion', 'selador', 'lumina'].includes(template.id) }">{{ template.title }}</span>
                           </button>
                         </div>
                       </div>
@@ -3577,7 +3577,7 @@ onMounted(async () => {
                                 class="template-color-dot"
                                 :style="{ backgroundColor: template.color }"
                               ></div>
-                              <span class="template-title">{{ template.title }}</span>
+                              <span class="template-title" :class="{ 'brand-product-name': ['primer', 'lilit', 'leona', 'stelion', 'selador', 'lumina'].includes(template.id) }">{{ template.title }}</span>
                             </button>
                           </div>
                         </div>

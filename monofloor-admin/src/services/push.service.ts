@@ -4,9 +4,7 @@
  */
 
 import webpush from 'web-push';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 // VAPID keys for Web Push
 // Generate new keys with: npx web-push generate-vapid-keys

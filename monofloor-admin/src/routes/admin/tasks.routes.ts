@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { PrismaClient, TaskType, TaskStatus, TaskPhase, TaskSurface } from '@prisma/client';
+import { TaskType, TaskStatus, TaskPhase, TaskSurface } from '@prisma/client';
 import { body, param, query, validationResult } from 'express-validator';
 import { adminAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/errorHandler';
@@ -12,9 +12,9 @@ import {
   convertDaysToHours,
   ProjectScope,
 } from '../../services/task-scheduler.service';
+import prisma from '../../lib/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 /**
  * Calculate grouping pattern to fit tasks within available work days

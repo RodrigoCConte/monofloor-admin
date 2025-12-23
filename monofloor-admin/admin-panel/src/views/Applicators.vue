@@ -1,11 +1,21 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { applicatorsApi, projectsApi } from '../api';
+import { useToast } from '../composables/useToast';
 
 const router = useRouter();
 const authStore = useAuthStore();
+const toast = useToast();
+
+// Mobile menu state
+const mobileMenuOpen = ref(false);
+const toggleMobileMenu = () => { mobileMenuOpen.value = !mobileMenuOpen.value; };
+const closeMobileMenu = () => { mobileMenuOpen.value = false; };
+const handleResize = () => { if (window.innerWidth >= 768) mobileMenuOpen.value = false; };
+onMounted(() => { window.addEventListener('resize', handleResize); });
+onUnmounted(() => { window.removeEventListener('resize', handleResize); });
 
 // API URL for building photo URLs
 const API_URL = import.meta.env.VITE_API_URL || 'https://devoted-wholeness-production.up.railway.app';
@@ -69,15 +79,31 @@ const approveApplicator = async (id: string) => {
   }
 };
 
-const rejectApplicator = async (id: string) => {
-  const reason = prompt('Motivo da rejeicao:');
-  if (reason) {
-    try {
-      await applicatorsApi.reject(id, reason);
-      await loadApplicators();
-    } catch (error) {
-      console.error('Error rejecting applicator:', error);
-    }
+const openRejectModal = (applicator: any) => {
+  applicatorToReject.value = applicator;
+  rejectReason.value = '';
+  showRejectModal.value = true;
+};
+
+const closeRejectModal = () => {
+  showRejectModal.value = false;
+  applicatorToReject.value = null;
+  rejectReason.value = '';
+};
+
+const confirmReject = async () => {
+  if (!rejectReason.value.trim()) {
+    toast.warning('Por favor, informe o motivo da rejeicao');
+    return;
+  }
+  try {
+    await applicatorsApi.reject(applicatorToReject.value.id, rejectReason.value);
+    await loadApplicators();
+    closeRejectModal();
+    toast.success('Aplicador rejeitado');
+  } catch (error) {
+    console.error('Error rejecting applicator:', error);
+    toast.error('Erro ao rejeitar aplicador');
   }
 };
 
@@ -178,9 +204,14 @@ const updateRole = async () => {
     closeRoleModal();
   } catch (error) {
     console.error('Error updating role:', error);
-    alert('Erro ao atualizar cargo');
+    toast.error('Erro ao atualizar cargo');
   }
 };
+
+// Modal de rejeição
+const showRejectModal = ref(false);
+const applicatorToReject = ref<any>(null);
+const rejectReason = ref('');
 
 // Modal de delete
 const showDeleteModal = ref(false);
@@ -268,7 +299,7 @@ const addProjectToApplicator = async () => {
     showAddProjectModal.value = false;
   } catch (error: any) {
     console.error('Error adding project:', error);
-    alert(error.response?.data?.error?.message || 'Erro ao adicionar projeto');
+    toast.error(error.response?.data?.error?.message || 'Erro ao adicionar projeto');
   } finally {
     addingProject.value = false;
   }
@@ -293,7 +324,7 @@ const removeProjectFromApplicator = async (projectId: string) => {
   } catch (error: any) {
     console.error('[DEBUG] Error removing project:', error);
     console.error('[DEBUG] Error response:', error.response?.data);
-    alert('Erro ao remover projeto: ' + (error.response?.data?.error?.message || error.message));
+    toast.error('Erro ao remover projeto: ' + (error.response?.data?.error?.message || error.message));
   }
 };
 
@@ -306,7 +337,7 @@ const openXpModal = (type: 'PRAISE' | 'PENALTY') => {
 
 const submitXpAdjustment = async () => {
   if (!profileApplicator.value || !xpReason.value.trim()) {
-    alert('Por favor, informe o motivo');
+    toast.warning('Por favor, informe o motivo');
     return;
   }
   adjustingXp.value = true;
@@ -320,10 +351,10 @@ const submitXpAdjustment = async () => {
     // Update local XP
     profileApplicator.value.xpTotal = response.data.data.xpTotal;
     showXpModal.value = false;
-    alert(`XP ${xpType.value === 'PRAISE' ? 'adicionado' : 'removido'} com sucesso!`);
+    toast.success(`XP ${xpType.value === 'PRAISE' ? 'adicionado' : 'removido'} com sucesso!`);
   } catch (error) {
     console.error('Error adjusting XP:', error);
-    alert('Erro ao ajustar XP');
+    toast.error('Erro ao ajustar XP');
   } finally {
     adjustingXp.value = false;
   }
@@ -401,7 +432,7 @@ const deleteApplicator = async () => {
     closeDeleteModal();
   } catch (error) {
     console.error('Error deleting applicator:', error);
-    alert('Erro ao remover aplicador');
+    toast.error('Erro ao remover aplicador');
   } finally {
     deleting.value = false;
   }
@@ -412,12 +443,41 @@ onMounted(loadApplicators);
 
 <template>
   <div class="page">
+    <!-- Mobile Menu Overlay -->
+    <div v-if="mobileMenuOpen" class="mobile-overlay" @click="closeMobileMenu"></div>
+    <!-- Mobile Sidebar -->
+    <aside class="mobile-sidebar" :class="{ open: mobileMenuOpen }">
+      <div class="mobile-sidebar-header">
+        <img src="/logo.png" alt="Monofloor" class="header-logo" />
+        <button class="close-menu-btn" @click="closeMobileMenu">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <nav class="mobile-nav">
+        <router-link to="/" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Dashboard</router-link>
+        <router-link to="/applicators" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Aplicadores</router-link>
+        <router-link to="/projects" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Projetos</router-link>
+        <router-link to="/reports" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Relatorios</router-link>
+        <router-link to="/requests" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>Solicitacoes</router-link>
+        <router-link to="/campaigns" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>Campanhas</router-link>
+        <router-link to="/academy" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>Academia</router-link>
+        <router-link to="/map" class="mobile-nav-link" @click="closeMobileMenu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>Mapa</router-link>
+      </nav>
+      <div class="mobile-sidebar-footer">
+        <div class="mobile-user-info"><div class="user-avatar"><img v-if="getPhotoUrl(authStore.user?.photoUrl)" :src="getPhotoUrl(authStore.user?.photoUrl)!" alt="Avatar" class="avatar-img" /><span v-else>{{ getInitials(authStore.user?.name) }}</span></div><span class="user-name">{{ authStore.user?.name }}</span></div>
+        <button @click="logout" class="mobile-logout-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sair</button>
+      </div>
+    </aside>
+
     <header class="header">
       <div class="header-left">
+        <button class="hamburger-btn" @click="toggleMobileMenu">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
         <img src="/logo.png" alt="Monofloor" class="header-logo" />
         <span class="logo-badge">ADMIN</span>
       </div>
-      <nav class="nav">
+      <nav class="nav desktop-nav">
         <router-link to="/" class="nav-link">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
@@ -622,7 +682,7 @@ onMounted(loadApplicators);
                   </button>
                   <button
                     v-if="app.status === 'PENDING_APPROVAL'"
-                    @click="rejectApplicator(app.id)"
+                    @click="openRejectModal(app)"
                     class="btn btn-reject"
                     title="Rejeitar"
                   >
@@ -695,6 +755,34 @@ onMounted(loadApplicators);
         <div class="modal-footer">
           <button class="btn-cancel" @click="closeRoleModal">Cancelar</button>
           <button class="btn-save" @click="updateRole">Salvar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Rejeição -->
+    <div v-if="showRejectModal" class="modal-overlay" @click.self="closeRejectModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Rejeitar Aplicador</h3>
+          <button class="close-btn" @click="closeRejectModal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p style="margin-bottom: 16px;">Informe o motivo da rejeicao de <strong>{{ applicatorToReject?.name }}</strong>:</p>
+          <textarea
+            v-model="rejectReason"
+            placeholder="Motivo da rejeicao..."
+            rows="4"
+            style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); resize: vertical;"
+          ></textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="closeRejectModal">Cancelar</button>
+          <button class="btn-delete" @click="confirmReject">Rejeitar</button>
         </div>
       </div>
     </div>
@@ -2633,5 +2721,43 @@ onMounted(loadApplicators);
 .btn-penalty-confirm:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* ===== MOBILE RESPONSIVE STYLES ===== */
+.hamburger-btn { display: none; background: none; border: none; color: var(--text-primary); cursor: pointer; padding: 8px; border-radius: var(--border-radius); }
+.hamburger-btn:hover { background-color: var(--bg-secondary); }
+.mobile-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 998; }
+.mobile-sidebar { display: none; position: fixed; top: 0; left: -280px; width: 280px; height: 100vh; background-color: var(--bg-card); border-right: 1px solid var(--border-color); z-index: 999; transition: left 0.3s ease; flex-direction: column; }
+.mobile-sidebar.open { left: 0; }
+.mobile-sidebar-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-color); }
+.close-menu-btn { background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 8px; border-radius: var(--border-radius); }
+.close-menu-btn:hover { background-color: var(--bg-secondary); color: var(--text-primary); }
+.mobile-nav { flex: 1; padding: 16px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.mobile-nav-link { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--border-radius); text-decoration: none; color: var(--text-secondary); font-weight: 500; font-size: 15px; transition: all 0.2s; }
+.mobile-nav-link:hover { background-color: var(--bg-secondary); color: var(--text-primary); }
+.mobile-nav-link.router-link-active { background-color: rgba(201, 169, 98, 0.15); color: var(--accent-primary); }
+.mobile-sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border-color); }
+.mobile-user-info { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.mobile-user-info .user-name { font-size: 14px; color: var(--text-primary); font-weight: 500; }
+.mobile-logout-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 16px; background-color: rgba(239, 68, 68, 0.1); color: var(--accent-red); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: var(--border-radius); cursor: pointer; font-weight: 500; font-size: 14px; }
+.mobile-logout-btn:hover { background-color: rgba(239, 68, 68, 0.2); }
+
+@media (max-width: 768px) {
+  .hamburger-btn { display: flex; }
+  .mobile-overlay { display: block; }
+  .mobile-sidebar { display: flex; }
+  .desktop-nav { display: none !important; }
+  .header-right { display: none; }
+  .header { padding: 12px 16px; flex-wrap: wrap; }
+  .header-left { gap: 8px; }
+  .header-logo { height: 28px; }
+  .logo-badge { font-size: 9px; padding: 3px 6px; }
+  .main { padding: 16px; }
+  .page-header { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .page-title h2 { font-size: 20px; }
+  .filters { width: 100%; }
+  .filter-select { width: 100%; }
+  .applicators-table { display: none; }
+  .applicators-cards { display: flex !important; flex-direction: column; gap: 12px; }
 }
 </style>

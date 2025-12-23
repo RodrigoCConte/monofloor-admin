@@ -2,10 +2,8 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
-import { PrismaClient } from '@prisma/client';
 import simpleVideoReportService from '../../services/simple-video-report.service';
-
-const prisma = new PrismaClient();
+import prisma from '../../lib/prisma';
 
 const router = Router();
 

@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { PrismaClient, ProjectStatus } from '@prisma/client';
+import { ProjectStatus } from '@prisma/client';
+import { prisma } from '../../lib/prisma';
 import { body, param, query, validationResult } from 'express-validator';
 import multer from 'multer';
 import { adminAuth } from '../../middleware/auth';
@@ -26,7 +27,6 @@ const upload = multer({
 });
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Validation middleware
 const validate = (req: any, res: any, next: any) => {
@@ -858,8 +858,31 @@ router.post(
 
 // DELETE /api/admin/projects - Delete ALL projects (TESTING ONLY)
 // IMPORTANT: This route must be defined BEFORE /:id to avoid route conflicts
+// SECURITY: Only available in development mode and requires SUPER_ADMIN role
 router.delete('/', adminAuth, async (req, res, next) => {
   try {
+    // SECURITY: Block in production
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'This operation is not allowed in production',
+        },
+      });
+    }
+
+    // SECURITY: Require SUPER_ADMIN role
+    if (req.user?.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Only SUPER_ADMIN can perform this operation',
+        },
+      });
+    }
+
     // Delete all related records first
     await prisma.$transaction(async (tx) => {
       // Delete all checkins

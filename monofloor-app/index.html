@@ -510,7 +510,7 @@
                     <p class="project-schedule" id="projectScheduleInfo" style="display: none;"></p>
 
                     <div class="project-tag-row">
-                        <span class="tag-pill stelion">STELION</span>
+                        <span class="tag-pill stelion brand-product-name">STELION</span>
                         <span class="tag-pill">Residencial</span>
                     </div>
                 </div>
@@ -817,10 +817,22 @@
                             <span class="detail-label">Horas trabalhadas</span>
                             <span class="detail-value" id="earningsTotalHours">0h</span>
                         </div>
-                        <div class="earnings-detail-row">
-                            <span class="detail-label">Valor/hora atual</span>
-                            <span class="detail-value" id="earningsHourlyRate">R$ 0,00</span>
-                        </div>
+                    </div>
+                </div>
+
+                <!-- Role Breakdown (if changed during month) -->
+                <div class="role-breakdown-card" id="roleBreakdownCard" style="display: none;">
+                    <div class="breakdown-title">Ganhos por Cargo</div>
+                    <div class="role-breakdown-list" id="roleBreakdownList">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Full Roles Table -->
+                <div class="roles-table-card">
+                    <div class="breakdown-title">Tabela de Cargos</div>
+                    <div class="roles-table" id="rolesTable">
+                        <!-- Populated dynamically -->
                     </div>
                 </div>
 
@@ -1391,7 +1403,7 @@
                             <polyline points="9,18 15,12 9,6"/>
                         </svg>
                     </div>
-                    <div class="menu-item">
+                    <div class="menu-item" onclick="navigateTo('screen-settings')">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="3"/>
                             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -1401,7 +1413,7 @@
                             <polyline points="9,18 15,12 9,6"/>
                         </svg>
                     </div>
-                    <div class="menu-item">
+                    <div class="menu-item" onclick="navigateTo('screen-help')">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="10"/>
                             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
@@ -1513,6 +1525,197 @@
                     <div class="input-group">
                         <label>Telefone</label>
                         <input type="tel" id="editPhone" placeholder="(11) 99999-9999" maxlength="15" oninput="formatPhone(this)">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela de Configurações -->
+        <div id="screen-settings" class="screen">
+            <div class="header-back">
+                <button class="back-btn" onclick="navigateTo('screen-profile')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                </button>
+                <h1>Configurações</h1>
+                <div style="width: 40px;"></div>
+            </div>
+
+            <div class="content">
+                <div class="settings-section">
+                    <h3 class="settings-section-title">Notificações</h3>
+                    <div class="settings-item">
+                        <div class="settings-item-info">
+                            <span class="settings-item-label">Notificações Push</span>
+                            <span class="settings-item-desc">Receber alertas de projetos e campanhas</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="settingsPushNotifications" checked onchange="togglePushNotifications(this)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-item">
+                        <div class="settings-item-info">
+                            <span class="settings-item-label">Lembretes de Relatório</span>
+                            <span class="settings-item-desc">Lembrar de enviar relatórios diários</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="settingsReportReminders" checked onchange="toggleReportReminders(this)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3 class="settings-section-title">Localização</h3>
+                    <div class="settings-item">
+                        <div class="settings-item-info">
+                            <span class="settings-item-label">Compartilhar Localização</span>
+                            <span class="settings-item-desc">Necessário para check-in em projetos</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="settingsLocation" checked onchange="toggleLocationSharing(this)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-item">
+                        <div class="settings-item-info">
+                            <span class="settings-item-label">GPS em Segundo Plano</span>
+                            <span class="settings-item-desc">Manter localização ativa durante o trabalho</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="settingsBackgroundGPS" checked onchange="toggleBackgroundGPS(this)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3 class="settings-section-title">Dados e Armazenamento</h3>
+                    <div class="settings-item clickable" onclick="clearAppCache()">
+                        <div class="settings-item-info">
+                            <span class="settings-item-label">Limpar Cache</span>
+                            <span class="settings-item-desc">Liberar espaço de armazenamento</span>
+                        </div>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="settings-chevron">
+                            <polyline points="9,18 15,12 9,6"/>
+                        </svg>
+                    </div>
+                    <div class="settings-item">
+                        <div class="settings-item-info">
+                            <span class="settings-item-label">Modo Economia de Dados</span>
+                            <span class="settings-item-desc">Reduzir uso de dados móveis</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="settingsDataSaver" onchange="toggleDataSaver(this)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3 class="settings-section-title">Sobre</h3>
+                    <div class="settings-item">
+                        <div class="settings-item-info">
+                            <span class="settings-item-label">Versão do App</span>
+                            <span class="settings-item-desc">v1.0.0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela de Ajuda -->
+        <div id="screen-help" class="screen">
+            <div class="header-back">
+                <button class="back-btn" onclick="navigateTo('screen-profile')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                </button>
+                <h1>Ajuda</h1>
+                <div style="width: 40px;"></div>
+            </div>
+
+            <div class="content">
+                <!-- Botao Iniciar Tutorial -->
+                <button class="tutorial-start-btn" onclick="startTutorial()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/>
+                    </svg>
+                    Ver Tutorial Interativo
+                </button>
+
+                <div class="help-section">
+                    <h3 class="help-section-title">Perguntas Frequentes</h3>
+
+                    <div class="help-item" onclick="toggleHelpItem(this)">
+                        <div class="help-question">
+                            <span>Como fazer check-in em um projeto?</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="help-chevron">
+                                <polyline points="6,9 12,15 18,9"/>
+                            </svg>
+                        </div>
+                        <div class="help-answer">
+                            <p>Para fazer check-in, você precisa estar a menos de 200 metros do projeto. Vá até a tela de detalhes do projeto e toque no botão "Fazer Check-in". O GPS será usado para verificar sua localização.</p>
+                        </div>
+                    </div>
+
+                    <div class="help-item" onclick="toggleHelpItem(this)">
+                        <div class="help-question">
+                            <span>Como solicitar material?</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="help-chevron">
+                                <polyline points="6,9 12,15 18,9"/>
+                            </svg>
+                        </div>
+                        <div class="help-answer">
+                            <p>Na tela de detalhes do projeto, toque em "Solicitar Material ou Ajuda". Selecione o material necessário, informe a quantidade e envie. Você pode adicionar uma gravação de áudio para explicar melhor.</p>
+                        </div>
+                    </div>
+
+                    <div class="help-item" onclick="toggleHelpItem(this)">
+                        <div class="help-question">
+                            <span>Como ganhar XP?</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="help-chevron">
+                                <polyline points="6,9 12,15 18,9"/>
+                            </svg>
+                        </div>
+                        <div class="help-answer">
+                            <p>Você ganha XP completando diversas ações: fazer check-in (+100 XP), concluir tarefas, enviar relatórios, assistir vídeos da Academia e completar quizzes. Participe de campanhas para ganhar XP bônus!</p>
+                        </div>
+                    </div>
+
+                    <div class="help-item" onclick="toggleHelpItem(this)">
+                        <div class="help-question">
+                            <span>O que são as conquistas?</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="help-chevron">
+                                <polyline points="6,9 12,15 18,9"/>
+                            </svg>
+                        </div>
+                        <div class="help-answer">
+                            <p>Conquistas são badges especiais que você desbloqueia ao atingir marcos importantes, como completar 10 projetos, acumular 1000 horas de trabalho, ou participar de campanhas. Elas aparecem no seu perfil!</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="help-section">
+                    <h3 class="help-section-title">Contato</h3>
+                    <div class="help-contact">
+                        <a href="mailto:suporte@monofloor.com.br" class="help-contact-item">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                                <polyline points="22,6 12,13 2,6"/>
+                            </svg>
+                            <span>suporte@monofloor.com.br</span>
+                        </a>
+                        <a href="tel:+5511999999999" class="help-contact-item">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                            </svg>
+                            <span>(11) 99999-9999</span>
+                        </a>
                     </div>
                 </div>
             </div>
@@ -2247,6 +2450,66 @@
                 <div id="evolutionRoleLabel" class="evolution-role-label"></div>
             </div>
             <button class="evolution-continue-btn" onclick="closeEvolutionNotification()">Continuar</button>
+        </div>
+
+        <!-- Demotion Notification Modal (Dramatic) -->
+        <div id="demotionOverlay" class="demotion-overlay">
+            <!-- Dark particles/rain effect -->
+            <div class="demotion-particles"></div>
+
+            <div class="demotion-container">
+                <!-- Broken/cracked icon effect -->
+                <div class="demotion-icon-area">
+                    <div class="demotion-old-icon-wrapper">
+                        <img id="demotionOldIcon" class="demotion-old-icon" src="" alt="Cargo Anterior">
+                        <div class="demotion-crack"></div>
+                        <div class="demotion-crack crack-2"></div>
+                        <div class="demotion-crack crack-3"></div>
+                    </div>
+
+                    <div class="demotion-arrow-down">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 5v14M5 12l7 7 7-7"/>
+                        </svg>
+                    </div>
+
+                    <div class="demotion-new-icon-wrapper">
+                        <img id="demotionNewIcon" class="demotion-new-icon" src="" alt="Novo Cargo">
+                    </div>
+                </div>
+
+                <!-- Dramatic Title -->
+                <h2 class="demotion-title">
+                    <span class="demotion-title-line">Voce perdeu</span>
+                    <span class="demotion-title-line highlight">sua posicao</span>
+                </h2>
+
+                <!-- Role transition -->
+                <div class="demotion-role-transition">
+                    <span id="demotionOldRole" class="demotion-role-old"></span>
+                    <span class="demotion-role-arrow">→</span>
+                    <span id="demotionNewRole" class="demotion-role-new"></span>
+                </div>
+
+                <!-- Emotional message -->
+                <p class="demotion-message">
+                    Mas nao desanime! Cada passo atras pode ser o preparo para um salto maior.
+                    Continue dando o seu melhor e reconquiste sua posicao!
+                </p>
+
+                <!-- Stats lost indicator -->
+                <div class="demotion-impact">
+                    <div class="demotion-impact-icon">📉</div>
+                    <span>Seu valor/hora foi ajustado</span>
+                </div>
+
+                <button class="demotion-continue-btn" onclick="closeDemotionNotification()">
+                    <span>Vou dar a volta por cima</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            </div>
         </div>
 
         <!-- XP Reward Modal (Mobile Style - Pokemon inspired) -->

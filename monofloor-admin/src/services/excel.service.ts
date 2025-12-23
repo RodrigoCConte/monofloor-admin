@@ -1,8 +1,7 @@
 import * as XLSX from 'xlsx';
-import { PrismaClient, ProjectStatus } from '@prisma/client';
+import { ProjectStatus } from '@prisma/client';
 import { geocodingService } from './geocoding.service';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 export interface ProjectImportRow {
   titulo: string;
