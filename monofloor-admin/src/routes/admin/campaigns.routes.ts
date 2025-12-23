@@ -421,12 +421,37 @@ router.post(
         },
       });
 
-      // Get total applicators for counter
-      const totalApplicators = await prisma.user.count({
+      // Get all approved users
+      const allUsers = await prisma.user.findMany({
         where: { status: 'APPROVED' },
+        select: { id: true },
       });
 
-      // Emit campaign to all connected mobile users via Socket.io
+      const totalApplicators = allUsers.length;
+
+      // Create pending notifications for ALL users (so offline users get it)
+      const pendingNotifications = allUsers.map((user) => ({
+        userId: user.id,
+        type: 'ADMIN_NOTIFICATION' as const,
+        payload: {
+          notificationId: `campaign-launch-${updatedCampaign.id}`,
+          title: `Nova Campanha: ${updatedCampaign.name}`,
+          message: updatedCampaign.description || 'Nova campanha disponível! Participe e ganhe bônus.',
+          videoUrl: updatedCampaign.bannerType === 'VIDEO' ? updatedCampaign.bannerUrl : null,
+          videoDuration: null,
+          xpReward: updatedCampaign.xpBonus || 0,
+          campaignId: updatedCampaign.id,
+        },
+        expiresAt: updatedCampaign.endDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      }));
+
+      await prisma.pendingNotification.createMany({
+        data: pendingNotifications,
+      });
+
+      console.log(`[Campaign] Created ${pendingNotifications.length} pending notifications for campaign launch`);
+
+      // Emit campaign to all connected mobile users via Socket.io (real-time)
       emitToMobile('campaign:new', {
         id: updatedCampaign.id,
         name: updatedCampaign.name,
@@ -541,7 +566,30 @@ router.post(
         where: { status: 'APPROVED' },
       });
 
-      // Emit campaign to non-participating users via Socket.io
+      // Create pending notifications for ALL non-participants (so offline users get it)
+      const pendingNotifications = nonParticipants.map((user) => ({
+        userId: user.id,
+        type: 'ADMIN_NOTIFICATION' as const,
+        payload: {
+          notificationId: `campaign-${campaign.id}`,
+          title: `Campanha: ${campaign.name}`,
+          message: campaign.description || 'Nova campanha disponível!',
+          videoUrl: campaign.bannerType === 'VIDEO' ? campaign.bannerUrl : null,
+          videoDuration: null,
+          xpReward: campaign.xpBonus || 0,
+          campaignId: campaign.id,
+          forceShow: true,
+        },
+        expiresAt: campaign.endDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      }));
+
+      await prisma.pendingNotification.createMany({
+        data: pendingNotifications,
+      });
+
+      console.log(`[Campaign] Created ${pendingNotifications.length} pending notifications for non-participants`);
+
+      // Emit campaign to non-participating users via Socket.io (real-time)
       // forceShow: true tells the app to clear the "seen" cache and show the campaign again
       for (const user of nonParticipants) {
         emitToUser(user.id, 'campaign:new', {
