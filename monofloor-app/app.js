@@ -5961,28 +5961,58 @@ async function submitReport() {
             formData.append('media', media.file, media.name);
         });
 
-        // Send to backend (or simulate for demo)
-        // const response = await fetch(`${API_URL}/api/mobile/reports`, {
-        //     method: 'POST',
-        //     headers: {
-        //         'Authorization': `Bearer ${getAuthToken()}`
-        //     },
-        //     body: formData
-        // });
+        // Use project from checkin context if available
+        const projectId = currentProjectForCheckin || selectedProject?.id;
+        if (!projectId) {
+            throw new Error('Nenhum projeto selecionado');
+        }
+        formData.set('projectId', projectId);
 
-        // Simulate upload delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        // Send to backend
+        const response = await fetch(`${API_URL}/api/mobile/reports`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: formData
+        });
 
-        // Show success
-        showSuccessModal('Relatório Enviado!', 'Seu relatório foi registrado com sucesso.');
+        const data = await response.json();
+
+        if (!data.success) {
+            throw new Error(data.error?.message || 'Erro ao enviar relatório');
+        }
 
         // Reset form
         resetReportForm();
 
+        // Handle checkout if user is checked in
+        if (isCheckedIn && activeCheckinId) {
+            console.log('[REPORT] Iniciando checkout automático após relatório...');
+            try {
+                const checkoutResult = await doCheckoutWithTasksAndReminder('REPORT_SENT');
+                if (checkoutResult?.xp) {
+                    showXPNotification(
+                        checkoutResult.xp.totalEarned,
+                        'Relatório + Checkout',
+                        checkoutResult.xp.total
+                    );
+                } else {
+                    showSuccessModal('Relatório Enviado!', 'Relatório enviado e checkout realizado com sucesso.');
+                }
+            } catch (checkoutError) {
+                console.error('[REPORT] Erro no checkout:', checkoutError);
+                showSuccessModal('Relatório Enviado!', 'Relatório enviado. Checkout pendente.');
+            }
+        } else {
+            showSuccessModal('Relatório Enviado!', 'Seu relatório foi registrado com sucesso.');
+        }
+
         // Navigate back
         setTimeout(() => {
-            navigateTo('screen-project-detail');
-        }, 2000);
+            closeModal();
+            navigateTo('screen-projects');
+        }, 1500);
 
     } catch (error) {
         console.error('Erro ao enviar relatório:', error);
@@ -7189,79 +7219,6 @@ function renderEarnings(earningsData) {
         projectsList.querySelectorAll('.project-earnings-card').forEach(card => card.remove());
         projectsList.querySelectorAll('.hours-project-card').forEach(card => card.remove());
         projectsList.insertAdjacentHTML('beforeend', projectsHTML);
-    }
-}
-
-// =============================================
-// REPORTS - Enviar relatório para o backend
-// =============================================
-async function submitReport() {
-    if (!selectedProject && !currentProjectForCheckin) {
-        alert('Selecione um projeto primeiro');
-        return;
-    }
-
-    const projectId = currentProjectForCheckin || selectedProject?.id;
-    const notesEl = document.getElementById('reportNotes');
-    const notes = notesEl ? notesEl.value : '';
-
-    try {
-        const response = await fetch(`${API_URL}/api/mobile/reports`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${getAuthToken()}`
-            },
-            body: JSON.stringify({
-                projectId,
-                notes
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            // Limpar form
-            if (notesEl) notesEl.value = '';
-
-            // Se o usuário ainda está checado, fazer checkout automático
-            console.log('[REPORT] Verificando checkout automático - isCheckedIn:', isCheckedIn, 'activeCheckinId:', activeCheckinId);
-            if (isCheckedIn && activeCheckinId) {
-                console.log('[REPORT] Iniciando checkout automático após relatório...');
-                try {
-                    const checkoutResult = await doCheckoutWithTasksAndReminder('REPORT_SENT');
-                    console.log('[REPORT] Checkout automático concluído!', checkoutResult);
-
-                    // Mostrar animação de XP se ganhou XP
-                    if (checkoutResult?.xp) {
-                        showXPNotification(
-                            checkoutResult.xp.totalEarned,
-                            'Relatório + Checkout',
-                            checkoutResult.xp.total
-                        );
-                    } else {
-                        showSuccessModal('Relatório Enviado!', 'Relatório enviado e checkout realizado com sucesso.');
-                    }
-                } catch (checkoutError) {
-                    console.error('[REPORT] Erro no checkout após relatório:', checkoutError);
-                    showSuccessModal('Relatório Enviado!', 'Relatório enviado. Checkout pendente.');
-                }
-            } else {
-                console.log('[REPORT] Usuário não está checado, pulando checkout automático');
-                showSuccessModal('Relatório Enviado!', 'O relatório foi enviado para o time do projeto.');
-            }
-
-            // Voltar para tela de projetos
-            setTimeout(() => {
-                closeModal();
-                navigateTo('screen-projects');
-            }, 1500);
-        } else {
-            throw new Error(data.error?.message || 'Erro ao enviar relatório');
-        }
-    } catch (error) {
-        console.error('Erro ao enviar relatório:', error);
-        alert(error.message || 'Erro ao enviar relatório. Tente novamente.');
     }
 }
 

@@ -730,20 +730,31 @@ router.post(
       const CHECKIN_EARLY_MINUTES = 20;
 
       if (project.workStartTime) {
+        // Get current time in São Paulo timezone
         const now = new Date();
-        const [hours, minutes] = project.workStartTime.split(':').map(Number);
+        const saoPauloTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+        const currentHours = saoPauloTime.getHours();
+        const currentMinutes = saoPauloTime.getMinutes();
+        const currentTotalMinutes = currentHours * 60 + currentMinutes;
 
-        // Create today's expected start time
-        const expectedStart = new Date(now);
-        expectedStart.setHours(hours, minutes, 0, 0);
+        // Parse project start time
+        const [startHours, startMinutes] = project.workStartTime.split(':').map(Number);
+        const startTotalMinutes = startHours * 60 + startMinutes;
 
-        // Calculate earliest allowed check-in time (20 min before start)
-        const earliestCheckin = new Date(expectedStart);
-        earliestCheckin.setMinutes(earliestCheckin.getMinutes() - CHECKIN_EARLY_MINUTES);
+        // Calculate earliest allowed check-in (20 min before start)
+        const earliestTotalMinutes = startTotalMinutes - CHECKIN_EARLY_MINUTES;
 
         // If current time is before the earliest allowed time, reject
-        if (now < earliestCheckin) {
-          const earliestTimeStr = earliestCheckin.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        // Handle edge case where earliest time might be negative (e.g., start at 00:15)
+        const adjustedEarliest = earliestTotalMinutes < 0 ? earliestTotalMinutes + 24 * 60 : earliestTotalMinutes;
+        const adjustedCurrent = earliestTotalMinutes < 0 && currentTotalMinutes > 12 * 60
+          ? currentTotalMinutes
+          : currentTotalMinutes;
+
+        if (adjustedCurrent < adjustedEarliest) {
+          const earliestHours = Math.floor((earliestTotalMinutes + 24 * 60) % (24 * 60) / 60);
+          const earliestMins = (earliestTotalMinutes + 24 * 60) % 60;
+          const earliestTimeStr = `${String(earliestHours).padStart(2, '0')}:${String(earliestMins).padStart(2, '0')}`;
           throw new AppError(
             `Check-in permitido apenas a partir das ${earliestTimeStr} (20 minutos antes do inicio do expediente as ${project.workStartTime})`,
             400,
@@ -1603,24 +1614,52 @@ router.get(
 // REPORTS
 // =============================================
 
-// POST /api/mobile/reports - Create report
+// Multer configuration for report uploads (audio + media files)
+const uploadReport = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedAudioTypes = ['audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/ogg'];
+    const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
+
+    if (file.fieldname === 'audio' && allowedAudioTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else if (file.fieldname === 'media' && [...allowedImageTypes, ...allowedVideoTypes].includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(null, false);
+    }
+  },
+});
+
+// POST /api/mobile/reports - Create report with audio and media
 router.post(
   '/reports',
   mobileAuth,
-  [
-    body('projectId').isUUID(),
-    body('notes').optional().trim(),
-    body('tags').optional().isArray(),
-  ],
-  validate,
+  uploadReport.fields([
+    { name: 'audio', maxCount: 1 },
+    { name: 'media', maxCount: 10 }, // Up to 10 photos/videos
+  ]),
   async (req, res, next) => {
     try {
-      const { projectId, notes, tags } = req.body;
+      const userId = req.user!.sub;
+      const { projectId, notes } = req.body;
+      const tags = req.body.tags ? (typeof req.body.tags === 'string' ? JSON.parse(req.body.tags) : req.body.tags) : [];
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
+      // Validate projectId
+      if (!projectId) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'MISSING_PROJECT_ID', message: 'projectId is required' },
+        });
+      }
 
       // Check if user is assigned
       const assignment = await prisma.projectAssignment.findFirst({
         where: {
-          userId: req.user!.sub,
+          userId,
           projectId,
           isActive: true,
         },
@@ -1633,27 +1672,96 @@ router.post(
       // Get active checkin
       const activeCheckin = await prisma.checkin.findFirst({
         where: {
-          userId: req.user!.sub,
+          userId,
           projectId,
           checkoutAt: null,
         },
       });
 
+      // Process audio file
+      const audioFile = files?.audio?.[0];
+      let audioFileUrl: string | null = null;
+      let audioTranscription: string | null = null;
+
+      if (audioFile) {
+        // Save audio to database
+        const savedAudio = await saveFile({
+          filename: audioFile.originalname,
+          mimetype: audioFile.mimetype,
+          data: audioFile.buffer,
+          type: 'REPORT' as UploadType,
+          userId,
+        });
+        audioFileUrl = savedAudio.url;
+
+        // Transcribe audio with Whisper
+        try {
+          console.log(`[Report] Transcribing audio...`);
+          const transcriptionResult = await whisperService.transcribeFromBuffer(audioFile.buffer, audioFile.originalname);
+          audioTranscription = transcriptionResult.text;
+          console.log(`[Report] Transcription: "${audioTranscription?.substring(0, 100)}..."`);
+        } catch (transcriptionError) {
+          console.error('[Report] Transcription failed:', transcriptionError);
+        }
+      }
+
+      // Create report
       const report = await prisma.report.create({
         data: {
-          userId: req.user!.sub,
+          userId,
           projectId,
           checkinId: activeCheckin?.id,
-          notes,
+          notes: notes || null,
           tags: tags || [],
+          audioFileUrl,
+          audioTranscription,
           status: 'SUBMITTED',
           submittedAt: new Date(),
         },
       });
 
+      // Process and save media files (photos/videos)
+      const mediaFiles = files?.media || [];
+      const savedPhotos = [];
+
+      for (let i = 0; i < mediaFiles.length; i++) {
+        const mediaFile = mediaFiles[i];
+
+        // Save to database
+        const savedMedia = await saveFile({
+          filename: mediaFile.originalname,
+          mimetype: mediaFile.mimetype,
+          data: mediaFile.buffer,
+          type: 'REPORT' as UploadType,
+          userId,
+          entityId: report.id,
+        });
+
+        // Create ReportPhoto record
+        const photo = await prisma.reportPhoto.create({
+          data: {
+            reportId: report.id,
+            fileUrl: savedMedia.url,
+            fileName: mediaFile.originalname,
+            fileSize: mediaFile.size,
+            mimeType: mediaFile.mimetype,
+            sortOrder: i,
+          },
+        });
+        savedPhotos.push(photo);
+      }
+
+      // Fetch complete report with photos
+      const completeReport = await prisma.report.findUnique({
+        where: { id: report.id },
+        include: { photos: true },
+      });
+
+      console.log(`[Report] Created report ${report.id} with ${savedPhotos.length} media files`);
+
       res.status(201).json({
         success: true,
-        data: report,
+        data: completeReport,
       });
     } catch (error) {
       next(error);
