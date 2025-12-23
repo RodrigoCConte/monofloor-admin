@@ -1804,4 +1804,5 @@ enum PendingNotificationType {
   PROJECT_ASSIGNED
   XP_PENALTY
   LUNCH_SKIPPED       // Almoço pulado (desconto de horas)
+  ADMIN_NOTIFICATION  // Notificação do admin (com vídeo/XP)
 }

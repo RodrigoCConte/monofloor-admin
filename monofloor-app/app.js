@@ -323,6 +323,18 @@ async function processPendingNotification(notification) {
                 );
                 break;
 
+            case 'ADMIN_NOTIFICATION':
+                // Show admin notification with optional video
+                showAdminNotification({
+                    id: notification.payload.notificationId,
+                    title: notification.payload.title,
+                    message: notification.payload.message,
+                    videoUrl: notification.payload.videoUrl,
+                    videoDuration: notification.payload.videoDuration,
+                    xpReward: notification.payload.xpReward
+                });
+                break;
+
             // Add more notification types as needed
             default:
                 console.log('[PendingNotifications] Unknown type:', notification.type);

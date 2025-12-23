@@ -353,7 +353,32 @@ router.post(
         throw new AppError('Notificacao nao encontrada', 404, 'NOT_FOUND');
       }
 
-      // Emit socket event to all connected users
+      // Get all approved users
+      const users = await prisma.user.findMany({
+        where: { status: 'APPROVED' },
+        select: { id: true },
+      });
+
+      // Create pending notifications for ALL users (so offline users get it later)
+      const pendingNotifications = users.map((user) => ({
+        userId: user.id,
+        type: 'ADMIN_NOTIFICATION' as const,
+        payload: {
+          notificationId: notification.id,
+          title: notification.title,
+          message: notification.message,
+          videoUrl: notification.videoUrl,
+          videoDuration: notification.videoDuration,
+          xpReward: notification.xpReward,
+        },
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Expires in 7 days
+      }));
+
+      await prisma.pendingNotification.createMany({
+        data: pendingNotifications,
+      });
+
+      // Emit socket event to all connected users (real-time)
       const { emitNotification } = await import('../../services/socket.service');
       emitNotification({
         id: notification.id,
@@ -364,6 +389,27 @@ router.post(
         xpReward: notification.xpReward,
       });
 
+      // Send push notifications to all users
+      try {
+        const { sendPushToUser } = await import('../../services/push.service');
+        const pushPromises = users.map((user) =>
+          sendPushToUser(user.id, {
+            title: notification.title,
+            body: notification.message,
+            data: {
+              type: 'admin_notification',
+              notificationId: notification.id,
+              hasVideo: !!notification.videoUrl,
+              xpReward: notification.xpReward,
+            },
+          }).catch((err) => console.error(`[Notification] Push failed for ${user.id}:`, err.message))
+        );
+        await Promise.allSettled(pushPromises);
+        console.log(`[Notification] Push sent to ${users.length} users`);
+      } catch (pushError) {
+        console.error('[Notification] Failed to send push notifications:', pushError);
+      }
+
       // Create audit log
       await prisma.auditLog.create({
         data: {
@@ -371,13 +417,16 @@ router.post(
           action: 'SEND_NOTIFICATION',
           entityType: 'Notification',
           entityId: notification.id,
-          description: `Sent notification "${notification.title}" to all users`,
+          description: `Sent notification "${notification.title}" to ${users.length} users`,
         },
       });
 
       res.json({
         success: true,
-        message: 'Notificacao enviada para todos os usuarios conectados',
+        message: `Notificacao enviada para ${users.length} usuarios`,
+        data: {
+          recipientCount: users.length,
+        },
       });
     } catch (error) {
       next(error);
