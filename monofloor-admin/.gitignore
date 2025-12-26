@@ -30,3 +30,8 @@ uploads/
 # Prisma
 prisma/*.db
 prisma/*.db-journal
+
+# Sensitive files
+CREDENCIAIS.md
+*.credentials
+.env.production
