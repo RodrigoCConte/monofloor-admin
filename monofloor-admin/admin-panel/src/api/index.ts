@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://devoted-wholeness-production.up.railway.app';
+// Use empty string for local development (proxy), or production URL
+const API_URL = import.meta.env.VITE_API_URL !== undefined
+  ? import.meta.env.VITE_API_URL
+  : 'https://devoted-wholeness-production.up.railway.app';
 
 const api = axios.create({
   baseURL: API_URL,

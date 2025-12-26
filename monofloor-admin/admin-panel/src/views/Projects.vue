@@ -36,7 +36,7 @@ const getInitials = (name: string | null | undefined): string => {
 
 const projects = ref<any[]>([]);
 const loading = ref(true);
-const filter = ref('all');
+const filter = ref('EM_EXECUCAO');
 const importing = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 const deleting = ref<string | null>(null);

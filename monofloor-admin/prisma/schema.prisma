@@ -113,6 +113,8 @@ model User {
   videoProgress         VideoProgress[]
   quizAttempts          QuizAttempt[]
   pendingNotifications  PendingNotification[]
+  currentReportResponsibilities  DailyReportResponsibility[] @relation("CurrentReportResponsible")
+  originalReportResponsibilities DailyReportResponsibility[] @relation("OriginalReportResponsible")
 
   @@map("users")
 }
@@ -227,6 +229,19 @@ model Project {
   tasks                 ProjectTask[]
   reportReminders       ReportReminder[]
   xpTransactions        XpTransaction[]
+  dailyReportResponsibilities DailyReportResponsibility[]
+
+  // Enterprise Module Relations
+  comercialData         ComercialData?
+  contrato              Contrato?
+  planejamento          Planejamento?
+  execucao              Execucao?
+  posVendas             PosVenda[]
+  timelineEvents        TimelineEvent[]
+  videos                ProjectVideo[]
+
+  // Current module tracking
+  currentModule         ProjectModule?        @map("current_module")
 
   @@map("projects")
 }
@@ -1805,4 +1820,1098 @@ enum PendingNotificationType {
   XP_PENALTY
   LUNCH_SKIPPED       // Almoço pulado (desconto de horas)
   ADMIN_NOTIFICATION  // Notificação do admin (com vídeo/XP)
+  NOTIFICATION        // Notificação geral
+  CAMPAIGN            // Campanha
+  REPORT_RESPONSIBILITY_ASSIGNED  // Responsável pelo relatório do dia
+  REPORT_RESPONSIBILITY_RECEIVED  // Recebeu transferência de responsabilidade
+}
+
+// =============================================
+// DAILY REPORT RESPONSIBILITY (Responsável pelo relatório diário)
+// =============================================
+model DailyReportResponsibility {
+  id                String   @id @default(uuid())
+  projectId         String   @map("project_id")
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Responsável atual
+  responsibleUserId String   @map("responsible_user_id")
+  responsibleUser   User     @relation("CurrentReportResponsible", fields: [responsibleUserId], references: [id])
+
+  // Data do relatório
+  reportDate        DateTime @map("report_date") @db.Date
+
+  // Histórico de transferência
+  originalUserId    String?  @map("original_user_id")
+  originalUser      User?    @relation("OriginalReportResponsible", fields: [originalUserId], references: [id])
+  transferredAt     DateTime? @map("transferred_at")
+  transferReason    String?  @map("transfer_reason")
+
+  // Status
+  status            ReportResponsibilityStatus @default(PENDING)
+  reportId          String?  @map("report_id")
+
+  // Timestamps
+  createdAt         DateTime @default(now()) @map("created_at")
+  notifiedAt        DateTime? @map("notified_at")
+
+  @@unique([projectId, reportDate])
+  @@index([responsibleUserId, reportDate])
+  @@map("daily_report_responsibilities")
+}
+
+enum ReportResponsibilityStatus {
+  PENDING       // Aguardando envio
+  TRANSFERRED   // Foi transferido
+  COMPLETED     // Relatório enviado
+  EXPIRED       // Dia passou sem relatório
+}
+
+// =============================================
+// ENTERPRISE MODULES - Comercial, PIUI, Planejamento, Pós-venda
+// =============================================
+
+// =============================================
+// COMERCIAL DATA (Dados do módulo comercial - sync Pipedrive)
+// =============================================
+model ComercialData {
+  id              String          @id @default(uuid())
+  projectId       String          @unique @map("project_id")
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Dados do Pipedrive - Identificação
+  pipedriveDealId    String?         @unique @map("pipedrive_deal_id")
+  pipedrivePersonId  Int?            @map("pipedrive_person_id")
+  pipedriveOrgId     Int?            @map("pipedrive_org_id")
+  stageId            Int?            @map("stage_id")
+  stageName          String?         @map("stage_name")
+  stageOrderNr       Int?            @map("stage_order_nr")
+  pipelineId         Int?            @map("pipeline_id")
+  pipedriveUrl       String?         @map("pipedrive_url")
+
+  // Pipedrive - Pessoa de Contato
+  personName         String?         @map("person_name")
+  personEmail        String?         @map("person_email")
+  personPhone        String?         @map("person_phone")
+
+  // Pipedrive - Valores
+  dealValue          Decimal?        @map("deal_value") @db.Decimal(12, 2)
+  dealCurrency       String?         @map("deal_currency")
+  probability        Int?
+  weightedValue      Decimal?        @map("weighted_value") @db.Decimal(12, 2)
+
+  // Pipedrive - Datas
+  dealAddTime        DateTime?       @map("deal_add_time")
+  dealUpdateTime     DateTime?       @map("deal_update_time")
+  stageChangeTime    DateTime?       @map("stage_change_time")
+  wonTime            DateTime?       @map("won_time")
+  lostTime           DateTime?       @map("lost_time")
+  expectedCloseDate  DateTime?       @map("expected_close_date")
+
+  // Pipedrive - Status
+  dealStatus         String?         @map("deal_status") // open, won, lost
+  lostReason         String?         @map("lost_reason")
+
+  // Pipedrive - Contadores
+  filesCount         Int?            @map("files_count") @default(0)
+  notesCount         Int?            @map("notes_count") @default(0)
+  activitiesCount    Int?            @map("activities_count") @default(0)
+  followersCount     Int?            @map("followers_count") @default(0)
+  emailMessagesCount Int?            @map("email_messages_count") @default(0)
+
+  // Pipedrive - Responsáveis
+  ownerUserId        Int?            @map("owner_user_id")
+  ownerUserName      String?         @map("owner_user_name")
+  ownerUserEmail     String?         @map("owner_user_email")
+  creatorUserId      Int?            @map("creator_user_id")
+  creatorUserName    String?         @map("creator_user_name")
+
+  // Pipedrive - Custom Fields (Campos personalizados)
+  resumo             String?         @db.Text  // Resumo
+  metragemEstimada   String?         @map("metragem_estimada")  // Metragem estimada
+  metragemEstimadaN1 String?         @map("metragem_estimada_n1")  // Metragem estimada N1
+  descritivoArea     String?         @map("descritivo_area")  // Descritivo de área
+  detalhesArquiteto  String?         @map("detalhes_arquiteto") @db.Text // Detalhes (com arquiteto)
+  cidadeExecucaoDesc String?         @map("cidade_execucao_desc")  // Cidade de execução (descritivo)
+  cidadeExecucao     String?         @map("cidade_execucao")  // Cidade de execução (set)
+  tipoCliente        String?         @map("tipo_cliente") // Tipo de cliente (set)
+  tipoProjeto        String?         @map("tipo_projeto")  // Tipo de projeto (set)
+  nomeEscritorio     String?         @map("nome_escritorio")  // Nome do escritório / Empresa
+  budgetEstimado     String?         @map("budget_estimado")  // Budget estimado
+  estadoObra         String?         @map("estado_obra")  // Qual estado de obra
+  metragemSemArq     String?         @map("metragem_sem_arq")  // Metragem estimada (sem arquiteto)
+  dataPrevistaExec   String?         @map("data_prevista_exec")  // Data prevista de execução
+  primeiroNomeZapi   String?         @map("primeiro_nome_zapi")  // Primeiro Nome Para Z-API
+  telefoneZapi       String?         @map("telefone_zapi")  // Telefone Processado Z-API
+  labelPipedrive     String?         @map("label_pipedrive")  // Label
+
+  // Pipedrive - Origem
+  dealOrigin         String?         @map("deal_origin")  // Origin (Import, etc)
+  dealOriginId       String?         @map("deal_origin_id")
+
+  // Pipedrive - Dados brutos JSON (para campos extras não mapeados)
+  pipedriveRawData   Json?           @map("pipedrive_raw_data")
+
+  // Lead info (campos do sistema)
+  origem          String?         // Formulário, Indicação, Site, etc
+  arquiteto       String?
+  escritorio      String?
+  telefoneArquiteto String?       @map("telefone_arquiteto")
+
+  // Status comercial
+  status          ComercialStatus @default(LEAD)
+  motivoPerda     String?         @map("motivo_perda")
+  dataGanho       DateTime?       @map("data_ganho")
+  dataPerda       DateTime?       @map("data_perda")
+
+  // Consultor responsável
+  consultorId     String?         @map("consultor_id")
+
+  // Sync info
+  pipedriveSyncedAt DateTime?     @map("pipedrive_synced_at")
+
+  // Timestamps
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  propostas       Proposta[]
+  followUps       FollowUp[]
+  pipedriveNotes  PipedriveNote[]
+  pipedriveActivities PipedriveActivity[]
+  pipedriveFiles  PipedriveFile[]
+
+  @@index([status])
+  @@index([pipedriveDealId])
+  @@index([stageId])
+  @@index([dealStatus])
+  @@map("comercial_data")
+}
+
+// =============================================
+// PIPEDRIVE NOTES (Notas do Pipedrive)
+// =============================================
+model PipedriveNote {
+  id              String          @id @default(uuid())
+  comercialId     String          @map("comercial_id")
+  comercial       ComercialData   @relation(fields: [comercialId], references: [id], onDelete: Cascade)
+
+  pipedriveNoteId Int             @unique @map("pipedrive_note_id")
+  content         String          @db.Text
+  addTime         DateTime?       @map("add_time")
+  updateTime      DateTime?       @map("update_time")
+  userId          Int?            @map("user_id")
+  userName        String?         @map("user_name")
+  pinned          Boolean         @default(false)
+
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  @@index([comercialId])
+  @@map("pipedrive_notes")
+}
+
+// =============================================
+// PIPEDRIVE ACTIVITIES (Atividades do Pipedrive)
+// =============================================
+model PipedriveActivity {
+  id              String          @id @default(uuid())
+  comercialId     String          @map("comercial_id")
+  comercial       ComercialData   @relation(fields: [comercialId], references: [id], onDelete: Cascade)
+
+  pipedriveActivityId Int         @unique @map("pipedrive_activity_id")
+  type            String?         // call, meeting, task, email, etc
+  subject         String?
+  note            String?         @db.Text
+  dueDate         DateTime?       @map("due_date")
+  dueTime         String?         @map("due_time")
+  duration        Int?            // minutes
+  done            Boolean         @default(false)
+  markedDoneTime  DateTime?       @map("marked_done_time")
+  userId          Int?            @map("user_id")
+  userName        String?         @map("user_name")
+  addTime         DateTime?       @map("add_time")
+
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  @@index([comercialId])
+  @@map("pipedrive_activities")
+}
+
+// =============================================
+// PIPEDRIVE FILES (Arquivos do Pipedrive)
+// =============================================
+model PipedriveFile {
+  id              String          @id @default(uuid())
+  comercialId     String          @map("comercial_id")
+  comercial       ComercialData   @relation(fields: [comercialId], references: [id], onDelete: Cascade)
+
+  pipedriveFileId Int             @unique @map("pipedrive_file_id")
+  fileName        String          @map("file_name")
+  fileType        String?         @map("file_type")
+  fileSize        Int?            @map("file_size")
+  fileUrl         String?         @map("file_url") @db.Text
+  addTime         DateTime?       @map("add_time")
+  userId          Int?            @map("user_id")
+  userName        String?         @map("user_name")
+
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  @@index([comercialId])
+  @@map("pipedrive_files")
+}
+
+enum ComercialStatus {
+  LEAD                // Novo lead
+  PRIMEIRO_CONTATO    // Em primeiro contato
+  CONTATO_ARQUITETO   // Contato com arquiteto
+  LEVANTAMENTO        // Levantamento de projeto
+  PROPOSTA_ENVIADA    // Proposta enviada
+  FOLLOW_UP           // Em follow-up
+  NEGOCIACAO          // Em negociação
+  GANHO               // Negócio ganho
+  PERDIDO             // Negócio perdido
+}
+
+// =============================================
+// PROPOSTA (Propostas comerciais)
+// =============================================
+model Proposta {
+  id              String          @id @default(uuid())
+  comercialId     String          @map("comercial_id")
+  comercial       ComercialData   @relation(fields: [comercialId], references: [id], onDelete: Cascade)
+
+  // Versão
+  versao          Int             @default(1)
+
+  // Valores
+  valorTotal      Decimal         @map("valor_total") @db.Decimal(12, 2)
+  valorM2         Decimal?        @map("valor_m2") @db.Decimal(10, 2)
+  desconto        Decimal?        @db.Decimal(5, 2) // Percentual
+
+  // Descrição e escopo
+  descricao       String?         @db.Text
+  escopoUrl       String?         @map("escopo_url") // URL do documento
+
+  // Status
+  status          PropostaStatus  @default(DRAFT)
+  enviadaEm       DateTime?       @map("enviada_em")
+  aprovadaEm      DateTime?       @map("aprovada_em")
+  rejeitadaEm     DateTime?       @map("rejeitada_em")
+  motivoRejeicao  String?         @map("motivo_rejeicao")
+
+  // Validade
+  validadeAte     DateTime?       @map("validade_ate")
+
+  // Timestamps
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  @@index([comercialId])
+  @@index([status])
+  @@map("propostas")
+}
+
+enum PropostaStatus {
+  DRAFT             // Rascunho
+  ENVIADA           // Enviada ao cliente
+  VISUALIZADA       // Cliente visualizou
+  APROVADA          // Aprovada
+  REJEITADA         // Rejeitada
+  EXPIRADA          // Validade expirou
+}
+
+// =============================================
+// FOLLOW UP (Acompanhamentos comerciais)
+// =============================================
+model FollowUp {
+  id              String          @id @default(uuid())
+  comercialId     String          @map("comercial_id")
+  comercial       ComercialData   @relation(fields: [comercialId], references: [id], onDelete: Cascade)
+
+  // Tipo e canal
+  tipo            FollowUpTipo
+  canal           FollowUpCanal   @default(WHATSAPP)
+
+  // Conteúdo
+  mensagem        String?         @db.Text
+  resultado       String?         @db.Text
+
+  // Agendamento
+  agendadoPara    DateTime?       @map("agendado_para")
+  realizadoEm     DateTime?       @map("realizado_em")
+
+  // Status
+  status          FollowUpStatus  @default(AGENDADO)
+
+  // Timestamps
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  @@index([comercialId])
+  @@index([agendadoPara, status])
+  @@map("follow_ups")
+}
+
+enum FollowUpTipo {
+  PRIMEIRO_CONTATO
+  FOLLOW_1
+  FOLLOW_2
+  FOLLOW_3
+  NEGOCIACAO
+  FECHAMENTO
+  OUTRO
+}
+
+enum FollowUpCanal {
+  WHATSAPP
+  EMAIL
+  TELEFONE
+  PRESENCIAL
+}
+
+enum FollowUpStatus {
+  AGENDADO
+  REALIZADO
+  CANCELADO
+  REAGENDADO
+}
+
+// =============================================
+// CONTRATO (Módulo PIUI - Contratos)
+// =============================================
+model Contrato {
+  id              String          @id @default(uuid())
+  projectId       String          @unique @map("project_id")
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Número do contrato
+  numero          String?         @unique
+
+  // Valores
+  valorContratado Decimal         @map("valor_contratado") @db.Decimal(12, 2)
+  valorEntrada    Decimal?        @map("valor_entrada") @db.Decimal(12, 2)
+  formaPagamento  String?         @map("forma_pagamento")
+
+  // Escopo
+  escopoInicialUrl  String?       @map("escopo_inicial_url")
+  escopoAprovadoUrl String?       @map("escopo_aprovado_url")
+
+  // Especificações
+  m2Piso          Decimal?        @map("m2_piso") @db.Decimal(10, 2)
+  m2Parede        Decimal?        @map("m2_parede") @db.Decimal(10, 2)
+  m2Rodape        Decimal?        @map("m2_rodape") @db.Decimal(10, 2)
+  cores           String[]        // Cores contratadas
+  materiais       String[]        // Materiais
+  isTelada        Boolean         @default(false) @map("is_telada")
+  isFaseada       Boolean         @default(false) @map("is_faseada")
+  detalheFaseamento String?       @map("detalhe_faseamento") @db.Text
+  detalheTela     String?         @map("detalhe_tela") @db.Text
+
+  // Aprovações
+  aprovadoInternamente Boolean    @default(false) @map("aprovado_internamente")
+  aprovadoCliente      Boolean    @default(false) @map("aprovado_cliente")
+  assinadoDigitalmente Boolean    @default(false) @map("assinado_digitalmente")
+
+  dataAprovacaoInterna DateTime?  @map("data_aprovacao_interna")
+  dataAprovacaoCliente DateTime?  @map("data_aprovacao_cliente")
+  dataAssinatura       DateTime?  @map("data_assinatura")
+
+  // Status
+  status          ContratoStatus  @default(DRAFT)
+
+  // Responsáveis
+  consultorContratoId String?     @map("consultor_contrato_id")
+
+  // Timestamps
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  parcelas        Parcela[]
+
+  @@index([status])
+  @@map("contratos")
+}
+
+enum ContratoStatus {
+  DRAFT                   // Rascunho
+  AGUARDANDO_APROVACAO    // Aguardando aprovação
+  APROVADO_INTERNO        // Aprovado internamente
+  ENVIADO_CLIENTE         // Enviado ao cliente
+  APROVADO                // Aprovado pelo cliente
+  ASSINADO                // Assinado
+  CANCELADO               // Cancelado
+}
+
+// =============================================
+// PARCELA (Parcelas de pagamento)
+// =============================================
+model Parcela {
+  id              String          @id @default(uuid())
+  contratoId      String          @map("contrato_id")
+  contrato        Contrato        @relation(fields: [contratoId], references: [id], onDelete: Cascade)
+
+  // Parcela info
+  numero          Int
+  valor           Decimal         @db.Decimal(12, 2)
+  vencimento      DateTime        @db.Date
+  descricao       String?         // Ex: "Entrada", "2ª Parcela", etc
+
+  // Status
+  pago            Boolean         @default(false)
+  dataPagamento   DateTime?       @map("data_pagamento")
+  comprovante     String?         // URL do comprovante
+
+  // Timestamps
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  @@index([contratoId])
+  @@index([vencimento, pago])
+  @@map("parcelas")
+}
+
+// =============================================
+// PLANEJAMENTO (Módulo de Planejamento - sync Pipefy OPERAÇÕES)
+// =============================================
+model Planejamento {
+  id              String              @id @default(uuid())
+  projectId       String              @unique @map("project_id")
+  project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Pipefy sync
+  pipefyCardId       String?          @unique @map("pipefy_card_id")
+  pipefyPhaseId      String?          @map("pipefy_phase_id")
+  pipefyPhaseName    String?          @map("pipefy_phase_name")
+  pipefyUrl          String?          @map("pipefy_url")
+  pipefySyncedAt     DateTime?        @map("pipefy_synced_at")
+  pipefyCreatedAt    DateTime?        @map("pipefy_created_at")
+
+  // Status geral (mapeado das fases do Pipefy)
+  status          PlanejamentoStatus  @default(ENTRADA)
+
+  // Pipefy - Reserva
+  isReserva          Boolean          @default(false) @map("is_reserva")
+
+  // Pipefy - Datas
+  dataEntrada        DateTime?        @map("data_entrada")
+  dataDueDate        DateTime?        @map("data_due_date")
+  dataUltimaCamadaVerniz DateTime?    @map("data_ultima_camada_verniz")
+
+  // Pipefy - Metragens
+  m2Total            Decimal?         @map("m2_total") @db.Decimal(10, 2)
+  metragemLinearTotal Decimal?        @map("metragem_linear_total") @db.Decimal(10, 2)
+  prazoEstimado      Int?             @map("prazo_estimado") // dias
+
+  // Pipefy - Características
+  visitaAntesPiui    Boolean          @default(false) @map("visita_antes_piui")
+  isTelada           Boolean          @default(false) @map("is_telada")
+  detalheTela        String?          @map("detalhe_tela") @db.Text
+  isFaseada          Boolean          @default(false) @map("is_faseada")
+  detalheFaseamento  String?          @map("detalhe_faseamento") @db.Text
+
+  // Pipefy - Detalhes do projeto
+  classificacaoSuperficie String[]    @map("classificacao_superficie")  // checklist horizontal
+  cores              String[]         // COR(ES) - checklist
+  detalhePersonalizacao String?       @map("detalhe_personalizacao")
+  materiais          String[]         // MATERIAL - checklist
+  etiquetas          String[]         // ETIQUETAS - labels
+
+  // Pipefy - Equipe
+  equipeExecucao     String?          @map("equipe_execucao")
+
+  // Pipefy - Indústria
+  numeroOS           Int?             @map("numero_os")
+
+  // Pipefy - Vendedor
+  vendedor           String?
+
+  // Pipefy - Responsáveis (Assignees)
+  consultorOperacional   String?      @map("consultor_operacional")
+  consultorOperacionalId String?      @map("consultor_operacional_id")
+  consultorAtendimento   String?      @map("consultor_atendimento")
+  consultorAtendimentoId String?      @map("consultor_atendimento_id")
+  consultorProjetos      String?      @map("consultor_projetos")
+  consultorProjetosId    String?      @map("consultor_projetos_id")
+
+  // Pipefy - Anexos (URLs dos escopos)
+  escopoInicialUrl   String?          @map("escopo_inicial_url")
+  escopoAprovadoUrl  String?          @map("escopo_aprovado_url")
+
+  // Flags de progresso (interno)
+  vtAfericaoRealizada   Boolean       @default(false) @map("vt_afericao_realizada")
+  projetoRevisado       Boolean       @default(false) @map("projeto_revisado")
+  confirmacoesOk        Boolean       @default(false) @map("confirmacoes_ok")
+  equipeDefinida        Boolean       @default(false) @map("equipe_definida")
+  materialProduzido     Boolean       @default(false) @map("material_produzido")
+  materialEntregue      Boolean       @default(false) @map("material_entregue")
+
+  // Observações
+  observacoes           String?       @db.Text
+
+  // Dados brutos JSON (para campos extras não mapeados)
+  pipefyRawData      Json?            @map("pipefy_raw_data")
+
+  // Timestamps
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  visitasTecnicas VisitaTecnica[]
+  ordemServico    OrdemServico?
+  logistica       Logistica?
+  pipefyComments  PipefyComment[]
+  pipefyAttachments PipefyAttachment[]
+
+  @@index([status])
+  @@index([pipefyCardId])
+  @@index([pipefyPhaseName])
+  @@map("planejamentos")
+}
+
+// =============================================
+// PIPEFY COMMENT (Comentários do Pipefy)
+// =============================================
+model PipefyComment {
+  id              String          @id @default(uuid())
+  planejamentoId  String          @map("planejamento_id")
+  planejamento    Planejamento    @relation(fields: [planejamentoId], references: [id], onDelete: Cascade)
+
+  pipefyCommentId String?         @map("pipefy_comment_id")
+  text            String          @db.Text
+  authorName      String?         @map("author_name")
+  createdAt       DateTime        @map("pipefy_created_at")
+
+  @@index([planejamentoId])
+  @@map("pipefy_comments")
+}
+
+// =============================================
+// PIPEFY ATTACHMENT (Anexos do Pipefy)
+// =============================================
+model PipefyAttachment {
+  id              String          @id @default(uuid())
+  planejamentoId  String          @map("planejamento_id")
+  planejamento    Planejamento    @relation(fields: [planejamentoId], references: [id], onDelete: Cascade)
+
+  pipefyPath      String?         @map("pipefy_path")
+  url             String          @db.Text
+  fieldName       String?         @map("field_name")  // Qual campo (escopo_inicial, escopo_aprovado, etc)
+
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  @@index([planejamentoId])
+  @@map("pipefy_attachments")
+}
+
+enum PlanejamentoStatus {
+  // Fases do Pipefy OPERAÇÕES
+  ENTRADA                       // ENTRADA
+  EM_CONTRATO                   // EM CONTRATO
+  PRIMEIRO_CONTATO_OP           // 1º CONTATO OP.
+  AGEND_VT_AFERICAO             // AGEND. VT - AFERIÇÃO/ORIENTAÇÃO
+  RESULTADO_VT_AFERICAO         // RESULTADO VT - AFERIÇÃO/ORIENTAÇÃO
+  PROJETOS_REVISAO              // PROJETOS - 1ª REVISÃO
+  CONFIRMACOES_OP1              // CONFIRMAÇÕES OP 1
+  DATA_A_DEFINIR                // DATA À DEFINIR
+  AGEND_VT_ACOMPANHAMENTO       // AGEND. VT - ACOMPANHAMENTO
+  RESULTADO_VT_ACOMPANHAMENTO   // RESULTADO VT - ACOMPANHAMENTO
+  CONFIRMACOES_OP2              // CONFIRMAÇÕES OP 2
+  REVISAO_FINAL_OP              // REVISÃO FINAL OP
+  AGUARDANDO_LIBERACAO          // AGUARDANDO LIBERAÇÃO
+  INDUSTRIA_PRODUCAO            // INDÚSTRIA - EM PRODUÇÃO
+  AGEND_VT_ENTRADA              // AGEND. VT - ENTRADA
+  RESULTADO_VT_ENTRADA          // RESULTADO VT - ENTRADA
+  FINANCEIRO_REVISAO            // FINANCEIRO - EM REVISÃO
+  EQUIPE_EXECUCAO               // EQUIPE DE EXECUÇÃO
+  INFO_LOGISTICAS               // INFORMAÇÕES LOGÍSTICAS
+  LOGISTICA_ENTREGA             // LOGÍSTICA - EM ENTREGA
+  LOGISTICA_MATERIAL_ENTREGUE   // LOGÍSTICA - MATERIAL ENTREGUE
+  OBRA_EXECUCAO                 // OBRA EM EXECUÇÃO
+  OBRA_PAUSADA                  // OBRA PAUSADA
+  OBRA_CONCLUIDA                // OBRA CONCLUÍDA
+  LOGISTICA_COLETAR             // LOGÍSTICA - COLETAR
+  LOGISTICA_EM_COLETA           // LOGÍSTICA - EM COLETA
+  CLIENTE_FINALIZADO            // CLIENTE FINALIZADO
+}
+
+// =============================================
+// VISITA TECNICA
+// =============================================
+model VisitaTecnica {
+  id              String              @id @default(uuid())
+  planejamentoId  String              @map("planejamento_id")
+  planejamento    Planejamento        @relation(fields: [planejamentoId], references: [id], onDelete: Cascade)
+
+  // Tipo de visita
+  tipo            TipoVisita
+
+  // Status
+  status          VisitaStatus        @default(AGENDADA)
+
+  // Agendamento
+  dataAgendada    DateTime?           @map("data_agendada")
+  dataRealizada   DateTime?           @map("data_realizada")
+
+  // Resultado
+  observacoes     String?             @db.Text
+  relatorioUrl    String?             @map("relatorio_url") // URL do relatório
+  fotos           String[]            // URLs das fotos
+
+  // Responsável
+  realizadaPorId  String?             @map("realizada_por_id")
+  realizadaPorNome String?            @map("realizada_por_nome")
+
+  // Timestamps
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  @@index([planejamentoId])
+  @@index([dataAgendada, status])
+  @@map("visitas_tecnicas")
+}
+
+enum TipoVisita {
+  AFERICAO              // Aferição/Medição
+  ORIENTACAO            // Orientação
+  ACOMPANHAMENTO        // Acompanhamento
+  ENTRADA               // Visita de entrada
+  QUALIDADE             // Controle de qualidade (pós-venda)
+}
+
+enum VisitaStatus {
+  AGENDADA
+  REALIZADA
+  CANCELADA
+  REAGENDADA
+}
+
+// =============================================
+// ORDEM DE SERVIÇO (Indústria)
+// =============================================
+model OrdemServico {
+  id              String          @id @default(uuid())
+  planejamentoId  String          @unique @map("planejamento_id")
+  planejamento    Planejamento    @relation(fields: [planejamentoId], references: [id], onDelete: Cascade)
+
+  // Número da OS
+  numero          String          @unique
+
+  // Status
+  status          OSStatus        @default(AGUARDANDO)
+
+  // Datas
+  dataEnvio       DateTime?       @map("data_envio")
+  dataPrevisao    DateTime?       @map("data_previsao")
+  dataConclusao   DateTime?       @map("data_conclusao")
+
+  // Especificações
+  cores           String[]
+  materiais       String[]
+  quantidades     Json?           // Detalhamento de quantidades
+
+  // Observações
+  observacoes     String?         @db.Text
+
+  // Timestamps
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("ordens_servico")
+}
+
+enum OSStatus {
+  AGUARDANDO        // Aguardando envio
+  ENVIADA           // Enviada para indústria
+  EM_PRODUCAO       // Em produção
+  CONCLUIDA         // Produção concluída
+  CANCELADA         // Cancelada
+}
+
+// =============================================
+// LOGISTICA
+// =============================================
+model Logistica {
+  id              String              @id @default(uuid())
+  planejamentoId  String              @unique @map("planejamento_id")
+  planejamento    Planejamento        @relation(fields: [planejamentoId], references: [id], onDelete: Cascade)
+
+  // Entrega
+  dataEntregaAgendada  DateTime?      @map("data_entrega_agendada")
+  dataEntregaRealizada DateTime?      @map("data_entrega_realizada")
+  entregaConfirmada    Boolean        @default(false) @map("entrega_confirmada")
+  entregaFotos         String[]       @map("entrega_fotos")
+
+  // Coleta (após conclusão da obra)
+  dataColetaAgendada   DateTime?      @map("data_coleta_agendada")
+  dataColetaRealizada  DateTime?      @map("data_coleta_realizada")
+  coletaConfirmada     Boolean        @default(false) @map("coleta_confirmada")
+  coletaFotos          String[]       @map("coleta_fotos")
+
+  // Observações
+  observacoesEntrega   String?        @map("observacoes_entrega") @db.Text
+  observacoesColeta    String?        @map("observacoes_coleta") @db.Text
+
+  // Status
+  status          LogisticaStatus     @default(AGUARDANDO)
+
+  // Timestamps
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("logisticas")
+}
+
+enum LogisticaStatus {
+  AGUARDANDO          // Aguardando agendamento
+  ENTREGA_AGENDADA    // Entrega agendada
+  EM_ENTREGA          // Em processo de entrega
+  ENTREGUE            // Material entregue
+  COLETA_AGENDADA     // Coleta agendada
+  EM_COLETA           // Em processo de coleta
+  COLETADO            // Equipamentos coletados
+}
+
+// =============================================
+// EXECUCAO (Enhanced - Controle de Execução)
+// =============================================
+model Execucao {
+  id              String              @id @default(uuid())
+  projectId       String              @unique @map("project_id")
+  project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Status
+  status          ExecucaoStatus      @default(AGUARDANDO)
+
+  // Datas
+  dataInicio      DateTime?           @map("data_inicio")
+  dataFim         DateTime?           @map("data_fim")
+
+  // Progresso
+  m2Executado     Decimal             @default(0) @map("m2_executado") @db.Decimal(10, 2)
+  percentual      Int                 @default(0) // 0-100
+
+  // Horas
+  horasTrabalhadas Decimal            @default(0) @map("horas_trabalhadas") @db.Decimal(10, 2)
+
+  // Aplicação de verniz (para cálculo de cura)
+  dataUltimoVerniz DateTime?          @map("data_ultimo_verniz")
+
+  // Observações
+  observacoes     String?             @db.Text
+
+  // Timestamps
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  etapas          EtapaExecucao[]
+  checklists      ChecklistQualidade[]
+
+  @@index([status])
+  @@map("execucoes")
+}
+
+enum ExecucaoStatus {
+  AGUARDANDO        // Aguardando início
+  EM_ANDAMENTO      // Em andamento
+  PAUSADA           // Pausada
+  CONCLUIDA         // Concluída
+}
+
+// =============================================
+// ETAPA EXECUCAO (Etapas da obra)
+// =============================================
+model EtapaExecucao {
+  id              String              @id @default(uuid())
+  execucaoId      String              @map("execucao_id")
+  execucao        Execucao            @relation(fields: [execucaoId], references: [id], onDelete: Cascade)
+
+  // Etapa info
+  nome            String
+  descricao       String?             @db.Text
+  ordem           Int
+
+  // Metragem
+  m2Estimado      Decimal?            @map("m2_estimado") @db.Decimal(10, 2)
+  m2Executado     Decimal             @default(0) @map("m2_executado") @db.Decimal(10, 2)
+
+  // Status
+  status          EtapaStatus         @default(PENDENTE)
+
+  // Datas
+  dataInicio      DateTime?           @map("data_inicio")
+  dataFim         DateTime?           @map("data_fim")
+
+  // Fotos before/after
+  fotoBefore      String?             @map("foto_before")
+  fotoAfter       String?             @map("foto_after")
+
+  // Timestamps
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  @@index([execucaoId, ordem])
+  @@map("etapas_execucao")
+}
+
+enum EtapaStatus {
+  PENDENTE
+  EM_ANDAMENTO
+  CONCLUIDA
+  PAUSADA
+}
+
+// =============================================
+// CHECKLIST QUALIDADE
+// =============================================
+model ChecklistQualidade {
+  id              String              @id @default(uuid())
+  execucaoId      String              @map("execucao_id")
+  execucao        Execucao            @relation(fields: [execucaoId], references: [id], onDelete: Cascade)
+
+  // Etapa relacionada
+  etapa           String
+
+  // Items do checklist (JSON)
+  items           Json                // Array de { item: string, checked: boolean }
+
+  // Aprovação
+  aprovado        Boolean             @default(false)
+  aprovadoPorId   String?             @map("aprovado_por_id")
+  aprovadoPorNome String?             @map("aprovado_por_nome")
+  aprovadoEm      DateTime?           @map("aprovado_em")
+
+  // Observações e fotos
+  observacoes     String?             @db.Text
+  fotos           String[]
+
+  // Timestamps
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  @@index([execucaoId])
+  @@map("checklists_qualidade")
+}
+
+// =============================================
+// POS VENDA
+// =============================================
+model PosVenda {
+  id              String              @id @default(uuid())
+  projectId       String              @map("project_id")
+  project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Acionamento
+  dataAcionamento DateTime            @default(now()) @map("data_acionamento")
+  motivoAcionamento String            @map("motivo_acionamento") @db.Text
+  prioridade      Prioridade          @default(MEDIA)
+
+  // Contato do cliente
+  contatoCliente  String?             @map("contato_cliente")
+  telefoneContato String?             @map("telefone_contato")
+
+  // Status
+  status          PosVendaStatus      @default(ABERTO)
+
+  // Resolução
+  dataResolucao   DateTime?           @map("data_resolucao")
+  observacoesFinais String?           @map("observacoes_finais") @db.Text
+
+  // Responsável
+  responsavelId   String?             @map("responsavel_id")
+  responsavelNome String?             @map("responsavel_nome")
+
+  // Timestamps
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  visitasQualidade VisitaQualidade[]
+  intervencao     Intervencao?
+
+  @@index([projectId])
+  @@index([status])
+  @@map("pos_vendas")
+}
+
+enum PosVendaStatus {
+  ABERTO                  // Chamado aberto
+  VISITA_AGENDADA         // Visita de qualidade agendada
+  EM_ANALISE              // Em análise
+  INTERVENCAO_NECESSARIA  // Precisa de intervenção
+  EM_INTERVENCAO          // Em intervenção
+  RESOLVIDO               // Resolvido
+  CANCELADO               // Cancelado
+}
+
+enum Prioridade {
+  BAIXA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+// =============================================
+// VISITA QUALIDADE (Específico pós-venda)
+// =============================================
+model VisitaQualidade {
+  id              String              @id @default(uuid())
+  posVendaId      String              @map("pos_venda_id")
+  posVenda        PosVenda            @relation(fields: [posVendaId], references: [id], onDelete: Cascade)
+
+  // Agendamento
+  dataAgendada    DateTime?           @map("data_agendada")
+  dataRealizada   DateTime?           @map("data_realizada")
+
+  // Status
+  status          VisitaStatus        @default(AGENDADA)
+
+  // Resultado
+  parecer         String?             @db.Text // Parecer técnico
+  problemasEncontrados String[]       @map("problemas_encontrados")
+  recomendacoes   String?             @db.Text
+  fotos           String[]
+
+  // Responsável
+  realizadaPorId  String?             @map("realizada_por_id")
+  realizadaPorNome String?            @map("realizada_por_nome")
+
+  // Timestamps
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  @@index([posVendaId])
+  @@map("visitas_qualidade")
+}
+
+// =============================================
+// INTERVENCAO (Trabalho corretivo pós-venda)
+// =============================================
+model Intervencao {
+  id              String                  @id @default(uuid())
+  posVendaId      String                  @unique @map("pos_venda_id")
+  posVenda        PosVenda                @relation(fields: [posVendaId], references: [id], onDelete: Cascade)
+
+  // Descrição
+  descricao       String                  @db.Text
+  m2Intervencao   Decimal?                @map("m2_intervencao") @db.Decimal(10, 2)
+
+  // Status
+  status          IntervencaoStatus       @default(PLANEJANDO)
+
+  // Datas
+  dataInicio      DateTime?               @map("data_inicio")
+  dataFim         DateTime?               @map("data_fim")
+
+  // Custos
+  custoEstimado   Decimal?                @map("custo_estimado") @db.Decimal(12, 2)
+  custoReal       Decimal?                @map("custo_real") @db.Decimal(12, 2)
+  cobradoCliente  Boolean                 @default(false) @map("cobrado_cliente")
+
+  // Equipe
+  equipeDesignada String?                 @map("equipe_designada")
+
+  // Resultado
+  relatorioFinal  String?                 @map("relatorio_final") @db.Text
+  fotos           String[]
+
+  // Timestamps
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("intervencoes")
+}
+
+enum IntervencaoStatus {
+  PLANEJANDO            // Planejando intervenção
+  AGUARDANDO_MATERIAL   // Aguardando material
+  AGUARDANDO_EQUIPE     // Aguardando disponibilidade
+  EM_EXECUCAO           // Em execução
+  CONCLUIDA             // Concluída
+  CANCELADA             // Cancelada
+}
+
+// =============================================
+// TIMELINE EVENT (Histórico do projeto)
+// =============================================
+model TimelineEvent {
+  id              String              @id @default(uuid())
+  projectId       String              @map("project_id")
+  project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Módulo e tipo
+  modulo          ProjectModule
+  tipo            String              // STATUS_CHANGE, VT_AGENDADA, PROPOSTA_ENVIADA, etc
+  subtipo         String?             // Detalhamento adicional
+
+  // Descrição
+  titulo          String
+  descricao       String?             @db.Text
+
+  // Dados de mudança
+  dadosAnteriores Json?               @map("dados_anteriores")
+  dadosNovos      Json?               @map("dados_novos")
+
+  // Metadados
+  metadata        Json?               // Dados extras
+
+  // Quem fez
+  userId          String?             @map("user_id")
+  userName        String?             @map("user_name")
+  adminId         String?             @map("admin_id")
+  adminName       String?             @map("admin_name")
+
+  // Timestamps
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@index([modulo])
+  @@map("timeline_events")
+}
+
+enum ProjectModule {
+  COMERCIAL
+  PIUI
+  PLANEJAMENTO
+  EXECUCAO
+  FINALIZADO
+  POS_VENDA
+}
+
+// =============================================
+// PROJECT VIDEO (Galeria de vídeos do projeto)
+// =============================================
+model ProjectVideo {
+  id              String              @id @default(uuid())
+  projectId       String              @map("project_id")
+  project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Info do vídeo
+  titulo          String
+  descricao       String?             @db.Text
+  url             String              @db.Text
+  thumbnailUrl    String?             @map("thumbnail_url")
+  duracaoSegundos Int?                @map("duracao_segundos")
+
+  // Categorização
+  tipo            VideoTipo
+  fase            ProjectModule
+
+  // Ordenação
+  ordem           Int                 @default(0)
+
+  // Timestamps
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  @@index([projectId, fase])
+  @@map("project_videos")
+}
+
+enum VideoTipo {
+  VISITA_INICIAL    // Vídeo da visita inicial
+  DURANTE_EXECUCAO  // Durante a execução
+  ENTREGA           // Vídeo de entrega
+  POS_VENDA         // Vídeo de pós-venda
+  DEPOIMENTO        // Depoimento do cliente
+  OUTRO             // Outro tipo
 }

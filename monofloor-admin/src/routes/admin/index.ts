@@ -14,6 +14,11 @@ import { notificationsRoutes } from './notifications.routes';
 import { academyRoutes } from './academy.routes';
 import absencesRoutes from './absences.routes';
 import requestsRoutes from './requests.routes';
+import { comercialRoutes } from './comercial.routes';
+import { piuiRoutes } from './piui.routes';
+import { planejamentoRoutes } from './planejamento.routes';
+import { posvendaRoutes } from './posvenda.routes';
+import { enterpriseRoutes } from './enterprise.routes';
 import { detectAndProcessLunchSkips, checkLunchSkipForUser } from '../../services/lunch-skipped-detection.service';
 
 const router = Router();
@@ -33,6 +38,13 @@ router.use('/notifications', notificationsRoutes);
 router.use('/academy', academyRoutes);
 router.use('/absences', absencesRoutes);
 router.use('/requests', requestsRoutes);
+
+// Enterprise modules
+router.use('/comercial', comercialRoutes);
+router.use('/piui', piuiRoutes);
+router.use('/planejamento', planejamentoRoutes);
+router.use('/posvenda', posvendaRoutes);
+router.use('/enterprise', enterpriseRoutes);
 
 // Test endpoint for lunch skip detection (development only)
 router.post('/test/lunch-skip-detection', async (req, res) => {

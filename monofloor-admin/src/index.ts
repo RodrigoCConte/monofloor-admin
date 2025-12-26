@@ -11,6 +11,7 @@ import { processAllDailyWorktime } from './services/worktime.service';
 import { processGPSAutoCheckouts } from './services/gps-autocheckout.service';
 import { startCuraScheduler } from './services/cura-scheduler.service';
 import { detectAndProcessLunchSkips } from './services/lunch-skipped-detection.service';
+import { processAllProjectResponsibilities } from './services/report-responsibility.service';
 import prisma from './lib/prisma';
 
 // Create HTTP server for Socket.io
@@ -222,6 +223,37 @@ async function main() {
       };
 
       scheduleLunchSkipDetection();
+
+      // Schedule report responsibility assignment at 06:00 daily
+      const scheduleReportResponsibility = () => {
+        const now = new Date();
+        const nextRun = new Date(now);
+        nextRun.setHours(6, 0, 0, 0);
+
+        // If it's already past 06:00 today, schedule for tomorrow
+        if (now >= nextRun) {
+          nextRun.setDate(nextRun.getDate() + 1);
+        }
+
+        const msUntilRun = nextRun.getTime() - now.getTime();
+
+        setTimeout(async () => {
+          try {
+            console.log('📋 Running daily report responsibility assignment...');
+            const results = await processAllProjectResponsibilities();
+            console.log(`📋 Report responsibility complete: processed=${results.processed}, assigned=${results.assigned}, skipped=${results.skipped}, errors=${results.errors}`);
+          } catch (error) {
+            console.error('❌ Error in report responsibility assignment:', error);
+          }
+
+          // Schedule next run
+          scheduleReportResponsibility();
+        }, msUntilRun);
+
+        console.log(`📋 Report responsibility scheduled for ${nextRun.toISOString()}`);
+      };
+
+      scheduleReportResponsibility();
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);

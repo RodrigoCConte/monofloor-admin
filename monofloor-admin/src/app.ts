@@ -33,6 +33,10 @@ const allowedOrigins = [
   'https://app.monofloor.com.br',
   'https://admin.monofloor.com.br',
   'https://devoted-wholeness-production.up.railway.app',
+  // Hostinger VPS URLs
+  'https://admin.monofloor.cloud',
+  'https://app.monofloor.cloud',
+  'http://app.monofloor.cloud:8081',
 ].filter(Boolean);
 
 app.use(cors({

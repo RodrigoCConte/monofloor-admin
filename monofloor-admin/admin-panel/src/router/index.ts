@@ -78,6 +78,37 @@ const routes = [
     path: '/dashboard',
     redirect: '/',
   },
+  // Enterprise Modules
+  {
+    path: '/comercial',
+    name: 'Comercial',
+    component: () => import('../views/Comercial.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/piui',
+    name: 'PIUI',
+    component: () => import('../views/PIUI.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/planejamento',
+    name: 'Planejamento',
+    component: () => import('../views/Planejamento.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/posvenda',
+    name: 'PosVenda',
+    component: () => import('../views/PosVenda.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/enterprise',
+    name: 'Enterprise',
+    component: () => import('../views/Enterprise.vue'),
+    meta: { requiresAuth: true },
+  },
 ];
 
 const router = createRouter({

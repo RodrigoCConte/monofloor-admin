@@ -44,12 +44,13 @@ const validate = (req: any, res: any, next: any) => {
   next();
 };
 
-// GET /api/admin/projects - List all projects
+// GET /api/admin/projects - List all projects (excluding COMERCIAL by default)
 router.get(
   '/',
   adminAuth,
   [
     query('status').optional().isIn(['EM_EXECUCAO', 'PAUSADO', 'CONCLUIDO', 'CANCELADO']),
+    query('module').optional().isIn(['EXECUCAO', 'PLANEJAMENTO', 'FINALIZADO', 'POS_VENDA', 'COMERCIAL', 'ALL']),
     query('page').optional().isInt({ min: 1 }),
     query('limit').optional().isInt({ min: 1, max: 100 }),
     query('search').optional().trim(),
@@ -61,8 +62,19 @@ router.get(
       const limit = parseInt(req.query.limit as string) || 20;
       const status = req.query.status as ProjectStatus | undefined;
       const search = req.query.search as string | undefined;
+      const moduleFilter = req.query.module as string | undefined;
 
       const where: any = {};
+
+      // Filter by module - exclude COMERCIAL by default (Projects.vue is for operations, not sales)
+      if (moduleFilter === 'ALL') {
+        // Show all modules
+      } else if (moduleFilter) {
+        where.currentModule = moduleFilter;
+      } else {
+        // Default: show only EXECUCAO module (active construction projects)
+        where.currentModule = 'EXECUCAO';
+      }
 
       if (status) {
         where.status = status;
