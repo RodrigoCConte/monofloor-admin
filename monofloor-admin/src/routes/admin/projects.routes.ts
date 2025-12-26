@@ -752,7 +752,7 @@ router.post('/import', adminAuth, upload.single('file'), async (req, res, next) 
         adminUserId: req.user!.sub,
         action: 'IMPORT_PROJECTS',
         entityType: 'Project',
-        description: `Imported ${result.total} projects from Excel (${result.created} created, ${result.updated} updated, ${result.errors.length} errors)`,
+        description: `Imported ${result.total} projects from Excel (${result.created} created, ${result.updated} updated, ${result.skipped} skipped, ${result.errors.length} errors)`,
       },
     });
 
@@ -763,6 +763,10 @@ router.post('/import', adminAuth, upload.single('file'), async (req, res, next) 
         total: result.total,
         created: result.created,
         updated: result.updated,
+        skipped: result.skipped, // Projetos com status diferente de "Em Execução" ou "Obra Pausada"
+        skippedInfo: result.skipped > 0
+          ? 'Projetos com status diferente de "Em Execução" ou "Obra Pausada" foram ignorados'
+          : null,
         errors: result.errors,
       },
     });

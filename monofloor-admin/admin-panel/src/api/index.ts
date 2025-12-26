@@ -361,3 +361,186 @@ export const absencesApi = {
   getById: (id: string) => api.get(`/api/admin/absences/${id}`),
   acknowledge: (id: string) => api.post(`/api/admin/absences/${id}/acknowledge`),
 };
+
+// =============================================
+// COMERCIAL / CRM API
+// =============================================
+export const comercialApi = {
+  // Deals / Comercial Data
+  getAll: (params?: { status?: string; search?: string; page?: number; limit?: number }) =>
+    api.get('/api/admin/comercial', { params }),
+  getById: (id: string) => api.get(`/api/admin/comercial/${id}`),
+  create: (data: any) => api.post('/api/admin/comercial', data),
+  update: (id: string, data: any) => api.put(`/api/admin/comercial/${id}`, data),
+  updateStatus: (id: string, status: string, motivoPerda?: string) =>
+    api.put(`/api/admin/comercial/${id}/status`, { status, motivoPerda }),
+
+  // Stats & Analytics (Basic)
+  getStats: () => api.get('/api/admin/comercial/stats'),
+  getAnalytics: () => api.get('/api/admin/comercial/analytics'),
+  getPipeline: () => api.get('/api/admin/comercial/pipeline'),
+
+  // Analytics Avançado (FASE 3)
+  getAnalyticsOverview: (period?: number) =>
+    api.get('/api/admin/comercial/analytics/overview', { params: { period } }),
+  getAnalyticsFunnel: (period?: number) =>
+    api.get('/api/admin/comercial/analytics/funnel', { params: { period } }),
+  getAnalyticsForecast: () =>
+    api.get('/api/admin/comercial/analytics/forecast'),
+  getAnalyticsPerformance: (period?: number) =>
+    api.get('/api/admin/comercial/analytics/performance', { params: { period } }),
+  getAnalyticsCycleTime: (period?: number) =>
+    api.get('/api/admin/comercial/analytics/cycle-time', { params: { period } }),
+  getAnalyticsLostReasons: (period?: number) =>
+    api.get('/api/admin/comercial/analytics/lost-reasons', { params: { period } }),
+  getAnalyticsTrends: (period?: number, interval?: 'week' | 'month') =>
+    api.get('/api/admin/comercial/analytics/trends', { params: { period, interval } }),
+
+  // Pipeline Stages (Customizable)
+  getStages: () => api.get('/api/admin/comercial/stages'),
+  getStageGroups: () => api.get('/api/admin/comercial/stages/groups'),
+  seedStages: () => api.post('/api/admin/comercial/stages/seed'),
+  createStage: (data: {
+    name: string;
+    slug: string;
+    color?: string;
+    probability?: number;
+    groupName: string;
+    groupColor?: string;
+    icon?: string;
+    autoMoveDays?: number;
+    autoMoveToId?: string;
+  }) => api.post('/api/admin/comercial/stages', data),
+  updateStage: (id: string, data: {
+    name?: string;
+    color?: string;
+    probability?: number;
+    groupName?: string;
+    groupColor?: string;
+    icon?: string;
+    autoMoveDays?: number | null;
+    autoMoveToId?: string | null;
+    isActive?: boolean;
+  }) => api.put(`/api/admin/comercial/stages/${id}`, data),
+  deleteStage: (id: string) => api.delete(`/api/admin/comercial/stages/${id}`),
+  reorderStages: (stages: { id: string; sortOrder: number }[]) =>
+    api.put('/api/admin/comercial/stages/reorder', { stages }),
+
+  // Proposals
+  createProposal: (comercialId: string, data: {
+    valorTotal: number;
+    valorM2?: number;
+    desconto?: number;
+    descricao?: string;
+    escopoUrl?: string;
+    validadeAte?: string;
+  }) => api.post(`/api/admin/comercial/${comercialId}/propostas`, data),
+  sendProposal: (propostaId: string) =>
+    api.put(`/api/admin/comercial/propostas/${propostaId}/enviar`),
+  approveProposal: (propostaId: string) =>
+    api.put(`/api/admin/comercial/propostas/${propostaId}/aprovar`),
+
+  // Follow-ups
+  createFollowUp: (comercialId: string, data: {
+    tipo: string;
+    canal: string;
+    mensagem?: string;
+    agendadoPara?: string;
+  }) => api.post(`/api/admin/comercial/${comercialId}/followups`, data),
+  completeFollowUp: (followUpId: string, resultado: string) =>
+    api.put(`/api/admin/comercial/followups/${followUpId}/realizar`, { resultado }),
+  getTodayFollowUps: () => api.get('/api/admin/comercial/followups/hoje'),
+};
+
+// =============================================
+// LEAD SCORING API
+// =============================================
+export const leadScoringApi = {
+  // Rules
+  getRules: (params?: { category?: string; isActive?: boolean }) =>
+    api.get('/api/admin/comercial/scoring/rules', { params }),
+  getRule: (id: string) => api.get(`/api/admin/comercial/scoring/rules/${id}`),
+  createRule: (data: {
+    name: string;
+    description?: string;
+    category: string;
+    condition: any;
+    points: number;
+    maxPoints?: number;
+    priority?: number;
+  }) => api.post('/api/admin/comercial/scoring/rules', data),
+  updateRule: (id: string, data: any) =>
+    api.put(`/api/admin/comercial/scoring/rules/${id}`, data),
+  deleteRule: (id: string) =>
+    api.delete(`/api/admin/comercial/scoring/rules/${id}`),
+  seedDefaultRules: () =>
+    api.post('/api/admin/comercial/scoring/rules/seed'),
+
+  // Score calculation
+  getScore: (comercialId: string) =>
+    api.get(`/api/admin/comercial/${comercialId}/score`),
+  getScoreHistory: (comercialId: string) =>
+    api.get(`/api/admin/comercial/${comercialId}/score/history`),
+  recalculateAll: () =>
+    api.post('/api/admin/comercial/scoring/recalculate-all'),
+};
+
+// =============================================
+// CRM AUTOMATIONS API
+// =============================================
+export const automationsApi = {
+  getAll: (params?: { isActive?: boolean; triggerType?: string }) =>
+    api.get('/api/admin/comercial/automations', { params }),
+  getById: (id: string) => api.get(`/api/admin/comercial/automations/${id}`),
+  create: (data: {
+    name: string;
+    description?: string;
+    triggerType: string;
+    triggerConfig: any;
+    conditions?: any[];
+    actions: any[];
+  }) => api.post('/api/admin/comercial/automations', data),
+  update: (id: string, data: any) =>
+    api.put(`/api/admin/comercial/automations/${id}`, data),
+  delete: (id: string) =>
+    api.delete(`/api/admin/comercial/automations/${id}`),
+  toggle: (id: string, isActive: boolean) =>
+    api.put(`/api/admin/comercial/automations/${id}`, { isActive }),
+  getLogs: (id: string, params?: { limit?: number; offset?: number }) =>
+    api.get(`/api/admin/comercial/automations/${id}/logs`, { params }),
+  testAutomation: (id: string, comercialId?: string) =>
+    api.post(`/api/admin/comercial/automations/${id}/test`, { comercialId }),
+};
+
+// =============================================
+// WHATSAPP TEMPLATES API
+// =============================================
+export const whatsappApi = {
+  // Templates
+  getTemplates: (params?: { category?: string; isActive?: boolean }) =>
+    api.get('/api/admin/comercial/whatsapp/templates', { params }),
+  getTemplate: (id: string) =>
+    api.get(`/api/admin/comercial/whatsapp/templates/${id}`),
+  createTemplate: (data: {
+    name: string;
+    description?: string;
+    content: string;
+    category?: string;
+  }) => api.post('/api/admin/comercial/whatsapp/templates', data),
+  updateTemplate: (id: string, data: any) =>
+    api.put(`/api/admin/comercial/whatsapp/templates/${id}`, data),
+  deleteTemplate: (id: string) =>
+    api.delete(`/api/admin/comercial/whatsapp/templates/${id}`),
+
+  // Send messages
+  sendMessage: (data: {
+    comercialId?: string;
+    templateId?: string;
+    phoneNumber: string;
+    message: string;
+  }) => api.post('/api/admin/comercial/whatsapp/send', data),
+
+  // Message logs
+  getMessageLogs: (params?: { comercialId?: string; status?: string; limit?: number }) =>
+    api.get('/api/admin/comercial/whatsapp/logs', { params }),
+};

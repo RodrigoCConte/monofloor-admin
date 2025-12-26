@@ -1,5 +1,5 @@
 // API Configuration
-const API_URL = 'https://devoted-wholeness-production.up.railway.app'; // Production
+const API_URL = 'https://admin.monofloor.cloud'; // Production
 // const API_URL = 'http://localhost:3001'; // Local server for testing
 
 // =============================================
@@ -1541,6 +1541,12 @@ function initSocketConnection() {
         );
 
         console.log('[GPS] Auto-checkout complete - UI updated, state cleared');
+    });
+
+    // Listen for report responsibility updates
+    socket.on('report:responsibility', (data) => {
+        console.log('[Socket] Report responsibility event:', data);
+        handleResponsibilityUpdate(data);
     });
 
     // Listen for punctuality multiplier notification (first check-in of day)
@@ -3572,7 +3578,7 @@ let allProjectTasksFromModal = [];
 // =============================================
 // GEOFENCING SYSTEM
 // =============================================
-const GEOFENCE_RADIUS_METERS = 200; // Raio do geofencing em metros
+const GEOFENCE_RADIUS_METERS = 70; // Raio do geofencing em metros
 let geolocationWatchId = null;
 let currentUserLocation = null;
 let geolocationState = 'loading'; // 'loading' | 'valid' | 'invalid' | 'error' | 'permission_denied'
@@ -3581,7 +3587,7 @@ let currentDistanceToProject = null;
 // =============================================
 // AUTO-CHECKOUT SYSTEM (quando sai da área >100m)
 // =============================================
-const AUTO_CHECKOUT_DISTANCE_METERS = 100; // Distância para trigger de auto-checkout
+const AUTO_CHECKOUT_DISTANCE_METERS = 70; // Distância para trigger de auto-checkout
 const AUTO_CHECKOUT_COUNTDOWN_SECONDS = 30; // Tempo para responder antes do auto-checkout
 let autoCheckoutCountdownInterval = null;
 let autoCheckoutTimeRemaining = AUTO_CHECKOUT_COUNTDOWN_SECONDS;
@@ -3862,7 +3868,13 @@ function showAutoCheckoutWarning() {
     }
 
     if (modal) {
-        modal.classList.add('show');
+        modal.classList.add('active');
+        // Vibrar para chamar atenção
+        if (navigator.vibrate) {
+            navigator.vibrate([200, 100, 200, 100, 200]);
+        }
+    } else {
+        console.error('[Auto-checkout] Modal não encontrado no DOM!');
     }
 
     // Iniciar countdown
@@ -3884,7 +3896,7 @@ function cancelAutoCheckoutWarning() {
     // Fechar modal
     const modal = document.getElementById('auto-checkout-warning-modal');
     if (modal) {
-        modal.classList.remove('show');
+        modal.classList.remove('active');
     }
 
     console.log('[Auto-checkout] Aviso cancelado (usuário voltou para área)');
@@ -3945,7 +3957,7 @@ async function executeAutoCheckout() {
     // Fechar modal de aviso
     const warningModal = document.getElementById('auto-checkout-warning-modal');
     if (warningModal) {
-        warningModal.classList.remove('show');
+        warningModal.classList.remove('active');
     }
     isAutoCheckoutWarningShown = false;
 
@@ -4060,7 +4072,7 @@ async function doCheckoutWithReason(reason, isAutoCheckout = false) {
 function showAutoCheckoutDoneModal() {
     const modal = document.getElementById('auto-checkout-done-modal');
     if (modal) {
-        modal.classList.add('show');
+        modal.classList.add('active');
     }
 }
 
@@ -4068,7 +4080,7 @@ function showAutoCheckoutDoneModal() {
 function closeAutoCheckoutDoneModal() {
     const modal = document.getElementById('auto-checkout-done-modal');
     if (modal) {
-        modal.classList.remove('show');
+        modal.classList.remove('active');
     }
     lastAutoCheckoutCheckinId = null;
 }
@@ -4083,7 +4095,7 @@ function showAutoCheckoutJustifyModal() {
     // Fechar modal de confirmação
     const doneModal = document.getElementById('auto-checkout-done-modal');
     if (doneModal) {
-        doneModal.classList.remove('show');
+        doneModal.classList.remove('active');
     }
 
     // Abrir modal de justificativa
@@ -4096,7 +4108,7 @@ function showAutoCheckoutJustifyModal() {
     }
 
     if (justifyModal) {
-        justifyModal.classList.add('show');
+        justifyModal.classList.add('active');
     }
 }
 
@@ -4104,7 +4116,7 @@ function showAutoCheckoutJustifyModal() {
 function closeAutoCheckoutJustifyModal() {
     const modal = document.getElementById('auto-checkout-justify-modal');
     if (modal) {
-        modal.classList.remove('show');
+        modal.classList.remove('active');
     }
 }
 
@@ -6652,6 +6664,9 @@ async function openProject(projectId) {
             // Atualizar a equipe na tela
             renderProjectTeam(data.data.team || []);
 
+            // Load report responsibility for today
+            loadReportResponsibility(projectId);
+
             // Load tasks if user is checked in to this project
             if (isCheckedIn && activeCheckinId) {
                 loadProjectTasks(projectId);
@@ -6709,6 +6724,241 @@ function getRoleLabel(role) {
     return labels[role] || role || 'Membro';
 }
 
+// =============================================
+// REPORT RESPONSIBILITY MANAGEMENT
+// =============================================
+
+let currentResponsibility = null;
+let selectedTransferMemberId = null;
+
+// Load report responsibility for current project
+async function loadReportResponsibility(projectId) {
+    const section = document.getElementById('reportResponsibilitySection');
+    if (!section) return;
+
+    try {
+        const token = getAuthToken();
+        if (!token) {
+            section.style.display = 'none';
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/api/mobile/report-responsibility/today?projectId=${projectId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.data) {
+            currentResponsibility = data.data;
+            renderReportResponsibility(data.data);
+            section.style.display = 'block';
+        } else {
+            // No responsibility assigned yet (before 6AM)
+            section.style.display = 'none';
+            currentResponsibility = null;
+        }
+    } catch (error) {
+        console.error('[Responsibility] Error loading:', error);
+        section.style.display = 'none';
+    }
+}
+
+// Render responsibility card
+function renderReportResponsibility(responsibility) {
+    const nameEl = document.getElementById('responsibleName');
+    const statusEl = document.getElementById('responsibleStatus');
+    const avatarEl = document.getElementById('responsibleAvatar');
+    const transferBtn = document.getElementById('btnTransferResponsibility');
+
+    if (!nameEl || !statusEl || !avatarEl) return;
+
+    nameEl.textContent = responsibility.responsibleUserName || 'Carregando...';
+
+    // Check if current user is responsible
+    const isCurrentUser = responsibility.isCurrentUserResponsible;
+
+    if (isCurrentUser) {
+        statusEl.textContent = 'Voce e o responsavel';
+        statusEl.classList.add('is-you');
+        if (transferBtn) transferBtn.style.display = 'block';
+    } else {
+        if (responsibility.wasTransferred) {
+            statusEl.textContent = `Transferido de ${responsibility.originalUserName || 'outro membro'}`;
+        } else {
+            statusEl.textContent = 'Responsavel do dia';
+        }
+        statusEl.classList.remove('is-you');
+        if (transferBtn) transferBtn.style.display = 'none';
+    }
+
+    // Avatar
+    const initials = (responsibility.responsibleUserName || '??')
+        .split(' ')
+        .map(n => n[0])
+        .join('')
+        .substring(0, 2)
+        .toUpperCase();
+    avatarEl.innerHTML = initials;
+}
+
+// Open transfer modal
+async function openTransferModal() {
+    const modal = document.getElementById('transferResponsibilityModal');
+    const teamList = document.getElementById('transferTeamList');
+
+    if (!modal || !teamList || !selectedProject) return;
+
+    // Reset state
+    selectedTransferMemberId = null;
+    document.getElementById('btnConfirmTransfer').disabled = true;
+    document.getElementById('transferReason').value = '';
+
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+    teamList.innerHTML = '<div class="loading-team">Carregando equipe...</div>';
+
+    try {
+        const token = getAuthToken();
+        if (!token) {
+            teamList.innerHTML = '<div class="empty-team">Erro: Nao autenticado</div>';
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/api/mobile/report-responsibility/team/${selectedProject.id}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.data && data.data.length > 0) {
+            teamList.innerHTML = data.data.map(member => {
+                const initials = (member.name || '??')
+                    .split(' ')
+                    .map(n => n[0])
+                    .join('')
+                    .substring(0, 2)
+                    .toUpperCase();
+
+                const photoHtml = member.photoUrl
+                    ? `<img src="${getPhotoUrl(member.photoUrl)}" alt="${member.name}">`
+                    : initials;
+
+                const roleLabel = getRoleLabel(member.role);
+
+                return `
+                    <div class="transfer-team-member" onclick="selectTeamMemberForTransfer('${member.id}', this)">
+                        <div class="member-avatar">${photoHtml}</div>
+                        <div class="member-info">
+                            <span class="member-name">${member.name || 'Sem nome'}</span>
+                            <span class="member-role">${roleLabel}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } else {
+            teamList.innerHTML = '<div class="empty-team">Nenhum outro membro na equipe</div>';
+        }
+    } catch (error) {
+        console.error('[Transfer] Error loading team:', error);
+        teamList.innerHTML = '<div class="empty-team">Erro ao carregar equipe</div>';
+    }
+}
+
+// Close transfer modal
+function closeTransferModal() {
+    const modal = document.getElementById('transferResponsibilityModal');
+    if (modal) {
+        modal.classList.remove('active');
+        modal.style.display = 'none';
+    }
+    selectedTransferMemberId = null;
+}
+
+// Select team member for transfer
+function selectTeamMemberForTransfer(memberId, element) {
+    // Remove selection from others
+    document.querySelectorAll('.transfer-team-member').forEach(el => {
+        el.classList.remove('selected');
+    });
+
+    // Add selection to clicked
+    element.classList.add('selected');
+    selectedTransferMemberId = memberId;
+
+    // Enable confirm button
+    document.getElementById('btnConfirmTransfer').disabled = false;
+}
+
+// Confirm transfer
+async function confirmTransfer() {
+    if (!currentResponsibility || !selectedTransferMemberId) {
+        alert('Selecione um membro para transferir');
+        return;
+    }
+
+    const reason = document.getElementById('transferReason').value;
+    const confirmBtn = document.getElementById('btnConfirmTransfer');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Transferindo...';
+
+    try {
+        const token = getAuthToken();
+        if (!token) {
+            alert('Erro: Nao autenticado');
+            return;
+        }
+
+        const response = await fetch(`${API_URL}/api/mobile/report-responsibility/transfer`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                responsibilityId: currentResponsibility.id,
+                newResponsibleUserId: selectedTransferMemberId,
+                reason: reason || undefined
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            closeTransferModal();
+            showSuccessModal('Transferido!', 'A responsabilidade foi transferida com sucesso.');
+            // Reload responsibility
+            if (selectedProject) {
+                loadReportResponsibility(selectedProject.id);
+            }
+        } else {
+            alert(data.error?.message || 'Erro ao transferir responsabilidade');
+        }
+    } catch (error) {
+        console.error('[Transfer] Error:', error);
+        alert('Erro ao transferir responsabilidade');
+    } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Confirmar';
+    }
+}
+
+// Handle socket event for responsibility updates
+function handleResponsibilityUpdate(data) {
+    console.log('[Socket] Responsibility update:', data);
+
+    if (data.type === 'ASSIGNED') {
+        showToast(`Voce e o responsavel pelo relatorio de hoje no projeto ${data.projectName}`);
+    } else if (data.type === 'RECEIVED') {
+        showToast(`${data.transferredFrom} transferiu a responsabilidade do relatorio para voce`);
+    }
+
+    // Reload responsibility if on project detail screen
+    if (selectedProject) {
+        loadReportResponsibility(selectedProject.id);
+    }
+}
+
 // Atualizar tela de detalhes com dados do projeto
 function updateProjectDetailScreen(project) {
     // Atualizar título do header
@@ -6750,7 +7000,7 @@ function updateProjectDetailScreen(project) {
         const iconUrl = getCharacterIcon(user?.role);
         const positionDot = mapMarker.querySelector('.position-dot');
         if (positionDot) {
-            positionDot.innerHTML = `<img src="${iconUrl}" alt="Você" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+            positionDot.innerHTML = `<img src="${iconUrl}" alt="Você" style="width: 100%; height: 100%; object-fit: contain;">`;
         }
     }
 
@@ -14688,7 +14938,7 @@ const CHECKIN_SIMULATION_STEPS = [
         id: 'sim-far',
         scenario: 'FAR',
         title: '📍 Longe da obra',
-        content: 'Quando você está <strong>longe</strong> (mais de 200m), o botão de check-in fica desabilitado.',
+        content: 'Quando você está <strong>longe</strong> (mais de 70m), o botão de check-in fica desabilitado.',
         distance: '500m'
     },
     {
@@ -14880,7 +15130,14 @@ function showTutorialStep(stepIndex) {
         // Posicionar spotlight pulsante no elemento (coordenadas do viewport)
         const rect = targetElement.getBoundingClientRect();
         const phoneFrame = document.querySelector('.phone-frame');
-        const phoneRect = phoneFrame ? phoneFrame.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+        const phoneRect = phoneFrame ? phoneFrame.getBoundingClientRect() : {
+            left: 0,
+            top: 0,
+            width: window.innerWidth,
+            height: window.innerHeight,
+            right: window.innerWidth,
+            bottom: window.innerHeight
+        };
 
         const pulseSize = 60;
         // Usar coordenadas do viewport diretamente
@@ -15290,7 +15547,7 @@ function createSimulationElements() {
             <div id="simMessage" class="sim-message">
                 <div id="simMessageTitle" class="sim-message-title">Longe da obra</div>
                 <div id="simMessageContent" class="sim-message-content">
-                    Quando você está <strong>longe</strong> (mais de 200m), o botão de check-in fica desabilitado.
+                    Quando você está <strong>longe</strong> (mais de 70m), o botão de check-in fica desabilitado.
                 </div>
             </div>
             <div class="sim-controls">

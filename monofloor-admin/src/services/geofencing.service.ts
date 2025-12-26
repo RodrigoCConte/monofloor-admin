@@ -42,7 +42,7 @@ export function isOutOfArea(
   userLng: number,
   projectLat: number,
   projectLng: number,
-  radiusMeters: number = 200
+  radiusMeters: number = 70
 ): boolean {
   const distance = calculateDistance(userLat, userLng, projectLat, projectLng);
   return distance > radiusMeters;
@@ -56,7 +56,7 @@ export function getGeofenceStatus(
   userLng: number,
   projectLat: number | null,
   projectLng: number | null,
-  radiusMeters: number = 200
+  radiusMeters: number = 70
 ): {
   isOutOfArea: boolean;
   distance: number | null;

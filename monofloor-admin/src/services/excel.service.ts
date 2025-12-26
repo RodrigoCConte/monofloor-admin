@@ -28,11 +28,12 @@ export interface ImportResult {
   total: number;
   created: number;
   updated: number;
+  skipped: number; // Projetos com status não permitido (ex: concluído, cancelado)
   errors: Array<{ row: number; error: string }>;
 }
 
 const STATUS_MAP: Record<string, ProjectStatus> = {
-  // Portuguese variations
+  // EM EXECUÇÃO - Projetos ativos
   'em execução': 'EM_EXECUCAO',
   'em execucao': 'EM_EXECUCAO',
   'execução': 'EM_EXECUCAO',
@@ -40,17 +41,49 @@ const STATUS_MAP: Record<string, ProjectStatus> = {
   'ativo': 'EM_EXECUCAO',
   'em andamento': 'EM_EXECUCAO',
   'fazendo': 'EM_EXECUCAO',
+
+  // PAUSADO - Obras pausadas
   'pausado': 'PAUSADO',
   'parado': 'PAUSADO',
+  'obra pausada': 'PAUSADO',
+  'pausada': 'PAUSADO',
+  'suspenso': 'PAUSADO',
+  'aguardando': 'PAUSADO',
+
+  // CONCLUÍDO - Finalizados
   'concluído': 'CONCLUIDO',
   'concluido': 'CONCLUIDO',
   'finalizado': 'CONCLUIDO',
+  'entregue': 'CONCLUIDO',
+
+  // CANCELADO
   'cancelado': 'CANCELADO',
-  // Pipefy phases
-  'caixa de entrada': 'EM_EXECUCAO',
-  'início': 'EM_EXECUCAO',
-  'inicio': 'EM_EXECUCAO',
+  'cancelada': 'CANCELADO',
 };
+
+// Fases do Pipefy que devem ser importadas (apenas Em Execução e Obra Pausada)
+const ALLOWED_PIPEFY_PHASES = [
+  'em execução',
+  'em execucao',
+  'obra pausada',
+  'pausado',
+  'pausada',
+];
+
+/**
+ * Check if a Pipefy phase should be imported
+ * Only "Em Execução" and "Obra Pausada" are allowed
+ */
+function isAllowedPhase(value: string | undefined): boolean {
+  if (!value) return true; // If no status, allow it (will default to EM_EXECUCAO)
+  const normalized = value.toLowerCase().trim();
+
+  // Check if it's one of the allowed phases
+  return ALLOWED_PIPEFY_PHASES.some(phase => normalized.includes(phase)) ||
+         normalized.includes('execução') ||
+         normalized.includes('execucao') ||
+         normalized.includes('pausad');
+}
 
 function parseStatus(value: string | undefined): ProjectStatus {
   if (!value) return 'EM_EXECUCAO';
@@ -78,77 +111,122 @@ function normalizeHeaders(row: any): ProjectImportRow {
 
     // Map common variations including Pipefy columns
     const keyMap: Record<string, string> = {
-      // Titulo / Nome do projeto
+      // Titulo / Nome do projeto (Pipefy usa "Title" por padrão)
       'titulo': 'titulo',
       'title': 'titulo',
       'nome': 'titulo',
       'projeto': 'titulo',
+      'nome_do_projeto': 'titulo',
+      'card': 'titulo',
+
       // Cliente
       'cliente': 'cliente',
       'client': 'cliente',
-      // Endereco
+      'nome_do_cliente': 'cliente',
+      'cliente_nome': 'cliente',
+
+      // Endereço (Pipefy pode usar várias variações)
       'endereco': 'endereco',
       'address': 'endereco',
       'localizacao': 'endereco',
-      // M2 Total
+      'local': 'endereco',
+      'endereco_da_obra': 'endereco',
+      'endereco_completo': 'endereco',
+      'local_da_obra': 'endereco',
+
+      // M² Total
       'm2_total': 'm2_total',
-      'm²_total': 'm2_total', // Pipefy: "M² Total"
+      'm²_total': 'm2_total',
       'm2total': 'm2_total',
       'area_total': 'm2_total',
       'total_m2': 'm2_total',
-      // Piso
+      'metragem_total': 'm2_total',
+      'area': 'm2_total',
+
+      // Piso (m²)
       'm2_piso': 'm2_piso',
       'm²_piso': 'm2_piso',
       'm2piso': 'm2_piso',
       'piso_m2': 'm2_piso',
       'piso_m²': 'm2_piso',
-      'piso_m2_': 'm2_piso', // Pipefy: "Piso (m²)"
+      'piso_m2_': 'm2_piso',
       'piso_m²_': 'm2_piso',
-      // Parede
+      'piso': 'm2_piso',
+
+      // Parede (m²)
       'm2_parede': 'm2_parede',
       'm²_parede': 'm2_parede',
       'm2parede': 'm2_parede',
       'parede_m2': 'm2_parede',
       'parede_m²': 'm2_parede',
-      'parede_m2_': 'm2_parede', // Pipefy: "Parede (m²)"
+      'parede_m2_': 'm2_parede',
       'parede_m²_': 'm2_parede',
-      // Teto
+      'parede': 'm2_parede',
+
+      // Teto (m²)
       'm2_teto': 'm2_teto',
       'm²_teto': 'm2_teto',
       'm2teto': 'm2_teto',
       'teto_m2': 'm2_teto',
       'teto_m²': 'm2_teto',
-      'teto_m2_': 'm2_teto', // Pipefy: "Teto (m²)"
+      'teto_m2_': 'm2_teto',
       'teto_m²_': 'm2_teto',
-      // Rodape
+      'teto': 'm2_teto',
+      'forro': 'm2_teto',
+
+      // Rodapé (m linear)
       'm_rodape': 'm_rodape',
       'mrodape': 'm_rodape',
-      'rodape_m_linear': 'm_rodape', // Pipefy: "Rodapé (m linear)"
+      'rodape_m_linear': 'm_rodape',
       'rodape_m_linear_': 'm_rodape',
-      // Status
+      'rodape': 'm_rodape',
+      'm_linear_rodape': 'm_rodape',
+
+      // Status / Fase atual (IMPORTANTE: usado para filtrar)
       'status': 'status',
       'situacao': 'status',
-      'fase_atual': 'status', // Pipefy: "Fase atual"
-      // Consultor
+      'fase_atual': 'status',
+      'fase': 'status',
+      'current_phase': 'status',
+      'estagio': 'status',
+
+      // Consultor / Vendedor / Responsável
       'consultor': 'consultor',
       'vendedor': 'consultor',
-      // Material
+      'responsavel': 'consultor',
+      'responsavel_comercial': 'consultor',
+      'responsavel_pela_obra': 'consultor',
+
+      // Material / Tipo de aplicação
       'material': 'material',
       'tipo': 'material',
+      'tipo_de_material': 'material',
+      'tipo_aplicacao': 'material',
+
       // Cor
       'cor': 'cor',
       'color': 'cor',
-      // Horas
+      'cor_do_piso': 'cor',
+      'acabamento': 'cor',
+
+      // Horas estimadas
       'horas_estimadas': 'horas_estimadas',
       'horas': 'horas_estimadas',
       'estimativa_horas': 'horas_estimadas',
-      // Pipefy specific
+      'previsao_horas': 'horas_estimadas',
+
+      // Pipefy specific fields
       'codigo': 'codigo',
       'code': 'codigo',
+      'id': 'codigo',
+      'card_id': 'codigo',
       'equipe': 'equipe',
+      'time': 'equipe',
       'especiais': 'especiais',
       'detalhamento': 'detalhamento',
+      'descricao': 'detalhamento',
       'andamento': 'andamento',
+      'progresso': 'andamento',
     };
 
     const mappedKey = keyMap[normalizedKey] || normalizedKey;
@@ -173,12 +251,14 @@ export const excelService = {
 
   /**
    * Import projects from Excel data
+   * Only imports projects with status "Em Execução" or "Obra Pausada"
    */
   async importProjects(data: ProjectImportRow[]): Promise<ImportResult> {
     const result: ImportResult = {
       total: data.length,
       created: 0,
       updated: 0,
+      skipped: 0,
       errors: [],
     };
 
@@ -187,6 +267,13 @@ export const excelService = {
       const rowNum = i + 2; // +2 because Excel rows start at 1 and we skip header
 
       try {
+        // Filter: Only import "Em Execução" and "Obra Pausada" phases
+        if (!isAllowedPhase(row.status)) {
+          result.skipped++;
+          console.log(`Row ${rowNum}: Skipped (status: ${row.status})`);
+          continue;
+        }
+
         // Validate required field
         if (!row.titulo || String(row.titulo).trim() === '') {
           result.errors.push({ row: rowNum, error: 'Título é obrigatório' });
@@ -248,6 +335,8 @@ export const excelService = {
           cor: row.cor ? String(row.cor).trim() : null,
           estimatedHours: row.horas_estimadas ? parseNumber(row.horas_estimadas) : null,
           pipefyCardId: pipefyCardId,
+          // IMPORTANTE: Projetos importados da planilha vão para o módulo EXECUCAO
+          currentModule: 'EXECUCAO',
         };
 
         // Only add coordinates if we have them

@@ -21,12 +21,6 @@
     box-sizing: border-box;
 }
 
-/* Safari iOS - permitir que elementos usem -webkit-fill-available */
-html {
-    height: 100%;
-    height: -webkit-fill-available;
-}
-
 :root {
     --bg-primary: #000000;
     --bg-secondary: #0a0a0a;
@@ -77,45 +71,38 @@ html {
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    background-color: #000;
+    background-color: #1a1a1a; /* Dark gray background for desktop */
     min-height: 100vh;
-    min-height: 100dvh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile */
     margin: 0;
     padding: 0;
+    overflow: hidden;
+    -webkit-overflow-scrolling: touch;
 }
 
-/* Desktop: centralizar e adicionar padding */
+/* Desktop container - centers app with max-width */
 @media (min-width: 481px) {
     body {
-        background-color: #1a1a1a;
         display: flex;
         justify-content: center;
-        align-items: flex-start;
-        padding: 20px;
+        align-items: center;
+        background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
     }
 }
 
 /* Phone Frame */
 .phone-frame {
-    width: 100%;
-    min-height: 100vh;
-    min-height: 100dvh; /* Dynamic viewport height - considera barra de URL do mobile */
+    width: 375px;
+    height: 812px;
     background-color: var(--bg-primary);
+    border-radius: 40px;
     position: relative;
     overflow: hidden;
-    margin: 0 auto;
-}
-
-/* Desktop: limitar largura e adicionar delimitador */
-@media (min-width: 481px) {
-    .phone-frame {
-        max-width: 430px;
-        box-shadow: -1px 0 0 rgba(255,255,255,0.1), 1px 0 0 rgba(255,255,255,0.1);
-    }
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    border: 8px solid #333;
 }
 
 .phone-notch {
-    display: none;
     position: absolute;
     top: 0;
     left: 50%;
@@ -129,20 +116,43 @@ body {
 
 /* Screen Base */
 .screen {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
+    right: 0;
+    bottom: 0;
     width: 100%;
     height: 100%;
+    height: 100dvh; /* Dynamic viewport height */
     background-color: var(--bg-primary);
     display: none;
     flex-direction: column;
-    padding-top: 50px;
+    padding-top: env(safe-area-inset-top, 20px); /* Respect notch/status bar */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    padding-left: env(safe-area-inset-left, 0);
+    padding-right: env(safe-area-inset-right, 0);
     overflow: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .screen.active {
     display: flex;
+}
+
+/* Desktop: Constrained width for app-like appearance */
+@media (min-width: 481px) {
+    .screen {
+        width: 430px;
+        max-width: 430px;
+        left: 50%;
+        right: auto;
+        margin-left: -215px; /* Half of width */
+        transform: none;
+        border-left: 1px solid var(--border-color);
+        border-right: 1px solid var(--border-color);
+        box-shadow: 0 0 60px rgba(0, 0, 0, 0.5);
+    }
 }
 
 /* Login Screen */
@@ -497,7 +507,8 @@ body {
 .content {
     flex: 1;
     overflow-y: auto;
-    padding: 0 20px 100px;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 20px calc(120px + env(safe-area-inset-bottom, 20px));
 }
 
 /* Location Banner */
@@ -3883,18 +3894,33 @@ body {
 
 /* Bottom Navigation */
 .bottom-nav {
-    position: absolute;
+    position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    height: 80px;
+    height: calc(100px + env(safe-area-inset-bottom, 20px));
     background-color: var(--bg-card);
     border-top: 1px solid var(--border-color);
     display: flex;
     justify-content: space-around;
-    align-items: center;
-    padding-bottom: 10px;
-    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); /* Safe area para mobile */
+    align-items: flex-start;
+    padding-top: 12px;
+    padding-bottom: calc(30px + env(safe-area-inset-bottom, 20px));
+    z-index: 100;
+}
+
+/* Desktop: Bottom nav constrained to app width */
+@media (min-width: 481px) {
+    .bottom-nav {
+        width: 430px;
+        max-width: 430px;
+        left: 50%;
+        right: auto;
+        margin-left: -215px;
+        transform: none;
+        border-left: 1px solid var(--border-color);
+        border-right: 1px solid var(--border-color);
+    }
 }
 
 .nav-item {
@@ -5033,6 +5059,14 @@ body {
     animation: slideDown 0.3s ease;
 }
 
+@media (min-width: 481px) {
+    .location-denied-banner {
+        max-width: 430px;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+}
+
 @keyframes slideDown {
     from {
         transform: translateY(-100%);
@@ -5048,8 +5082,8 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    max-width: 375px;
-    margin: 0 auto;
+    max-width: 100%;
+    padding: 0 20px;
 }
 
 .location-denied-banner span {
@@ -5073,12 +5107,20 @@ body {
     animation: slideDown 0.3s ease;
 }
 
+@media (min-width: 481px) {
+    .network-status-banner {
+        max-width: 430px;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+}
+
 .network-status-banner .banner-content {
     display: flex;
     align-items: center;
     gap: 12px;
-    max-width: 375px;
-    margin: 0 auto;
+    max-width: 100%;
+    padding: 0 20px;
 }
 
 .network-status-banner span {
@@ -5102,6 +5144,14 @@ body {
     box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
 }
 
+@media (min-width: 481px) {
+    .gps-off-alert-banner {
+        max-width: 430px;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+}
+
 .gps-off-alert-banner.pulse-alert {
     animation: slideDown 0.3s ease, gpsAlertPulse 2s infinite;
 }
@@ -5119,8 +5169,8 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    max-width: 375px;
-    margin: 0 auto;
+    max-width: 100%;
+    padding: 0 20px;
 }
 
 .gps-alert-icon {
@@ -16376,24 +16426,14 @@ body {
     position: fixed;
     top: 0;
     left: 0;
-    right: 0;
-    /* bottom: 0 não funciona bem com barra do Safari, usar altura */
-    width: 100%;
-    /* Altura total da viewport (inclui área sob barra do Safari) */
+    width: 100vw;
     height: 100vh;
-    min-height: 100vh;
-    min-height: -webkit-fill-available; /* Safari iOS */
-    background: rgba(0, 0, 0, 0.98);
+    background: rgba(0, 0, 0, 0.95);
     z-index: 9998;
     display: none;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     flex-direction: column;
-    /* Padding grande embaixo para conteúdo ficar acima da barra */
-    padding: 15px 10px 90px 10px;
-    box-sizing: border-box;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
 }
 
 .checkin-simulation.active {
@@ -16409,31 +16449,13 @@ body {
 /* Mockup do telefone na simulação */
 .sim-phone {
     width: 280px;
-    height: calc(100% - 220px); /* Deixa espaço para mensagem e botões */
-    max-height: 500px;
-    min-height: 280px;
+    height: 680px;
     background: var(--bg-primary);
     border-radius: 32px;
     border: 6px solid #333;
     position: relative;
     overflow: hidden;
     box-shadow: 0 25px 80px rgba(0, 0, 0, 0.8);
-    flex-shrink: 1;
-}
-
-/* Telas muito pequenas - reduzir mais */
-@media (max-height: 650px) {
-    .sim-phone {
-        height: calc(100% - 200px);
-        max-height: 350px;
-        min-height: 250px;
-        width: 240px;
-        border-radius: 24px;
-        border-width: 4px;
-    }
-    .sim-map {
-        height: 80px !important;
-    }
 }
 
 .sim-phone-notch {
@@ -16708,33 +16730,17 @@ body {
 
 /* Mensagem explicativa da simulação */
 .sim-message {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
     background: linear-gradient(145deg, #1a1a1a, #0d0d0d);
     border: 2px solid var(--accent-primary);
     border-radius: 16px;
     padding: 16px 24px;
     max-width: 320px;
-    width: 90%;
     text-align: center;
     box-shadow: 0 10px 40px rgba(201, 169, 98, 0.3);
-    flex-shrink: 0;
-}
-
-@media (max-height: 700px) {
-    .sim-message {
-        padding: 12px 16px;
-        max-width: 280px;
-        border-radius: 12px;
-    }
-
-    .sim-message-title {
-        font-size: 14px;
-        margin-bottom: 4px;
-    }
-
-    .sim-message-content {
-        font-size: 12px;
-        line-height: 1.4;
-    }
 }
 
 .sim-message-title {
@@ -16756,16 +16762,12 @@ body {
 
 /* Botões de navegação da simulação */
 .sim-controls {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
     gap: 12px;
-    flex-shrink: 0;
-    padding-bottom: 10px;
-}
-
-@media (max-height: 700px) {
-    .sim-controls {
-        gap: 8px;
-    }
 }
 
 .sim-btn {
@@ -16776,13 +16778,6 @@ body {
     cursor: pointer;
     transition: all 0.2s;
     border: none;
-}
-
-@media (max-height: 700px) {
-    .sim-btn {
-        padding: 8px 16px;
-        font-size: 12px;
-    }
 }
 
 .sim-btn-skip {

@@ -2943,3 +2943,231 @@ enum VideoTipo {
   DEPOIMENTO        // Depoimento do cliente
   OUTRO             // Outro tipo
 }
+
+// =============================================
+// PIPELINE STAGES (Stages customizáveis do CRM)
+// =============================================
+model PipelineStage {
+  id              String   @id @default(uuid())
+
+  // Identificação
+  name            String
+  slug            String   @unique  // ex: "primeiro_contato" - usado internamente
+
+  // Visual
+  color           String   @default("#6366f1")
+  icon            String?  // nome do ícone (opcional)
+
+  // Configuração
+  probability     Int      @default(50)  // 0-100% - probabilidade de fechamento
+
+  // Agrupamento
+  groupName       String   @map("group_name")  // ex: "Entrada", "Contato", "Proposta"
+  groupColor      String?  @map("group_color")
+
+  // Ordenação
+  sortOrder       Int      @default(0) @map("sort_order")
+
+  // Status
+  isActive        Boolean  @default(true) @map("is_active")
+  isSystem        Boolean  @default(false) @map("is_system") // stages do sistema (não podem ser deletados)
+  isFinal         Boolean  @default(false) @map("is_final")  // GANHO ou PERDIDO
+  isWon           Boolean  @default(false) @map("is_won")    // true se é etapa de ganho
+
+  // Auto-move config
+  autoMoveDays    Int?     @map("auto_move_days")  // mover automaticamente após X dias
+  autoMoveToId    String?  @map("auto_move_to_id") // para qual stage mover
+
+  // Timestamps
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([groupName, sortOrder])
+  @@index([isActive])
+  @@map("pipeline_stages")
+}
+
+// =============================================
+// LEAD SCORING RULES (Regras de pontuação de leads)
+// =============================================
+model LeadScoringRule {
+  id              String   @id @default(uuid())
+
+  // Identificação
+  name            String
+  description     String?
+
+  // Categoria (FIT, ENGAGEMENT, BEHAVIOR, TIME)
+  category        String
+
+  // Condição (JSON com regras)
+  condition       Json     // ex: { "field": "tipoCliente", "operator": "equals", "value": "FINAL" }
+
+  // Pontuação
+  points          Int      @default(10)  // pode ser negativo
+  maxPoints       Int?     @map("max_points")  // limite máximo para esta regra
+
+  // Status
+  isActive        Boolean  @default(true) @map("is_active")
+  priority        Int      @default(0)  // ordem de avaliação
+
+  // Timestamps
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([category, isActive])
+  @@map("lead_scoring_rules")
+}
+
+// =============================================
+// LEAD SCORE HISTORY (Histórico de scores)
+// =============================================
+model LeadScoreHistory {
+  id              String   @id @default(uuid())
+
+  comercialId     String   @map("comercial_id")
+
+  // Score calculado
+  totalScore      Int      @map("total_score")
+  fitScore        Int      @map("fit_score")
+  engagementScore Int      @map("engagement_score")
+  behaviorScore   Int      @map("behavior_score")
+  timeScore       Int      @map("time_score")
+
+  // Detalhes (quais regras foram aplicadas)
+  rulesApplied    Json     @map("rules_applied")  // array de { ruleId, points }
+
+  // Timestamps
+  calculatedAt    DateTime @default(now()) @map("calculated_at")
+
+  @@index([comercialId, calculatedAt])
+  @@map("lead_score_history")
+}
+
+// =============================================
+// CRM AUTOMATIONS (Automações do CRM)
+// =============================================
+model CRMAutomation {
+  id              String   @id @default(uuid())
+
+  // Identificação
+  name            String
+  description     String?
+
+  // Status
+  isActive        Boolean  @default(true) @map("is_active")
+
+  // Trigger (quando executar)
+  triggerType     String   @map("trigger_type")  // deal_created, stage_changed, days_in_stage, followup_overdue, score_changed
+  triggerConfig   Json     @map("trigger_config")  // configurações específicas do trigger
+
+  // Condições (filtros adicionais)
+  conditions      Json[]   @default([])  // array de condições que devem ser verdadeiras
+
+  // Ações (o que fazer)
+  actions         Json[]   @default([])  // array de { type: "send_whatsapp", config: {...} }
+
+  // Estatísticas
+  executionCount  Int      @default(0) @map("execution_count")
+  lastExecutedAt  DateTime? @map("last_executed_at")
+  lastError       String?  @map("last_error")
+
+  // Timestamps
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  logs            AutomationLog[]
+
+  @@index([isActive, triggerType])
+  @@map("crm_automations")
+}
+
+// =============================================
+// AUTOMATION LOGS (Logs de execução de automações)
+// =============================================
+model AutomationLog {
+  id              String        @id @default(uuid())
+
+  automationId    String        @map("automation_id")
+  automation      CRMAutomation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  // Contexto
+  comercialId     String?       @map("comercial_id")
+  triggeredBy     String        @map("triggered_by")  // ex: "stage_changed: LEAD -> PRIMEIRO_CONTATO"
+
+  // Resultado
+  status          String        // success, error, skipped
+  actionsExecuted Json          @map("actions_executed")  // quais ações foram executadas
+  errorMessage    String?       @map("error_message")
+
+  // Timing
+  executedAt      DateTime      @default(now()) @map("executed_at")
+  durationMs      Int?          @map("duration_ms")
+
+  @@index([automationId, executedAt])
+  @@index([comercialId])
+  @@map("automation_logs")
+}
+
+// =============================================
+// WHATSAPP MESSAGE TEMPLATES (Templates de mensagens)
+// =============================================
+model WhatsAppTemplate {
+  id              String   @id @default(uuid())
+
+  // Identificação
+  name            String
+  description     String?
+
+  // Conteúdo
+  content         String   @db.Text  // Suporta variáveis: {{cliente}}, {{valor}}, {{consultor}}
+
+  // Categorização
+  category        String   @default("general")  // general, followup, proposal, welcome, etc.
+
+  // Status
+  isActive        Boolean  @default(true) @map("is_active")
+
+  // Estatísticas
+  usageCount      Int      @default(0) @map("usage_count")
+
+  // Timestamps
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([category, isActive])
+  @@map("whatsapp_templates")
+}
+
+// =============================================
+// WHATSAPP MESSAGE LOGS (Histórico de mensagens enviadas)
+// =============================================
+model WhatsAppMessageLog {
+  id              String   @id @default(uuid())
+
+  // Contexto
+  comercialId     String?  @map("comercial_id")
+  templateId      String?  @map("template_id")
+
+  // Destinatário
+  phoneNumber     String   @map("phone_number")
+  recipientName   String?  @map("recipient_name")
+
+  // Conteúdo
+  message         String   @db.Text
+
+  // Status (Z-API response)
+  status          String   @default("pending")  // pending, sent, delivered, read, failed
+  zapiMessageId   String?  @map("zapi_message_id")
+  errorMessage    String?  @map("error_message")
+
+  // Timestamps
+  sentAt          DateTime @default(now()) @map("sent_at")
+  deliveredAt     DateTime? @map("delivered_at")
+  readAt          DateTime? @map("read_at")
+
+  @@index([comercialId])
+  @@index([status, sentAt])
+  @@map("whatsapp_message_logs")
+}

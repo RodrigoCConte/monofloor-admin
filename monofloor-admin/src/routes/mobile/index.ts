@@ -20,8 +20,13 @@ import { sendRequestNotification } from '../../services/whatsapp.service';
 import { whisperService } from '../../services/ai/whisper.service';
 import { saveFile, deleteFile, UploadType } from '../../services/db-storage.service';
 import { updateGPSStatus, getGPSStatus, resetGPSConfirmations } from '../../services/gps-autocheckout.service';
+import reportResponsibilityRoutes from './report-responsibility.routes';
+import { markResponsibilityCompleted } from '../../services/report-responsibility.service';
 
 const router = Router();
+
+// Mount report responsibility routes
+router.use('/report-responsibility', reportResponsibilityRoutes);
 
 // Multer configuration with memory storage (files saved to PostgreSQL)
 const uploadProfilePhoto = multer({
@@ -1880,6 +1885,9 @@ router.post(
 
       console.log(`[Report] Created report ${report.id} with ${savedPhotos.length} media files`);
 
+      // Mark daily report responsibility as completed
+      await markResponsibilityCompleted(projectId, report.id);
+
       res.status(201).json({
         success: true,
         data: completeReport,
@@ -1989,7 +1997,7 @@ router.post(
       let geofenceStatus = {
         isOutOfArea: false,
         distance: null as number | null,
-        radiusMeters: 200,
+        radiusMeters: 70,
       };
 
       if (activeCheckin?.project) {
@@ -1998,7 +2006,7 @@ router.post(
           longitude,
           activeCheckin.project.latitude ? Number(activeCheckin.project.latitude) : null,
           activeCheckin.project.longitude ? Number(activeCheckin.project.longitude) : null,
-          200 // 200 meters radius
+          70 // 70 meters radius
         );
       }
 
