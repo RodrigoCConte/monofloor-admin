@@ -312,7 +312,7 @@ async function fetchPipedrive(endpoint: string) {
 }
 
 // Helper function to fetch from Pipefy
-async function fetchPipefy(query: string) {
+async function fetchPipefy(query: string): Promise<any> {
   const response = await fetch(PIPEFY_BASE_URL, {
     method: 'POST',
     headers: {
@@ -321,7 +321,7 @@ async function fetchPipefy(query: string) {
     },
     body: JSON.stringify({ query }),
   });
-  return response.json();
+  return response.json() as Promise<any>;
 }
 
 // GET /enterprise/migration/status - Migration status

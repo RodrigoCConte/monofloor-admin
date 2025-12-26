@@ -76,15 +76,15 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/stats', async (_req: Request, res: Response) => {
   try {
     const stats = await Promise.all([
-      prisma.planejamento.count({ where: { status: 'AGUARDANDO_VT' } }),
-      prisma.planejamento.count({ where: { status: 'VT_AGENDADA' } }),
-      prisma.planejamento.count({ where: { status: 'VT_REALIZADA' } }),
-      prisma.planejamento.count({ where: { status: 'PROJETO_EM_REVISAO' } }),
-      prisma.planejamento.count({ where: { status: 'CONFIRMACOES' } }),
+      prisma.planejamento.count({ where: { status: 'AGEND_VT_AFERICAO' } }),
+      prisma.planejamento.count({ where: { status: 'AGEND_VT_ACOMPANHAMENTO' } }),
+      prisma.planejamento.count({ where: { status: 'RESULTADO_VT_AFERICAO' } }),
+      prisma.planejamento.count({ where: { status: 'PROJETOS_REVISAO' } }),
+      prisma.planejamento.count({ where: { status: 'CONFIRMACOES_OP1' } }),
       prisma.planejamento.count({ where: { status: 'AGUARDANDO_LIBERACAO' } }),
-      prisma.planejamento.count({ where: { status: 'INDUSTRIA' } }),
-      prisma.planejamento.count({ where: { status: { in: ['LOGISTICA_ENTREGA', 'LOGISTICA_MATERIAL_ENTREGUE'] } } }),
-      prisma.planejamento.count({ where: { status: 'PRONTO_EXECUCAO' } }),
+      prisma.planejamento.count({ where: { status: 'INDUSTRIA_PRODUCAO' } }),
+      prisma.planejamento.count({ where: { status: 'INFO_LOGISTICAS' } }),
+      prisma.planejamento.count({ where: { status: 'EQUIPE_EXECUCAO' } }),
       // VTs agendadas para hoje
       prisma.visitaTecnica.count({
         where: {
@@ -123,7 +123,7 @@ router.get('/kanban', async (_req: Request, res: Response) => {
   try {
     const planejamentos = await prisma.planejamento.findMany({
       where: {
-        status: { not: 'PRONTO_EXECUCAO' },
+        status: { not: 'EQUIPE_EXECUCAO' },
       },
       include: {
         project: {
@@ -220,7 +220,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const {
-      dataEntradaPrevista,
+      dataEntrada,
       prazoEstimado,
       consultorOperacionalId,
       consultorProjetosId,
@@ -231,7 +231,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const planejamento = await prisma.planejamento.update({
       where: { id },
       data: {
-        dataEntradaPrevista: dataEntradaPrevista ? new Date(dataEntradaPrevista) : null,
+        dataEntrada: dataEntrada ? new Date(dataEntrada) : null,
         prazoEstimado: prazoEstimado ? parseInt(prazoEstimado) : null,
         consultorOperacionalId,
         consultorProjetosId,
@@ -351,10 +351,10 @@ router.post('/:id/visitas', async (req: Request, res: Response) => {
     });
 
     // Update planejamento status
-    if (planejamento.status === 'AGUARDANDO_VT') {
+    if (planejamento.status === 'AGEND_VT_AFERICAO') {
       await prisma.planejamento.update({
         where: { id },
-        data: { status: 'VT_AGENDADA' },
+        data: { status: 'RESULTADO_VT_AFERICAO' },
       });
     }
 
@@ -401,10 +401,10 @@ router.put('/visitas/:visitaId/realizar', async (req: Request, res: Response) =>
     });
 
     // Update planejamento
-    if (visita.planejamento.status === 'VT_AGENDADA') {
+    if (visita.planejamento.status === 'AGEND_VT_ACOMPANHAMENTO') {
       await prisma.planejamento.update({
         where: { id: visita.planejamentoId },
-        data: { status: 'VT_REALIZADA' },
+        data: { status: 'RESULTADO_VT_ACOMPANHAMENTO' },
       });
     }
 
@@ -501,7 +501,7 @@ router.post('/:id/ordem-servico', async (req: Request, res: Response) => {
     // Update planejamento
     await prisma.planejamento.update({
       where: { id },
-      data: { status: 'INDUSTRIA' },
+      data: { status: 'INDUSTRIA_PRODUCAO' },
     });
 
     // Create timeline event

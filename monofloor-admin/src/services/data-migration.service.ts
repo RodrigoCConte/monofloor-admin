@@ -90,11 +90,11 @@ const PIPEFY_PHASE_MAP: Record<string, PlanejamentoStatus> = {
 // PIPEDRIVE API FUNCTIONS
 // ==========================================
 
-async function fetchPipedrive(endpoint: string) {
+async function fetchPipedrive(endpoint: string): Promise<any> {
   const separator = endpoint.includes('?') ? '&' : '?';
   const url = `${PIPEDRIVE_BASE_URL}${endpoint}${separator}api_token=${PIPEDRIVE_API_TOKEN}`;
   const response = await fetch(url);
-  return response.json();
+  return response.json() as Promise<any>;
 }
 
 async function getAllPipedriveDeals(): Promise<any[]> {
@@ -149,7 +149,7 @@ async function getPipedriveStages(): Promise<Record<number, string>> {
 // PIPEFY API FUNCTIONS
 // ==========================================
 
-async function fetchPipefy(query: string) {
+async function fetchPipefy(query: string): Promise<any> {
   const response = await fetch(PIPEFY_BASE_URL, {
     method: 'POST',
     headers: {
@@ -158,7 +158,7 @@ async function fetchPipefy(query: string) {
     },
     body: JSON.stringify({ query }),
   });
-  return response.json();
+  return response.json() as Promise<any>;
 }
 
 async function getAllPipefyCards(pipeId: string): Promise<any[]> {

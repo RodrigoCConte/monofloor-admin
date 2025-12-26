@@ -12,6 +12,7 @@ import { processGPSAutoCheckouts } from './services/gps-autocheckout.service';
 import { startCuraScheduler } from './services/cura-scheduler.service';
 import { detectAndProcessLunchSkips } from './services/lunch-skipped-detection.service';
 import { processAllProjectResponsibilities } from './services/report-responsibility.service';
+import { startComercialFollowUpScheduler } from './services/comercial-followup.service';
 import prisma from './lib/prisma';
 
 // Create HTTP server for Socket.io
@@ -80,6 +81,9 @@ async function main() {
 
       // Start CURA auto-completion scheduler
       startCuraScheduler();
+
+      // Start comercial follow-up scheduler
+      startComercialFollowUpScheduler();
 
       // Start video job worker
       videoJobWorker.start();
