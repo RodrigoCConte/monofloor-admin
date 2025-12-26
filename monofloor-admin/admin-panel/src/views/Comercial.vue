@@ -225,7 +225,7 @@
           <button class="btn btn--outline" @click="toggleFilters">
             <span>⚡</span> Filtros
           </button>
-          <button class="btn btn--primary" @click="openNewDeal">
+          <button class="btn btn--primary" @click="openNewDeal()">
             <span>+</span> Novo Deal
           </button>
         </div>
@@ -430,7 +430,7 @@
               <div class="detail-item">
                 <span class="detail-label">Estágio</span>
                 <span class="detail-value">
-                  {{ stages.find(s => s.id === selectedDeal.status)?.name || 'N/A' }}
+                  {{ stages.find(s => s.id === selectedDeal?.status)?.name || 'N/A' }}
                 </span>
               </div>
               <div class="detail-item">
@@ -769,14 +769,14 @@ const conversionRate = computed(() => {
 });
 
 const avgDaysInPipeline = computed(() => {
-  const dealsWithDays = deals.value.filter(d => d.daysInStage > 0);
+  const dealsWithDays = deals.value.filter(d => (d.daysInStage ?? 0) > 0);
   if (dealsWithDays.length === 0) return 0;
   const total = dealsWithDays.reduce((sum, d) => sum + (d.daysInStage || 0), 0);
   return Math.round(total / dealsWithDays.length);
 });
 
 const avgTicket = computed(() => {
-  const dealsWithValue = deals.value.filter(d => d.value > 0);
+  const dealsWithValue = deals.value.filter(d => (d.value ?? 0) > 0);
   if (dealsWithValue.length === 0) return 0;
   return Math.round(totalValue.value / dealsWithValue.length);
 });
@@ -792,7 +792,8 @@ const consultores = computed(() => {
 // Primeiro nome do especialista selecionado
 const selectedSpecialistFirstName = computed(() => {
   if (!selectedSpecialist.value) return '';
-  return selectedSpecialist.value.split(' ')[0].toUpperCase();
+  const parts = selectedSpecialist.value.split(' ');
+  return parts.length > 0 ? parts[0].toUpperCase() : '';
 });
 
 const filteredDeals = computed(() => {
