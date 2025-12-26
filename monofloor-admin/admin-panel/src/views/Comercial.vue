@@ -792,8 +792,8 @@ const consultores = computed(() => {
 // Primeiro nome do especialista selecionado
 const selectedSpecialistFirstName = computed(() => {
   if (!selectedSpecialist.value) return '';
-  const parts = selectedSpecialist.value.split(' ');
-  return parts.length > 0 ? parts[0].toUpperCase() : '';
+  const firstName = selectedSpecialist.value.split(' ')[0] ?? '';
+  return firstName.toUpperCase();
 });
 
 const filteredDeals = computed(() => {
