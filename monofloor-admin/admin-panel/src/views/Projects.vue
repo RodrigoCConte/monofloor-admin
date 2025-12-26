@@ -209,7 +209,9 @@ const logout = () => {
 const loadProjects = async () => {
   loading.value = true;
   try {
-    const params: any = {};
+    const params: any = {
+      limit: 100 // Show all projects (up to 100)
+    };
     if (filter.value !== 'all') {
       params.status = filter.value;
     }

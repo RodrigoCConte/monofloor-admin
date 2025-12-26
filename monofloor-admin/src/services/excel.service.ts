@@ -22,6 +22,8 @@ export interface ProjectImportRow {
   especiais?: string;
   detalhamento?: string;
   andamento?: string;
+  link_escopo?: string; // Link para escopo do projeto
+  data_entrada?: string; // Data de entrada no sistema
 }
 
 export interface ImportResult {
@@ -61,13 +63,18 @@ const STATUS_MAP: Record<string, ProjectStatus> = {
   'cancelada': 'CANCELADO',
 };
 
-// Fases do Pipefy que devem ser importadas (apenas Em Execução e Obra Pausada)
+// Fases do Pipefy que devem ser importadas
 const ALLOWED_PIPEFY_PHASES = [
   'em execução',
   'em execucao',
   'obra pausada',
   'pausado',
   'pausada',
+  'caixa de entrada', // Novos projetos
+  'inicio',
+  'início',
+  'em andamento',
+  'fazendo',
 ];
 
 /**
@@ -227,6 +234,12 @@ function normalizeHeaders(row: any): ProjectImportRow {
       'descricao': 'detalhamento',
       'andamento': 'andamento',
       'progresso': 'andamento',
+      'link_escopo': 'link_escopo',
+      'escopo': 'link_escopo',
+      'data_entrada': 'data_entrada',
+      'data_de_entrada': 'data_entrada',
+      'previsao': 'data_entrada',
+      'data_prevista': 'data_entrada',
     };
 
     const mappedKey = keyMap[normalizedKey] || normalizedKey;
@@ -320,21 +333,37 @@ export const excelService = {
           }
         }
 
+        // Parse metragens
+        const m2Piso = parseNumber(row.m2_piso);
+        const m2Parede = parseNumber(row.m2_parede);
+        const m2Teto = parseNumber(row.m2_teto);
+        const mRodape = parseNumber(row.m_rodape);
+
+        // IMPORTANTE: Calcular m2Total como soma de piso + parede + teto
+        // Ignorar o M² Total da planilha, calcular manualmente
+        const m2Total = m2Piso + m2Parede + m2Teto;
+
+        // Base data for new projects
         const projectData: any = {
           title,
           cliente: row.cliente ? String(row.cliente).trim() : null,
           endereco,
-          m2Total: parseNumber(row.m2_total),
-          m2Piso: parseNumber(row.m2_piso),
-          m2Parede: parseNumber(row.m2_parede),
-          m2Teto: parseNumber(row.m2_teto),
-          mRodape: parseNumber(row.m_rodape),
+          m2Total,
+          m2Piso,
+          m2Parede,
+          m2Teto,
+          mRodape,
           status: parseStatus(row.status),
           consultor: row.consultor ? String(row.consultor).trim() : null,
           material: row.material ? String(row.material).trim() : null,
           cor: row.cor ? String(row.cor).trim() : null,
           estimatedHours: row.horas_estimadas ? parseNumber(row.horas_estimadas) : null,
           pipefyCardId: pipefyCardId,
+          // Novos campos da planilha
+          linkEscopo: row.link_escopo ? String(row.link_escopo).trim() : null,
+          especiais: row.especiais ? String(row.especiais).trim() : null,
+          detalhamento: row.detalhamento ? String(row.detalhamento).trim() : null,
+          equipe: row.equipe ? String(row.equipe).trim() : null,
           // IMPORTANTE: Projetos importados da planilha vão para o módulo EXECUCAO
           currentModule: 'EXECUCAO',
         };
@@ -346,10 +375,53 @@ export const excelService = {
         }
 
         if (existingProject) {
-          // Update existing project
+          // UPDATE: Only update fields that have actual values in Excel
+          // Preserve existing data when Excel field is empty
+          const updateData: any = {
+            title, // Always update title
+            currentModule: 'EXECUCAO', // Always ensure correct module
+          };
+
+          // Only update if Excel has a value (preserve existing otherwise)
+          if (row.cliente) updateData.cliente = String(row.cliente).trim();
+          if (endereco) updateData.endereco = endereco;
+
+          // Metragens: atualizar se tiver valor
+          if (row.m2_piso) updateData.m2Piso = m2Piso;
+          if (row.m2_parede) updateData.m2Parede = m2Parede;
+          if (row.m2_teto) updateData.m2Teto = m2Teto;
+          if (row.m_rodape) updateData.mRodape = mRodape;
+
+          // Recalcular m2Total se algum dos componentes foi atualizado
+          if (row.m2_piso || row.m2_parede || row.m2_teto) {
+            // Pegar valores existentes ou zero
+            const existingPiso = updateData.m2Piso ?? existingProject.m2Piso ?? 0;
+            const existingParede = updateData.m2Parede ?? existingProject.m2Parede ?? 0;
+            const existingTeto = updateData.m2Teto ?? existingProject.m2Teto ?? 0;
+            updateData.m2Total = Number(existingPiso) + Number(existingParede) + Number(existingTeto);
+          }
+
+          if (row.status) updateData.status = parseStatus(row.status);
+          if (row.consultor) updateData.consultor = String(row.consultor).trim();
+          if (row.material) updateData.material = String(row.material).trim();
+          if (row.cor) updateData.cor = String(row.cor).trim();
+          if (row.horas_estimadas) updateData.estimatedHours = parseNumber(row.horas_estimadas);
+          if (pipefyCardId) updateData.pipefyCardId = pipefyCardId;
+
+          // Novos campos
+          if (row.link_escopo) updateData.linkEscopo = String(row.link_escopo).trim();
+          if (row.especiais) updateData.especiais = String(row.especiais).trim();
+          if (row.detalhamento) updateData.detalhamento = String(row.detalhamento).trim();
+          if (row.equipe) updateData.equipe = String(row.equipe).trim();
+
+          if (latitude !== null && longitude !== null) {
+            updateData.latitude = latitude;
+            updateData.longitude = longitude;
+          }
+
           await prisma.project.update({
             where: { id: existingProject.id },
-            data: projectData,
+            data: updateData,
           });
           result.updated++;
         } else {
