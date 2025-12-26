@@ -17,9 +17,12 @@ router.get('/stats', adminAuth, async (req, res, next) => {
       onlineApplicators,
       pendingApprovals,
     ] = await Promise.all([
-      // Total projects in execution
+      // Total projects in execution (only EXECUCAO module)
       prisma.project.count({
-        where: { status: 'EM_EXECUCAO' },
+        where: {
+          status: { in: ['EM_EXECUCAO', 'PAUSADO'] },
+          currentModule: 'EXECUCAO'
+        },
       }),
       // Total projects
       prisma.project.count(),
@@ -27,9 +30,12 @@ router.get('/stats', adminAuth, async (req, res, next) => {
       prisma.user.count({
         where: { status: 'APPROVED' },
       }),
-      // Total square meters (sum of all active projects)
+      // Total square meters (sum of EXECUCAO module projects)
       prisma.project.aggregate({
-        where: { status: 'EM_EXECUCAO' },
+        where: {
+          status: { in: ['EM_EXECUCAO', 'PAUSADO'] },
+          currentModule: 'EXECUCAO'
+        },
         _sum: { m2Total: true },
       }),
       // Total square meters applied (sum from all users)
