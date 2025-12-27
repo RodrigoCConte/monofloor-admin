@@ -1,4 +1,5 @@
 # Multi-stage build for Node.js + Python + FFmpeg
+# Cache bust: v2 - force rebuild admin-panel
 FROM node:20-bullseye AS builder
 
 # Install Python and FFmpeg
