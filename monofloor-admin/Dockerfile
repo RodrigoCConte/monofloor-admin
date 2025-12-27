@@ -22,8 +22,9 @@ RUN npm ci
 COPY requirements.txt ./
 RUN pip3 install -r requirements.txt
 
-# Copy source code
-COPY . .
+# Copy backend source code (excluding admin-panel for now)
+COPY src ./src
+COPY tsconfig.json ./
 
 # Build TypeScript
 RUN npm run build
@@ -31,12 +32,19 @@ RUN npm run build
 # Generate Prisma Client
 RUN npx prisma generate
 
-# Build admin panel - Force rebuild with timestamp
-ARG CACHEBUST=1
-RUN echo "Cache bust: $CACHEBUST - $(date)"
+# Copy admin-panel source separately to bust cache
+COPY admin-panel ./admin-panel
+
+# Build admin panel - add random string to force rebuild every time
+RUN echo "Build timestamp: $(date +%s)" > /tmp/build-time.txt
 WORKDIR /app/admin-panel
 RUN npm ci && npm run build
 WORKDIR /app
+
+# Copy remaining files
+COPY data ./data
+COPY scripts ./scripts
+COPY public ./public
 
 # Production image
 FROM node:20-bullseye-slim
