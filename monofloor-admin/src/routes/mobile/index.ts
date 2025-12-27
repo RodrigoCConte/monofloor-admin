@@ -358,7 +358,7 @@ router.get('/projects', mobileAuth, async (req, res, next) => {
   try {
     const userId = req.user!.sub;
 
-    // Get all projects user is assigned to with their tasks
+    // Get all projects user is assigned to with their tasks (including dependsOnId for dependency checking)
     const userProjects = await prisma.project.findMany({
       where: {
         assignments: {
@@ -378,12 +378,10 @@ router.get('/projects', mobileAuth, async (req, res, next) => {
             projectRole: true,
           },
         },
+        // Get ALL published tasks (to check dependency statuses)
         tasks: {
           where: {
             publishedToApp: true,
-            assignedUsers: {
-              some: { userId },
-            },
           },
           orderBy: { sortOrder: 'asc' },
           select: {
@@ -391,25 +389,72 @@ router.get('/projects', mobileAuth, async (req, res, next) => {
             title: true,
             status: true,
             sortOrder: true,
+            dependsOnId: true,
+            assignedUsers: {
+              where: { userId },
+              select: { userId: true },
+            },
           },
         },
       },
     });
 
-    // Filter projects: only show if user has at least one non-completed task assigned
-    const projectsWithPendingTasks = userProjects.filter((project) => {
-      return project.tasks.some((t) => t.status !== 'COMPLETED');
+    // Filter projects: only show if user has at least one AVAILABLE task
+    // A task is available if:
+    // 1. It's assigned to this user AND
+    // 2. It's either COMPLETED, OR it's pending and its dependency is completed (or has no dependency)
+    const projectsWithAvailableTasks = userProjects.filter((project) => {
+      // Build a map of task statuses for dependency checking
+      const taskStatusMap = new Map<string, string>();
+      project.tasks.forEach((t) => {
+        taskStatusMap.set(t.id, t.status);
+      });
+
+      // Get tasks assigned to this user
+      const userTasks = project.tasks.filter((t) => t.assignedUsers.length > 0);
+
+      // Check if any task is available
+      return userTasks.some((task) => {
+        // Completed tasks count as available (user contributed)
+        if (task.status === 'COMPLETED') {
+          return true;
+        }
+
+        // For pending tasks, check if dependency is completed
+        if (task.dependsOnId) {
+          const depStatus = taskStatusMap.get(task.dependsOnId);
+          return depStatus === 'COMPLETED';
+        }
+
+        // No dependency = available
+        return true;
+      });
     });
 
     res.json({
       success: true,
-      data: projectsWithPendingTasks.map((project) => {
-        const userTasks = project.tasks;
+      data: projectsWithAvailableTasks.map((project) => {
+        // Build task status map for this project
+        const taskStatusMap = new Map<string, string>();
+        project.tasks.forEach((t) => {
+          taskStatusMap.set(t.id, t.status);
+        });
+
+        // Get only user's assigned tasks
+        const userTasks = project.tasks.filter((t) => t.assignedUsers.length > 0);
         const completedCount = userTasks.filter((t) => t.status === 'COMPLETED').length;
         const totalCount = userTasks.length;
 
-        // Find the first non-completed task (current task)
-        const currentTask = userTasks.find((t) => t.status !== 'COMPLETED');
+        // Find the first AVAILABLE non-completed task (current task)
+        // Must respect dependency chain
+        const currentTask = userTasks.find((t) => {
+          if (t.status === 'COMPLETED') return false;
+          if (t.dependsOnId) {
+            const depStatus = taskStatusMap.get(t.dependsOnId);
+            return depStatus === 'COMPLETED';
+          }
+          return true;
+        });
 
         const currentStage = totalCount > 0 ? {
           name: currentTask?.title || 'Concluido',
