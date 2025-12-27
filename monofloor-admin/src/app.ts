@@ -8,6 +8,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { authRoutes } from './routes/auth.routes';
 import { adminRoutes } from './routes/admin';
 import { mobileRoutes } from './routes/mobile';
+import { webhookRoutes } from './routes/webhooks';
 import proposalsRoutes from './routes/proposals.routes';
 import filesRoutes from './routes/files.routes';
 
@@ -37,6 +38,11 @@ const allowedOrigins = [
   'https://admin.monofloor.cloud',
   'https://app.monofloor.cloud',
   'http://app.monofloor.cloud:8081',
+  // Capacitor iOS/Android native apps
+  'capacitor://monofloor.app',
+  'capacitor://localhost',
+  'ionic://localhost',
+  'http://localhost',
 ].filter(Boolean);
 
 app.use(cors({
@@ -98,6 +104,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/mobile', mobileRoutes);
 app.use('/api/proposals', proposalsRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 // File serving from PostgreSQL database
 app.use('/files', filesRoutes);
