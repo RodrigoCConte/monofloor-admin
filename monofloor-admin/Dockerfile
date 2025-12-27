@@ -32,14 +32,9 @@ RUN npm run build
 # Generate Prisma Client
 RUN npx prisma generate
 
-# Copy admin-panel source separately to bust cache
-COPY admin-panel ./admin-panel
-
-# Build admin panel - add random string to force rebuild every time
-RUN echo "Build timestamp: $(date +%s)" > /tmp/build-time.txt
-WORKDIR /app/admin-panel
-RUN npm ci && npm run build
-WORKDIR /app
+# Copy pre-built admin-panel dist (built locally and committed)
+# This avoids Docker cache issues with admin-panel build
+COPY admin-panel/dist ./admin-panel/dist
 
 # Copy remaining files
 COPY data ./data

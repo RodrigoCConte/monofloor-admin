@@ -9,6 +9,6 @@ npm-debug.log*
 .DS_Store
 test-video-processor.html
 admin-panel/node_modules
-admin-panel/dist
+# admin-panel/dist - now we commit pre-built files
 admin-panel/.env
 admin-panel/.env.local

@@ -16,6 +16,8 @@ yarn-error.log*
 # Build outputs
 dist/
 build/
+# But keep admin-panel dist (pre-built for Railway deploy)
+!monofloor-admin/admin-panel/dist/
 *.log
 
 # Screenshots and media in root
