@@ -31,7 +31,9 @@ RUN npm run build
 # Generate Prisma Client
 RUN npx prisma generate
 
-# Build admin panel
+# Build admin panel - Force rebuild with timestamp
+ARG CACHEBUST=1
+RUN echo "Cache bust: $CACHEBUST - $(date)"
 WORKDIR /app/admin-panel
 RUN npm ci && npm run build
 WORKDIR /app
