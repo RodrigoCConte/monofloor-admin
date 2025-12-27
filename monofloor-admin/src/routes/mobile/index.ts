@@ -21,12 +21,16 @@ import { whisperService } from '../../services/ai/whisper.service';
 import { saveFile, deleteFile, UploadType } from '../../services/db-storage.service';
 import { updateGPSStatus, getGPSStatus, resetGPSConfirmations } from '../../services/gps-autocheckout.service';
 import reportResponsibilityRoutes from './report-responsibility.routes';
+import workdayRoutes from './workday.routes';
 import { markResponsibilityCompleted } from '../../services/report-responsibility.service';
 
 const router = Router();
 
 // Mount report responsibility routes
 router.use('/report-responsibility', reportResponsibilityRoutes);
+
+// Mount workday routes (holidays, saturday schedules)
+router.use('/workday', workdayRoutes);
 
 // Multer configuration with memory storage (files saved to PostgreSQL)
 const uploadProfilePhoto = multer({
@@ -2815,8 +2819,49 @@ router.post(
 router.post('/push-subscription', mobileAuth, async (req, res, next) => {
   try {
     const userId = req.user!.sub;
-    const { subscription } = req.body;
+    const { subscription, type, platform, deviceToken } = req.body;
+    const userAgent = req.headers['user-agent'] || undefined;
 
+    // Handle native push (iOS/Android)
+    if (type === 'native' && deviceToken) {
+      console.log(`[Push] Registering native push for ${platform}:`, deviceToken.substring(0, 20) + '...');
+
+      // Save or update native device token
+      const existing = await prisma.pushSubscription.findFirst({
+        where: { deviceToken },
+      });
+
+      if (existing) {
+        await prisma.pushSubscription.update({
+          where: { id: existing.id },
+          data: {
+            userId,
+            platform,
+            isActive: true,
+            userAgent: userAgent as string | undefined,
+            updatedAt: new Date(),
+          },
+        });
+      } else {
+        await prisma.pushSubscription.create({
+          data: {
+            userId,
+            type: 'native',
+            platform,
+            deviceToken,
+            userAgent: userAgent as string | undefined,
+            isActive: true,
+          },
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'Push subscription nativa registrada com sucesso',
+      });
+    }
+
+    // Handle Web Push (browser)
     if (!subscription || !subscription.endpoint || !subscription.keys) {
       return res.status(400).json({
         success: false,
@@ -2825,9 +2870,8 @@ router.post('/push-subscription', mobileAuth, async (req, res, next) => {
     }
 
     const { savePushSubscription } = await import('../../services/push.service');
-    const userAgent = req.headers['user-agent'] || undefined;
 
-    const saved = await savePushSubscription(userId, subscription, userAgent);
+    const saved = await savePushSubscription(userId, subscription, userAgent as string | undefined);
 
     if (saved) {
       res.json({
