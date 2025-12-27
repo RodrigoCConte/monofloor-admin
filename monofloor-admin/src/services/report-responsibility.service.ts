@@ -360,6 +360,7 @@ export async function transferResponsibility(
 
 /**
  * Get today's responsibility for a project
+ * If the responsible user is no longer on the team, auto-reassign to highest-ranked member
  */
 export async function getTodayResponsibility(projectId: string): Promise<{
   id: string;
@@ -381,16 +382,79 @@ export async function getTodayResponsibility(projectId: string): Promise<{
     },
     include: {
       responsibleUser: {
-        select: { name: true },
+        select: { id: true, name: true },
       },
       originalUser: {
         select: { name: true },
+      },
+      project: {
+        select: { title: true, cliente: true },
       },
     },
   });
 
   if (!responsibility) {
     return null;
+  }
+
+  // Check if the responsible user is still an active team member
+  const isStillOnTeam = await prisma.projectAssignment.findFirst({
+    where: {
+      projectId,
+      userId: responsibility.responsibleUserId,
+      isActive: true,
+    },
+  });
+
+  // If responsible user is no longer on the team, auto-reassign
+  if (!isStillOnTeam) {
+    console.log(`[ReportResponsibility] User ${responsibility.responsibleUser.name} is no longer on team, reassigning...`);
+
+    // Get highest-ranked active members
+    const topMembers = await getHighestRankedMembers(projectId);
+
+    if (topMembers.length === 0) {
+      // No active team members, cannot reassign
+      return null;
+    }
+
+    // Select one (random if tie)
+    const newResponsible = topMembers.length === 1
+      ? topMembers[0]
+      : topMembers[Math.floor(Math.random() * topMembers.length)];
+
+    // Get new responsible user info
+    const newUser = await prisma.user.findUnique({
+      where: { id: newResponsible.userId },
+      select: { name: true },
+    });
+
+    // Update the responsibility record
+    await prisma.dailyReportResponsibility.update({
+      where: { id: responsibility.id },
+      data: {
+        responsibleUserId: newResponsible.userId,
+        originalUserId: responsibility.originalUserId || responsibility.responsibleUserId,
+        transferReason: `Auto-reassigned: ${responsibility.responsibleUser.name} is no longer on the team`,
+      },
+    });
+
+    const projectName = responsibility.project.title || responsibility.project.cliente || 'Projeto';
+
+    // Notify the new responsible
+    await notifyResponsibility(newResponsible.userId, projectName, 'ASSIGNED');
+
+    console.log(`[ReportResponsibility] Auto-reassigned to ${newUser?.name} (${newResponsible.userId})`);
+
+    return {
+      id: responsibility.id,
+      responsibleUserId: newResponsible.userId,
+      responsibleUserName: newUser?.name || 'Unknown',
+      status: responsibility.status,
+      wasTransferred: true,
+      originalUserName: responsibility.responsibleUser.name,
+      transferReason: `Auto-reassigned: ${responsibility.responsibleUser.name} is no longer on the team`,
+    };
   }
 
   return {
