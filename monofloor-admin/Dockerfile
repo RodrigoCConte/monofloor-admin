@@ -1,5 +1,7 @@
 # Multi-stage build for Node.js + Python + FFmpeg
-# Cache bust: v2 - force rebuild admin-panel
+# Cache bust timestamp: 2025-12-27T15:30:00Z - FORCE COMPLETE REBUILD
+# This timestamp ensures Docker doesn't use cached layers
+ARG CACHEBUST=1735314600
 FROM node:20-bullseye AS builder
 
 # Install Python and FFmpeg
@@ -32,9 +34,15 @@ RUN npm run build
 # Generate Prisma Client
 RUN npx prisma generate
 
+# Force cache invalidation before copying admin-panel
+RUN echo "Cache bust: ${CACHEBUST:-default}"
+
 # Copy pre-built admin-panel dist (built locally and committed)
 # This avoids Docker cache issues with admin-panel build
 COPY admin-panel/dist ./admin-panel/dist
+
+# Verify admin-panel files are copied correctly
+RUN ls -la admin-panel/dist/assets/ | head -10
 
 # Copy remaining files
 COPY data ./data
