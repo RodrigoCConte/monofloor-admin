@@ -1,3 +1,4 @@
+<!-- Cache bust v2: Role selector removed - using applicator's own role -->
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
