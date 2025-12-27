@@ -356,36 +356,60 @@ router.post('/pending-notifications/delivered-all', mobileAuth, async (req, res,
 // GET /api/mobile/projects
 router.get('/projects', mobileAuth, async (req, res, next) => {
   try {
-    const assignments = await prisma.projectAssignment.findMany({
+    const userId = req.user!.sub;
+
+    // Get all projects user is assigned to with their tasks
+    const userProjects = await prisma.project.findMany({
       where: {
-        userId: req.user!.sub,
-        isActive: true,
+        assignments: {
+          some: {
+            userId,
+            isActive: true,
+          },
+        },
       },
       include: {
-        project: {
-          include: {
-            tasks: {
-              orderBy: { sortOrder: 'asc' },
-              select: {
-                id: true,
-                title: true,
-                status: true,
-                sortOrder: true,
-              },
+        assignments: {
+          where: {
+            userId,
+            isActive: true,
+          },
+          select: {
+            projectRole: true,
+          },
+        },
+        tasks: {
+          where: {
+            publishedToApp: true,
+            assignedUsers: {
+              some: { userId },
             },
+          },
+          orderBy: { sortOrder: 'asc' },
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            sortOrder: true,
           },
         },
       },
     });
 
+    // Filter projects: only show if user has at least one non-completed task assigned
+    const projectsWithPendingTasks = userProjects.filter((project) => {
+      return project.tasks.some((t) => t.status !== 'COMPLETED');
+    });
+
     res.json({
       success: true,
-      data: assignments.map((a) => {
-        // Calculate current stage from tasks
-        const tasks = a.project.tasks || [];
-        const completedCount = tasks.filter((t) => t.status === 'COMPLETED').length;
-        const totalCount = tasks.length;
-        const currentTask = tasks.find((t) => t.status === 'PENDING' || t.status === 'IN_PROGRESS');
+      data: projectsWithPendingTasks.map((project) => {
+        const userTasks = project.tasks;
+        const completedCount = userTasks.filter((t) => t.status === 'COMPLETED').length;
+        const totalCount = userTasks.length;
+
+        // Find the first non-completed task (current task)
+        const currentTask = userTasks.find((t) => t.status !== 'COMPLETED');
 
         const currentStage = totalCount > 0 ? {
           name: currentTask?.title || 'Concluido',
@@ -393,15 +417,18 @@ router.get('/projects', mobileAuth, async (req, res, next) => {
           totalCount,
         } : null;
 
+        const assignment = project.assignments[0];
+
         return {
-          ...a.project,
-          m2Total: Number(a.project.m2Total),
-          m2Piso: Number(a.project.m2Piso),
-          m2Parede: Number(a.project.m2Parede),
-          workedHours: Number(a.project.workedHours),
-          projectRole: a.projectRole,
+          ...project,
+          m2Total: Number(project.m2Total),
+          m2Piso: Number(project.m2Piso),
+          m2Parede: Number(project.m2Parede),
+          workedHours: Number(project.workedHours),
+          projectRole: assignment?.projectRole || null,
           currentStage,
-          tasks: undefined, // Don't send full tasks array to client
+          tasks: undefined,
+          assignments: undefined,
         };
       }),
     });
@@ -4087,13 +4114,55 @@ router.get(
         throw new AppError('Voce nao esta atribuido a este projeto', 403, 'NOT_ASSIGNED');
       }
 
-      // Get all PUBLISHED tasks for the project, ordered by sortOrder
-      const tasks = await prisma.projectTask.findMany({
+      // Get ALL project tasks to build a map of task statuses (needed for dependency checking)
+      const allProjectTasks = await prisma.projectTask.findMany({
         where: {
           projectId,
           publishedToApp: true,
         },
         orderBy: { sortOrder: 'asc' },
+      });
+
+      // Build a map of task ID -> status for quick lookup
+      const taskStatusMap = new Map<string, string>();
+      allProjectTasks.forEach((task) => {
+        taskStatusMap.set(task.id, task.status);
+      });
+
+      // Get tasks explicitly assigned to this user
+      const userAssignedTasks = await prisma.projectTask.findMany({
+        where: {
+          projectId,
+          publishedToApp: true,
+          assignedUsers: {
+            some: {
+              userId: userId,
+            },
+          },
+        },
+        orderBy: { sortOrder: 'asc' },
+      });
+
+      // Filter tasks: only show tasks that are:
+      // 1. COMPLETED - always show
+      // 2. Non-completed BUT their dependency (dependsOnId) is COMPLETED
+      // This ensures tasks appear in proper sequence respecting dependencies
+      const tasks = userAssignedTasks.filter((task) => {
+        if (task.status === 'COMPLETED') {
+          return true; // Always show completed tasks
+        }
+
+        // Check if dependency task is completed (if there is one)
+        if (task.dependsOnId) {
+          const dependencyStatus = taskStatusMap.get(task.dependsOnId);
+          // Only show this task if its dependency is COMPLETED
+          if (dependencyStatus !== 'COMPLETED') {
+            return false; // Hide task - dependency not completed yet
+          }
+        }
+
+        // Task has no dependency or dependency is completed - show it
+        return true;
       });
 
       // Organize tasks by phase
@@ -4272,17 +4341,22 @@ router.post(
         throw new AppError('Voce precisa estar em check-in para marcar tarefas', 400, 'NO_ACTIVE_CHECKIN');
       }
 
-      // Verify task exists and belongs to the project
+      // Verify task exists, belongs to the project, AND user is explicitly assigned
       const task = await prisma.projectTask.findFirst({
         where: {
           id: taskId,
           projectId: activeCheckin.projectId,
           publishedToApp: true,
+          assignedUsers: {
+            some: {
+              userId: userId,
+            },
+          },
         },
       });
 
       if (!task) {
-        throw new AppError('Tarefa nao encontrada', 404, 'TASK_NOT_FOUND');
+        throw new AppError('Tarefa nao encontrada ou voce nao esta atribuido a ela', 404, 'TASK_NOT_FOUND');
       }
 
       // Check if task is already completed in this check-in
@@ -4716,13 +4790,19 @@ router.post(
       const taskXpPerTask = 50; // 50 XP per 100% task
 
       if (completedTaskIds && completedTaskIds.length > 0) {
-        // Verify all tasks belong to this project and are NOT already completed
+        // Verify all tasks belong to this project, user is explicitly assigned, and NOT already completed
         const validTasks = await prisma.projectTask.findMany({
           where: {
             id: { in: completedTaskIds },
             projectId: checkin.projectId,
             // Only process tasks that are not already COMPLETED
             status: { not: 'COMPLETED' },
+            // User must be explicitly assigned to this task
+            assignedUsers: {
+              some: {
+                userId: userId,
+              },
+            },
           },
         });
 
