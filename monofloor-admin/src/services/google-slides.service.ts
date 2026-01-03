@@ -59,6 +59,12 @@ function loadLogoBase64(): string {
   }
 }
 
+// Helper para retornar caminho absoluto da fonte NITECLUB
+function getNiteclubFontPath(): string {
+  const fontPath = path.join(__dirname, '../../public/NITECLUB.TTF');
+  return `file://${path.resolve(fontPath)}`;
+}
+
 // CSS compartilhado para fontes (usando Google Fonts para produção)
 const sharedFontStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -86,6 +92,7 @@ function createProposalHTML(data: ProposalData): string {
     : formatarMoeda(data.valorTotalLilit / data.metragemTotalLilit);
 
   const logoBase64 = loadLogoBase64();
+  const niteclubFontPath = getNiteclubFontPath();
 
   return `
 <!DOCTYPE html>
@@ -94,6 +101,14 @@ function createProposalHTML(data: ProposalData): string {
   <meta charset="UTF-8">
   <style>
     ${sharedFontStyles}
+
+    @font-face {
+      font-family: 'NITECLUB';
+      src: url('${niteclubFontPath}') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: block;
+    }
 
     body {
       width: 1080px;
@@ -108,10 +123,10 @@ function createProposalHTML(data: ProposalData): string {
     }
 
     .product-name {
-      font-family: 'Inter', sans-serif;
+      font-family: 'NITECLUB', 'Inter', sans-serif;
       letter-spacing: 3px;
-      font-size: 37px;
-      font-weight: 700;
+      font-size: 44px;
+      font-weight: normal;
       text-transform: uppercase;
       color: #ffffff;
       display: inline-block;
@@ -429,6 +444,7 @@ function createProposalHTML(data: ProposalData): string {
 // HTML template - Slide 27 - Detalhamento por Produto
 function createSurfacesTableHTML(data: ProposalData): string {
   const logoBase64 = loadLogoBase64();
+  const niteclubFontPath = getNiteclubFontPath();
 
   const valorM2Stelion = data.metragemTotalStelion > 0
     ? data.valorTotalStelion / data.metragemTotalStelion
@@ -455,6 +471,14 @@ function createSurfacesTableHTML(data: ProposalData): string {
   <meta charset="UTF-8">
   <style>
     ${sharedFontStyles}
+
+    @font-face {
+      font-family: 'NITECLUB';
+      src: url('${niteclubFontPath}') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: block;
+    }
 
     body {
       width: 1080px;
@@ -552,10 +576,10 @@ function createSurfacesTableHTML(data: ProposalData): string {
     }
 
     .product-name {
-      font-family: 'Inter', sans-serif;
+      font-family: 'NITECLUB', 'Inter', sans-serif;
       letter-spacing: 2px;
-      font-size: 20px;
-      font-weight: 700;
+      font-size: 24px;
+      font-weight: normal;
       text-transform: uppercase;
       color: #ffffff;
     }
@@ -622,9 +646,9 @@ function createSurfacesTableHTML(data: ProposalData): string {
     }
 
     .total-card-label {
-      font-family: 'Inter', sans-serif;
-      font-size: 18px;
-      font-weight: 700;
+      font-family: 'NITECLUB', 'Inter', sans-serif;
+      font-size: 22px;
+      font-weight: normal;
       color: #333333;
       text-transform: uppercase;
       letter-spacing: 2px;
@@ -753,6 +777,12 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
     const html26 = createProposalHTML(data);
     await page.setContent(html26, { waitUntil: 'networkidle0', timeout: 60000 });
 
+    // Esperar fontes carregarem (incluindo NITECLUB)
+    await page.evaluate(() => document.fonts.ready);
+    // Pequeno delay adicional para garantir renderização da fonte
+    await new Promise(resolve => setTimeout(resolve, 500));
+    console.log('✅ Fontes carregadas para slide 26');
+
     const slide26Buffer = await page.pdf({
       width: '1080px',
       height: '1920px',
@@ -780,8 +810,13 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
     if (hasProductData) {
       console.log('📄 Gerando slide 27 (Detalhamento por Produto)...');
       const html27 = createSurfacesTableHTML(data);
-      // Usar 'domcontentloaded' pois a fonte já está em cache do slide 26
       await page.setContent(html27, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+      // Esperar fontes carregarem
+      await page.evaluate(() => document.fonts.ready);
+      // Pequeno delay adicional para garantir renderização
+      await new Promise(resolve => setTimeout(resolve, 500));
+      console.log('✅ Fontes carregadas para slide 27');
 
       slide27Buffer = await page.pdf({
         width: '1080px',

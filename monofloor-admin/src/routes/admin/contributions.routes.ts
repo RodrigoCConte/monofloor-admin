@@ -3,6 +3,7 @@ import { ContributionStatus } from '@prisma/client';
 import { body, param, query, validationResult } from 'express-validator';
 import { adminAuth } from '../../middleware/auth';
 import { getSocketServer } from '../../services/socket.service';
+import { sendContributionResultPush } from '../../services/push.service';
 import prisma from '../../lib/prisma';
 
 const router = Router();
@@ -217,6 +218,9 @@ router.post(
         });
       }
 
+      // Also send push notification
+      sendContributionResultPush(request.userId, 'approved', 'contribuicao').catch(console.error);
+
       res.json({
         success: true,
         message: 'Solicitacao aprovada. Usuario adicionado ao projeto.',
@@ -274,6 +278,9 @@ router.post(
           projectId: request.projectId,
         });
       }
+
+      // Also send push notification
+      sendContributionResultPush(request.userId, 'rejected', 'contribuicao').catch(console.error);
 
       res.json({
         success: true,

@@ -19,6 +19,7 @@ import { piuiRoutes } from './piui.routes';
 import { planejamentoRoutes } from './planejamento.routes';
 import { posvendaRoutes } from './posvenda.routes';
 import { enterpriseRoutes } from './enterprise.routes';
+import schedulingRoutes from './scheduling.routes';
 import { detectAndProcessLunchSkips, checkLunchSkipForUser } from '../../services/lunch-skipped-detection.service';
 
 const router = Router();
@@ -45,6 +46,9 @@ router.use('/piui', piuiRoutes);
 router.use('/planejamento', planejamentoRoutes);
 router.use('/posvenda', posvendaRoutes);
 router.use('/enterprise', enterpriseRoutes);
+
+// Scheduling (holidays, saturday schedules, absences)
+router.use('/scheduling', schedulingRoutes);
 
 // Test endpoint for lunch skip detection (development only)
 router.post('/test/lunch-skip-detection', async (req, res) => {

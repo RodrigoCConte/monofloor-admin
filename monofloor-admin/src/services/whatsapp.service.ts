@@ -413,6 +413,70 @@ export async function sendEntryRequest(
 }
 
 /**
+ * Send a document (PDF) via Z-API
+ */
+export async function sendWhatsAppDocument(
+  phone: string,
+  documentBase64: string,  // Base64 encoded document (without data: prefix) or data URL
+  fileName: string,
+  caption?: string
+): Promise<SendMessageResponse> {
+  if (!ZAPI_INSTANCE || !ZAPI_TOKEN) {
+    console.warn('[WhatsApp] Z-API not configured. Skipping document.');
+    return { success: false, error: 'Z-API not configured' };
+  }
+
+  const formattedPhone = phone.replace(/\D/g, '');
+
+  // Ensure we have a proper data URL for PDF
+  let documentData = documentBase64;
+  if (!documentBase64.startsWith('data:')) {
+    documentData = `data:application/pdf;base64,${documentBase64}`;
+  }
+
+  try {
+    console.log(`[WhatsApp] Sending document "${fileName}" to ${formattedPhone}`);
+
+    const response = await fetch(`${ZAPI_BASE_URL}/send-document/pdf`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(ZAPI_CLIENT_TOKEN ? { 'Client-Token': ZAPI_CLIENT_TOKEN } : {}),
+      },
+      body: JSON.stringify({
+        phone: formattedPhone,
+        document: documentData,
+        fileName: fileName,
+        caption: caption || '',
+      }),
+    });
+
+    const data: ZApiSendTextResponse = await response.json();
+
+    if (response.ok) {
+      console.log(`[WhatsApp] Document sent successfully to ${formattedPhone}`);
+      return {
+        success: true,
+        zaapId: data.zaapId,
+        messageId: data.messageId,
+      };
+    } else {
+      console.error('[WhatsApp] Failed to send document:', data);
+      return {
+        success: false,
+        error: data.error || data.message || 'Unknown error',
+      };
+    }
+  } catch (error) {
+    console.error('[WhatsApp] Error sending document:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Network error',
+    };
+  }
+}
+
+/**
  * Check if Z-API is properly configured
  */
 export function isWhatsAppConfigured(): boolean {

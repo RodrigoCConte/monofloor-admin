@@ -281,7 +281,7 @@ router.post(
             name: user.name,
             username: user.username,
             status: user.status,
-            photoUrl: user.photoUrl,
+            photoUrl: photoUrl || user.photoUrl,
           },
         },
       });

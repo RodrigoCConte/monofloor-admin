@@ -1058,7 +1058,7 @@ model DailyReportResponsibility {
 
 model ComercialData {
   id                  String              @id @default(uuid())
-  projectId           String              @unique @map("project_id")
+  projectId           String?             @unique @map("project_id") // Opcional - só é preenchido quando lead vira projeto
   pipedriveDealId     String?             @unique @map("pipedrive_deal_id")
   pipedrivePersonId   Int?                @map("pipedrive_person_id")
   pipedriveOrgId      Int?                @map("pipedrive_org_id")
@@ -1127,18 +1127,57 @@ model ComercialData {
   typeformRawData     Json?               @map("typeform_raw_data")
   createdAt           DateTime            @default(now()) @map("created_at")
   updatedAt           DateTime            @updatedAt @map("updated_at")
-  project             Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project             Project?            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   followUps           FollowUp[]
   pipedriveActivities PipedriveActivity[]
   pipedriveFiles      PipedriveFile[]
   pipedriveNotes      PipedriveNote[]
   propostas           Proposta[]
+  anexos              ComercialAnexo[]
+  orcamentosEnviados  OrcamentoEnviado[]
 
   @@index([status])
   @@index([pipedriveDealId])
   @@index([stageId])
   @@index([dealStatus])
   @@map("comercial_data")
+}
+
+// Anexos do lead (projeto arquitetônico, documentos, etc)
+model ComercialAnexo {
+  id           String         @id @default(uuid())
+  comercialId  String         @map("comercial_id")
+  nome         String         // Nome do arquivo
+  tipo         String         // PROJETO_ARQUITETONICO, PLANTA, DOCUMENTO, OUTRO
+  descricao    String?        // Descrição opcional
+  fileData     String?        @map("file_data") @db.Text // Base64 do arquivo
+  fileUrl      String?        @map("file_url") // URL externa (se aplicável)
+  mimeType     String?        @map("mime_type") // image/png, application/pdf, etc
+  fileSize     Int?           @map("file_size") // Tamanho em bytes
+  createdAt    DateTime       @default(now()) @map("created_at")
+  comercial    ComercialData  @relation(fields: [comercialId], references: [id], onDelete: Cascade)
+
+  @@index([comercialId])
+  @@map("comercial_anexos")
+}
+
+// Orçamentos enviados ao cliente com datas
+model OrcamentoEnviado {
+  id           String         @id @default(uuid())
+  comercialId  String         @map("comercial_id")
+  dataEnvio    DateTime       @map("data_envio")
+  valor        Decimal?       @db.Decimal(12, 2)
+  descricao    String?        // Descrição do orçamento
+  metragem     Decimal?       @db.Decimal(10, 2)
+  observacoes  String?        @db.Text
+  propostaId   String?        @map("proposta_id") // Vínculo com proposta gerada (opcional)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  comercial    ComercialData  @relation(fields: [comercialId], references: [id], onDelete: Cascade)
+  proposta     Proposta?      @relation(fields: [propostaId], references: [id], onDelete: SetNull)
+
+  @@index([comercialId])
+  @@index([dataEnvio])
+  @@map("orcamentos_enviados")
 }
 
 model PipedriveNote {
@@ -1207,19 +1246,54 @@ model Proposta {
   desconto       Decimal?       @db.Decimal(5, 2)
   descricao      String?
   escopoUrl      String?        @map("escopo_url")
+  pdfUrl         String?        @map("pdf_url") // URL do PDF gerado
+  pdfBase64      String?        @map("pdf_base64") @db.Text // PDF em base64 para envio direto
+  metragem       Decimal?       @db.Decimal(10, 2) // Metragem total
+  dadosCalculo   Json?          @map("dados_calculo") // Dados usados no cálculo
   status         PropostaStatus @default(DRAFT)
   enviadaEm      DateTime?      @map("enviada_em")
   aprovadaEm     DateTime?      @map("aprovada_em")
   rejeitadaEm    DateTime?      @map("rejeitada_em")
   motivoRejeicao String?        @map("motivo_rejeicao")
   validadeAte    DateTime?      @map("validade_ate")
+  // Campos para proposta HTML com tracking
+  htmlSlug       String?        @unique @map("html_slug") // Slug único para URL pública
+  htmlContent    String?        @map("html_content") @db.Text // Conteúdo HTML da proposta
+  htmlImages     String?        @map("html_images") @db.Text // Imagens pré-convertidas (JSON array)
+  htmlGeradoEm   DateTime?      @map("html_gerado_em") // Quando foi gerada em HTML
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
-  comercial      ComercialData  @relation(fields: [comercialId], references: [id], onDelete: Cascade)
+  comercial          ComercialData    @relation(fields: [comercialId], references: [id], onDelete: Cascade)
+  orcamentosEnviados OrcamentoEnviado[]
+  views              PropostaView[]
 
   @@index([comercialId])
   @@index([status])
+  @@index([htmlSlug])
   @@map("propostas")
+}
+
+// Modelo para tracking de visualizações de propostas HTML
+model PropostaView {
+  id            String   @id @default(uuid())
+  propostaId    String   @map("proposta_id")
+  viewedAt      DateTime @default(now()) @map("viewed_at")
+  ip            String?  // IP do visitante
+  userAgent     String?  @map("user_agent") @db.Text // User agent do navegador
+  country       String?  // País (geolocalização por IP)
+  city          String?  // Cidade
+  region        String?  // Estado/Região
+  timeOnPage    Int?     @map("time_on_page") // Tempo na página em segundos
+  scrollDepth   Int?     @map("scroll_depth") // Profundidade de scroll (0-100%)
+  deviceType    String?  @map("device_type") // mobile, tablet, desktop
+  isBot         Boolean  @default(false) @map("is_bot") // Se detectou como bot
+  sessionId     String?  @map("session_id") // ID da sessão para agrupar eventos
+  proposta      Proposta @relation(fields: [propostaId], references: [id], onDelete: Cascade)
+
+  @@index([propostaId])
+  @@index([viewedAt])
+  @@index([ip])
+  @@map("proposta_views")
 }
 
 model FollowUp {

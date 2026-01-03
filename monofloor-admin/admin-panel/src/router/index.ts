@@ -109,10 +109,16 @@ const routes = [
     component: () => import('../views/Enterprise.vue'),
     meta: { requiresAuth: true },
   },
+  {
+    path: '/scheduling',
+    name: 'Scheduling',
+    component: () => import('../views/Scheduling.vue'),
+    meta: { requiresAuth: true },
+  },
 ];
 
 const router = createRouter({
-  history: createWebHistory('/admin/'),
+  history: createWebHistory('/'),
   routes,
 });
 

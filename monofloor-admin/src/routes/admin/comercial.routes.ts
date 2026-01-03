@@ -1,8 +1,30 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient, ComercialStatus, PropostaStatus, FollowUpStatus, FollowUpTipo, FollowUpCanal } from '@prisma/client';
+import * as XLSX from 'xlsx';
+import multer from 'multer';
+import { gptService } from '../../services/ai/gpt.service';
+import { leadDistributionService } from '../../services/lead-distribution.service';
+import { sendWhatsAppDocument, sendWhatsAppMessage, isWhatsAppConfigured } from '../../services/whatsapp.service';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// =============================================
+// CACHE SYSTEM FOR COMERCIAL DATA
+// =============================================
+interface CacheEntry {
+  data: any[];
+  timestamp: number;
+}
+
+const comercialCache: Map<string, CacheEntry> = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+// Função para invalidar cache
+export const invalidateComercialCache = () => {
+  comercialCache.clear();
+  console.log('[Cache] Comercial cache invalidated');
+};
 
 // =============================================
 // COMERCIAL MODULE ROUTES
@@ -11,53 +33,122 @@ const prisma = new PrismaClient();
 // GET /comercial - List all commercial data with filtering
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { status, search, page = '1', limit = '20' } = req.query;
+    const { status, search, page = '1', limit = '10000', excludeClosed } = req.query;
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+    // Cache key based on filters
+    // Cache key - só para queries sem search (search não é cacheável)
+    const cacheKey = !search ? `${excludeClosed || 'false'}-${status || 'ALL'}` : null;
+
+    // Verificar cache (apenas se não tiver search)
+    if (cacheKey) {
+      const cached = comercialCache.get(cacheKey);
+      if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+        console.log(`[Cache] HIT for ${cacheKey} (${cached.data.length} deals)`);
+        return res.json({
+          success: true,
+          data: cached.data,
+          pagination: {
+            total: cached.data.length,
+            page: 1,
+            limit: cached.data.length,
+            totalPages: 1,
+          },
+          cached: true,
+        });
+      }
+    }
 
     const where: any = {};
 
-    if (status && status !== 'ALL') {
+    // Excluir deals fechados (PERDIDO e GANHO) para melhor performance
+    if (excludeClosed === 'true') {
+      where.status = { notIn: ['PERDIDO', 'GANHO'] };
+    } else if (status && status !== 'ALL') {
       where.status = status as ComercialStatus;
     }
 
     if (search) {
       where.OR = [
-        { project: { cliente: { contains: search as string, mode: 'insensitive' } } },
-        { project: { endereco: { contains: search as string, mode: 'insensitive' } } },
-        { arquiteto: { contains: search as string, mode: 'insensitive' } },
-        { escritorio: { contains: search as string, mode: 'insensitive' } },
+        { personName: { contains: search as string, mode: 'insensitive' } },
+        { personEmail: { contains: search as string, mode: 'insensitive' } },
+        { nomeEscritorio: { contains: search as string, mode: 'insensitive' } },
+        { cidadeExecucao: { contains: search as string, mode: 'insensitive' } },
       ];
     }
+
+    console.log(`[Cache] MISS for ${cacheKey || 'search query'} - fetching from DB...`);
 
     const [comerciais, total] = await Promise.all([
       prisma.comercialData.findMany({
         where,
-        include: {
+        select: {
+          // IDs
+          id: true,
+          pipedriveDealId: true,
+          pipedriveUrl: true,
+          // Status e Stage
+          status: true,
+          stageName: true,
+          stageId: true,
+          // Contato
+          personName: true,
+          personEmail: true,
+          personPhone: true,
+          primeiroNomeZapi: true,
+          telefoneZapi: true,
+          // Valores
+          dealValue: true,
+          dealCurrency: true,
+          // Datas
+          dealAddTime: true,
+          dealUpdateTime: true,
+          stageChangeTime: true,
+          pipedriveSyncedAt: true,
+          // Owner / Consultor
+          ownerUserName: true,
+          consultorId: true,
+          // Campos customizados importantes
+          tipoCliente: true,
+          tipoProjeto: true,
+          nomeEscritorio: true,
+          cidadeExecucao: true,
+          metragemEstimada: true,
+          metragemEstimadaN1: true,
+          descritivoArea: true,
+          budgetEstimado: true,
+          estadoObra: true,
+          dataPrevistaExec: true,
+          resumo: true,
+          // Relações leves
           project: {
             select: {
               id: true,
               cliente: true,
               endereco: true,
               m2Total: true,
-              currentModule: true,
             },
           },
-          propostas: {
-            orderBy: { versao: 'desc' },
-            take: 1,
-          },
-          followUps: {
-            where: { status: 'AGENDADO' },
-            orderBy: { agendadoPara: 'asc' },
-            take: 1,
-          },
+          // NÃO incluir pipedriveRawData (muito pesado)
         },
-        orderBy: { updatedAt: 'desc' },
+        orderBy: [
+          { dealAddTime: 'desc' },  // Mais recentes primeiro
+          { dealUpdateTime: 'desc' }
+        ],
         skip,
         take: parseInt(limit as string),
       }),
       prisma.comercialData.count({ where }),
     ]);
+
+    // Salvar no cache (se não for search)
+    if (cacheKey) {
+      comercialCache.set(cacheKey, {
+        data: comerciais,
+        timestamp: Date.now(),
+      });
+      console.log(`[Cache] SAVED ${cacheKey} (${comerciais.length} deals)`);
+    }
 
     res.json({
       success: true,
@@ -68,6 +159,7 @@ router.get('/', async (req: Request, res: Response) => {
         limit: parseInt(limit as string),
         totalPages: Math.ceil(total / parseInt(limit as string)),
       },
+      cached: false,
     });
   } catch (error: any) {
     console.error('[Comercial] Error listing:', error);
@@ -81,6 +173,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
     const stats = await Promise.all([
       prisma.comercialData.count({ where: { status: 'LEAD' } }),
       prisma.comercialData.count({ where: { status: 'PRIMEIRO_CONTATO' } }),
+      prisma.comercialData.count({ where: { status: 'CONTATO_ARQUITETO' } }),
       prisma.comercialData.count({ where: { status: 'LEVANTAMENTO' } }),
       prisma.comercialData.count({ where: { status: 'PROPOSTA_ENVIADA' } }),
       prisma.comercialData.count({ where: { status: 'FOLLOW_UP' } }),
@@ -112,15 +205,16 @@ router.get('/stats', async (_req: Request, res: Response) => {
       stats: {
         leads: stats[0],
         primeiroContato: stats[1],
-        levantamento: stats[2],
-        propostaEnviada: stats[3],
-        followUp: stats[4],
-        negociacao: stats[5],
-        ganhos: stats[6],
-        perdidos: stats[7],
-        followUpsHoje: stats[8],
-        valorEmNegociacao: stats[9]._sum.valorTotal || 0,
-        totalAtivos: stats[0] + stats[1] + stats[2] + stats[3] + stats[4] + stats[5],
+        contatoArquiteto: stats[2],
+        levantamento: stats[3],
+        propostaEnviada: stats[4],
+        followUp: stats[5],
+        negociacao: stats[6],
+        ganhos: stats[7],
+        perdidos: stats[8],
+        followUpsHoje: stats[9],
+        valorEmNegociacao: stats[10]._sum.valorTotal || 0,
+        totalAtivos: stats[0] + stats[1] + stats[2] + stats[3] + stats[4] + stats[5] + stats[6],
       },
     });
   } catch (error: any) {
@@ -258,39 +352,47 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /comercial/:id - Update comercial data
+// PUT /comercial/:id - Update comercial data (suporta edição inline de campos)
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const {
-      personPhone,
-      personEmail,
-      arquiteto,
-      escritorio,
-      telefoneArquiteto,
-      tipoCliente,
-      tipoProjeto,
-      budgetEstimado,
-      origem,
-    } = req.body;
+    const updateData: Record<string, any> = {};
+
+    // Campos editáveis - só atualiza se presente no body
+    const editableFields = [
+      'personName', 'personPhone', 'personEmail',
+      'arquiteto', 'escritorio', 'telefoneArquiteto',
+      'tipoCliente', 'tipoProjeto', 'budgetEstimado', 'origem',
+      'metragemEstimada', 'metragemEstimadaN1',
+      'endereco', 'cidadeExecucao', 'cidadeExecucaoDesc',
+      'estadoObra', 'dataPrevistaExec',
+      'nomeEscritorio', 'detalhesArquiteto',
+      'resumo', 'descritivoArea',
+      'consultorId', 'dealValue'
+    ];
+
+    for (const field of editableFields) {
+      if (req.body[field] !== undefined) {
+        // Tratar valores vazios como null para campos opcionais
+        const value = req.body[field];
+        updateData[field] = value === '' ? null : value;
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ success: false, error: 'No fields to update' });
+    }
 
     const comercial = await prisma.comercialData.update({
       where: { id },
-      data: {
-        personPhone,
-        personEmail,
-        arquiteto,
-        escritorio,
-        telefoneArquiteto,
-        tipoCliente,
-        tipoProjeto,
-        budgetEstimado: budgetEstimado || null,
-        origem,
-      },
+      data: updateData,
       include: {
         project: true,
       },
     });
+
+    // Invalidar cache após atualização
+    invalidateComercialCache();
 
     res.json({ success: true, data: comercial });
   } catch (error: any) {
@@ -2026,6 +2128,218 @@ router.post('/scoring/recalculate-all', async (_req: Request, res: Response) => 
 });
 
 // =============================================
+// REPROCESS METRAGEM WITH AI
+// =============================================
+
+// POST /comercial/reprocess-metragem - Reprocess descritivoArea with AI to extract metragem
+router.post('/reprocess-metragem', async (req: Request, res: Response) => {
+  try {
+    const { limit = 100, dryRun = false, stageFilter } = req.body;
+
+    console.log(`[Metragem AI] Starting reprocess (limit=${limit}, dryRun=${dryRun})`);
+
+    // Find leads with descritivoArea but metragemEstimada is textual (contains 'de ' or 'm2')
+    const where: any = {
+      descritivoArea: { not: null },
+      OR: [
+        { metragemEstimada: { contains: 'de ' } },
+        { metragemEstimada: { endsWith: 'm2' } },
+        { metragemEstimada: { endsWith: 'm²' } },
+        { metragemEstimada: null },
+      ],
+    };
+
+    if (stageFilter) {
+      where.stageName = stageFilter;
+    }
+
+    const leads = await prisma.comercialData.findMany({
+      where,
+      select: {
+        id: true,
+        personName: true,
+        descritivoArea: true,
+        metragemEstimada: true,
+        metragemEstimadaN1: true,
+        projectId: true,
+      },
+      take: parseInt(limit),
+      orderBy: { dealAddTime: 'desc' },
+    });
+
+    console.log(`[Metragem AI] Found ${leads.length} leads to process`);
+
+    const results: any[] = [];
+    let processed = 0;
+    let updated = 0;
+    let errors = 0;
+
+    for (const lead of leads) {
+      try {
+        const descritivoArea = lead.descritivoArea as string;
+
+        // Get fallback from faixa
+        let fallbackMetragem = 150;
+        if (lead.metragemEstimadaN1) {
+          const faixaMatch = lead.metragemEstimadaN1.match(/(\d+)/);
+          if (faixaMatch) {
+            fallbackMetragem = parseInt(faixaMatch[1]);
+          }
+        }
+
+        console.log(`[Metragem AI] Processing ${lead.personName}: "${descritivoArea.substring(0, 50)}..."`);
+
+        const metragemExtraida = await gptService.extractMetragemFromDescription(
+          descritivoArea,
+          fallbackMetragem
+        );
+
+        const result = {
+          id: lead.id,
+          nome: lead.personName,
+          descritivoArea: descritivoArea.substring(0, 100),
+          metragemAnterior: lead.metragemEstimada,
+          metragemNova: metragemExtraida,
+        };
+
+        results.push(result);
+        processed++;
+
+        if (!dryRun && metragemExtraida > 0) {
+          // Update comercialData
+          await prisma.comercialData.update({
+            where: { id: lead.id },
+            data: { metragemEstimada: metragemExtraida.toString() },
+          });
+
+          // Update project m2Total if exists
+          if (lead.projectId) {
+            await prisma.project.update({
+              where: { id: lead.projectId },
+              data: { m2Total: metragemExtraida },
+            });
+          }
+
+          updated++;
+          console.log(`[Metragem AI] ✅ Updated ${lead.personName}: ${metragemExtraida}m²`);
+        }
+
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+      } catch (error: any) {
+        console.error(`[Metragem AI] ❌ Error processing ${lead.personName}:`, error.message);
+        errors++;
+      }
+    }
+
+    // Invalidate cache after updates
+    if (!dryRun && updated > 0) {
+      invalidateComercialCache();
+    }
+
+    res.json({
+      success: true,
+      message: dryRun ? 'Dry run complete' : `Processed ${processed}, updated ${updated} leads`,
+      stats: { found: leads.length, processed, updated, errors },
+      results,
+    });
+
+  } catch (error: any) {
+    console.error('[Metragem AI] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
+// REPROCESS PRIMEIRO NOME Z-API
+// =============================================
+
+/**
+ * Formata o primeiro nome para Z-API
+ * Ex: "ALTAIR DA SILVA" → "Altair"
+ * Ex: "joão pedro" → "João"
+ */
+function formatPrimeiroNome(nomeCompleto: string | null | undefined): string {
+  if (!nomeCompleto) return '';
+  const primeiroNome = nomeCompleto.trim().split(/\s+/)[0];
+  if (!primeiroNome) return '';
+  return primeiroNome.charAt(0).toUpperCase() + primeiroNome.slice(1).toLowerCase();
+}
+
+// POST /comercial/reprocess-primeiro-nome - Reprocess personName to extract primeiroNomeZapi
+router.post('/reprocess-primeiro-nome', async (req: Request, res: Response) => {
+  try {
+    const { limit = 1000, dryRun = false } = req.body;
+
+    console.log(`[Primeiro Nome] Starting reprocess (limit=${limit}, dryRun=${dryRun})`);
+
+    // Find leads where primeiroNomeZapi might need fixing
+    const leads = await prisma.comercialData.findMany({
+      where: {
+        personName: { not: null },
+      },
+      select: {
+        id: true,
+        personName: true,
+        primeiroNomeZapi: true,
+      },
+      take: parseInt(limit),
+      orderBy: { dealAddTime: 'desc' },
+    });
+
+    console.log(`[Primeiro Nome] Found ${leads.length} leads to check`);
+
+    const results: any[] = [];
+    let updated = 0;
+    let skipped = 0;
+
+    for (const lead of leads) {
+      const personName = lead.personName || '';
+      const novoNome = formatPrimeiroNome(personName);
+      const nomeAtual = lead.primeiroNomeZapi || '';
+
+      // Skip if already correct
+      if (nomeAtual === novoNome) {
+        skipped++;
+        continue;
+      }
+
+      results.push({
+        id: lead.id,
+        personName,
+        antes: nomeAtual,
+        depois: novoNome,
+      });
+
+      if (!dryRun) {
+        await prisma.comercialData.update({
+          where: { id: lead.id },
+          data: { primeiroNomeZapi: novoNome },
+        });
+        updated++;
+      }
+    }
+
+    // Invalidate cache after updates
+    if (!dryRun && updated > 0) {
+      invalidateComercialCache();
+    }
+
+    res.json({
+      success: true,
+      message: dryRun ? 'Dry run complete' : `Updated ${updated} leads`,
+      stats: { checked: leads.length, updated, skipped, needsUpdate: results.length },
+      results: results.slice(0, 50), // Limit results in response
+    });
+
+  } catch (error: any) {
+    console.error('[Primeiro Nome] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
 // ROUTES WITH :id PARAMETER (MUST BE LAST)
 // =============================================
 
@@ -2054,6 +2368,1150 @@ router.get('/:id', async (req: Request, res: Response) => {
     res.json({ success: true, data: comercial });
   } catch (error: any) {
     console.error('[Comercial] Error getting:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
+// EXCEL IMPORT
+// =============================================
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Mapeamento padrão de colunas do Pipedrive para ComercialData
+// Formato exato do export Pipedrive em português
+const DEFAULT_COLUMN_MAPPING: Record<string, string> = {
+  // Identificação
+  'Negócio - ID': 'pipedriveDealId',
+  'Negócio - Título': 'titulo',
+  'Negócio - Etiqueta': 'labelPipedrive',
+
+  // Contato - Pessoa
+  'Pessoa - Nome': 'personName',
+  'Negócio - Pessoa de contato': 'personName', // fallback
+  'Pessoa - Telefone': 'personPhone',
+  'Pessoa - Telefone - Celular': 'personPhone', // fallback
+  'Pessoa - E-mail - Trabalho': 'personEmail',
+
+  // Valores
+  'Negócio - Valor': 'dealValue',
+
+  // Estágio e Pipeline
+  'Negócio - Etapa': 'stageName',
+  'Negócio - Funil': 'pipelineName',
+  'Negócio - Status': 'dealStatus',
+
+  // Datas
+  'Negócio - Negócio criado em': 'dealAddTime',
+  'Negócio - Atualizado em': 'dealUpdateTime',
+  'Negócio - Última alteração de etapa': 'stageChangeTime',
+  'Negócio - Ganho em': 'wonTime',
+  'Negócio - Data de perda': 'lostTime',
+
+  // Responsável
+  'Negócio - Proprietário': 'ownerUserName',
+  'Negócio - Criado por': 'creatorUserName',
+
+  // Campos customizados Monofloor
+  'Negócio - Tipo de cliente': 'tipoCliente',
+  'Negócio - Tipo de projeto': 'tipoProjeto',
+  'Negócio - Cidade de execução': 'cidadeExecucao',
+  'Negócio - Cidade de execução (descritivo)': 'cidadeExecucaoDesc',
+  'Negócio - Nome do escritório / Empresa de engenharia': 'nomeEscritorio',
+  'Negócio - Metragem estimada': 'metragemEstimada',
+  'Negócio - Metragem estimada N1': 'metragemEstimadaN1',
+  'Negócio - Metragem estimada (sem arquiteto)': 'metragemSemArq',
+  'Negócio - Budget estimado': 'budgetEstimado',
+  'Negócio - Qual estado de obra': 'estadoObra',
+  'Negócio - Data prevista de execução': 'dataPrevistaExec',
+  'Negócio - Descritivo de área': 'descritivoArea',
+  'Negócio - Detalhes (com arquiteto)': 'detalhesArquiteto',
+
+  // Campos Z-API para integração WhatsApp
+  'Negócio - Primeiro Nome Para Z-API': 'primeiroNomeZapi',
+  'Negócio - Telefone Processado Z-API': 'telefoneZapi',
+
+  // Campos Pessoa extras
+  'Pessoa - Tem arquiteto?': 'temArquiteto',
+  'Pessoa - Nome do escritório': 'escritorio',
+};
+
+// POST /comercial/import - Import from Excel
+router.post('/import', upload.single('file'), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'Nenhum arquivo enviado' });
+    }
+
+    console.log('[Import] Recebendo arquivo:', req.file.originalname);
+
+    // Parse Excel
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+    if (rawData.length < 2) {
+      return res.status(400).json({ success: false, error: 'Arquivo vazio ou sem dados' });
+    }
+
+    // Headers (primeira linha)
+    const headers = rawData[0] as string[];
+    const rows = rawData.slice(1);
+
+    console.log('[Import] Headers encontrados:', headers);
+    console.log('[Import] Total de linhas:', rows.length);
+
+    // Custom mapping from request body (optional)
+    const customMapping = req.body.mapping ? JSON.parse(req.body.mapping) : {};
+    const columnMapping = { ...DEFAULT_COLUMN_MAPPING, ...customMapping };
+
+    // Mapear índices das colunas
+    const columnIndexes: Record<string, number> = {};
+    headers.forEach((header, index) => {
+      const mappedField = columnMapping[header];
+      if (mappedField) {
+        columnIndexes[mappedField] = index;
+      }
+    });
+
+    console.log('[Import] Colunas mapeadas:', Object.keys(columnIndexes));
+
+    // Importar dados
+    let imported = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+
+      try {
+        // Extrair dados da linha
+        const getValue = (field: string) => {
+          const idx = columnIndexes[field];
+          return idx !== undefined ? row[idx] : null;
+        };
+
+        const personName = getValue('personName');
+        const titulo = getValue('titulo');
+
+        // Pular linhas vazias
+        if (!personName && !titulo) {
+          skipped++;
+          continue;
+        }
+
+        // Determinar status baseado no estágio
+        const stageName = getValue('stageName')?.toString() || '';
+        const dealStatus = getValue('dealStatus')?.toString() || '';
+
+        let status: ComercialStatus = 'LEAD';
+        // Status em português do Pipedrive: "Ganho", "Perdido", "Aberto"
+        if (dealStatus.toLowerCase() === 'ganho' || dealStatus === 'won' || stageName.toLowerCase().includes('ganho')) {
+          status = 'GANHO';
+        } else if (dealStatus.toLowerCase() === 'perdido' || dealStatus === 'lost' || stageName.toLowerCase().includes('perdido')) {
+          status = 'PERDIDO';
+        } else if (stageName.toLowerCase().includes('proposta')) {
+          status = 'PROPOSTA_ENVIADA';
+        } else if (stageName.toLowerCase().includes('negociação') || stageName.toLowerCase().includes('negociacao')) {
+          status = 'NEGOCIACAO';
+        } else if (stageName.toLowerCase().includes('follow')) {
+          status = 'FOLLOW_UP';
+        } else if (stageName.toLowerCase().includes('levantamento')) {
+          status = 'LEVANTAMENTO';
+        } else if (stageName.toLowerCase().includes('contato') || stageName.toLowerCase().includes('arquiteto')) {
+          status = 'CONTATO_ARQUITETO';
+        } else if (stageName.toLowerCase().includes('primeiro')) {
+          status = 'PRIMEIRO_CONTATO';
+        }
+
+        // Parse de datas
+        const parseDate = (val: any): Date | null => {
+          if (!val) return null;
+          const d = new Date(val);
+          return isNaN(d.getTime()) ? null : d;
+        };
+
+        // Parse de valor numérico
+        const parseNumber = (val: any): number | null => {
+          if (!val) return null;
+          const n = parseFloat(val.toString().replace(/[^\d.,]/g, '').replace(',', '.'));
+          return isNaN(n) ? null : n;
+        };
+
+        // Criar registro
+        await prisma.comercialData.create({
+          data: {
+            pipedriveDealId: getValue('pipedriveDealId')?.toString() || null,
+            personName: personName?.toString() || titulo?.toString() || 'Sem nome',
+            personEmail: getValue('personEmail')?.toString() || null,
+            personPhone: getValue('personPhone')?.toString() || null,
+            dealValue: parseNumber(getValue('dealValue')),
+            stageName: stageName || null,
+            dealStatus: dealStatus || null,
+            dealAddTime: parseDate(getValue('dealAddTime')),
+            dealUpdateTime: parseDate(getValue('dealUpdateTime')),
+            stageChangeTime: parseDate(getValue('stageChangeTime')),
+            wonTime: parseDate(getValue('wonTime')),
+            lostTime: parseDate(getValue('lostTime')),
+            ownerUserName: getValue('ownerUserName')?.toString() || null,
+            creatorUserName: getValue('creatorUserName')?.toString() || null,
+            labelPipedrive: getValue('labelPipedrive')?.toString() || null,
+            tipoCliente: getValue('tipoCliente')?.toString() || null,
+            tipoProjeto: getValue('tipoProjeto')?.toString() || null,
+            cidadeExecucao: getValue('cidadeExecucao')?.toString() || null,
+            cidadeExecucaoDesc: getValue('cidadeExecucaoDesc')?.toString() || null,
+            nomeEscritorio: getValue('nomeEscritorio')?.toString() || null,
+            metragemEstimada: getValue('metragemEstimada')?.toString() || null,
+            metragemEstimadaN1: getValue('metragemEstimadaN1')?.toString() || null,
+            metragemSemArq: getValue('metragemSemArq')?.toString() || null,
+            budgetEstimado: getValue('budgetEstimado')?.toString() || null,
+            estadoObra: getValue('estadoObra')?.toString() || null,
+            dataPrevistaExec: getValue('dataPrevistaExec')?.toString() || null,
+            descritivoArea: getValue('descritivoArea')?.toString() || null,
+            detalhesArquiteto: getValue('detalhesArquiteto')?.toString() || null,
+            escritorio: getValue('escritorio')?.toString() || null,
+            // Campos Z-API para integração WhatsApp
+            primeiroNomeZapi: getValue('primeiroNomeZapi')?.toString() || null,
+            telefoneZapi: getValue('telefoneZapi')?.toString() || null,
+            status,
+            pipedriveSyncedAt: new Date(),
+          },
+        });
+
+        imported++;
+
+        if (imported % 100 === 0) {
+          console.log(`[Import] Progresso: ${imported}/${rows.length}`);
+        }
+      } catch (rowError: any) {
+        errors.push(`Linha ${i + 2}: ${rowError.message}`);
+        skipped++;
+      }
+    }
+
+    // Invalidar cache
+    comercialCache.clear();
+
+    console.log(`[Import] Concluído: ${imported} importados, ${skipped} pulados`);
+
+    res.json({
+      success: true,
+      imported,
+      skipped,
+      total: rows.length,
+      errors: errors.slice(0, 10), // Primeiros 10 erros
+      mappedColumns: Object.keys(columnIndexes),
+      unmappedHeaders: headers.filter(h => !columnMapping[h]),
+    });
+  } catch (error: any) {
+    console.error('[Import] Erro:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /comercial/import/template - Download template with column mapping
+router.get('/import/template', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    mapping: DEFAULT_COLUMN_MAPPING,
+    instructions: {
+      pt: 'Exporte seus deals do Pipedrive em Excel e faça upload. O sistema vai mapear automaticamente as colunas conhecidas.',
+      supportedColumns: Object.keys(DEFAULT_COLUMN_MAPPING),
+    },
+  });
+});
+
+// =============================================
+// PRECIFICAÇÃO AUTOMÁTICA
+// =============================================
+
+// Tabela de preços base por faixa de metragem
+const PRICING_TABLE: Record<string, { midpoint: number; pricePerM2: number }> = {
+  // Faixas padrão do Typeform/Pipedrive
+  'abaixo de 100m2': { midpoint: 75, pricePerM2: 650 },
+  'de 80m2 a 150m2': { midpoint: 115, pricePerM2: 650 },
+  'de 100m2 a 250m2': { midpoint: 175, pricePerM2: 650 },
+  'de 150m2 a 300m2': { midpoint: 225, pricePerM2: 650 },
+  'de 250m2 a 500m2': { midpoint: 375, pricePerM2: 650 },
+  'de 300m2 a 500m2': { midpoint: 400, pricePerM2: 650 },
+  'de 500m2 a 1000m2': { midpoint: 750, pricePerM2: 650 },
+  'acima de 1000m2': { midpoint: 1500, pricePerM2: 650 },
+};
+
+// Função para calcular valor baseado na metragem
+function calculateDealValue(metragem: string | null): number | null {
+  if (!metragem) return null;
+
+  const metLower = metragem.toLowerCase().trim();
+
+  // 1. Tentar match exato na tabela de faixas
+  for (const [faixa, config] of Object.entries(PRICING_TABLE)) {
+    if (metLower === faixa.toLowerCase() || metLower.includes(faixa.toLowerCase())) {
+      return config.midpoint * config.pricePerM2;
+    }
+  }
+
+  // 2. Tentar extrair número diretamente (ex: "150m²", "300m2", "450")
+  const numMatch = metragem.match(/(\d+(?:[.,]\d+)?)\s*m?[²2]?/i);
+  if (numMatch) {
+    const m2 = parseFloat(numMatch[1].replace(',', '.'));
+    if (!isNaN(m2) && m2 > 0) {
+      return m2 * 650; // Preço base R$ 650/m²
+    }
+  }
+
+  // 3. Tentar extrair faixa (ex: "80 a 150", "150-300")
+  const rangeMatch = metragem.match(/(\d+)\s*(?:a|até|-)\s*(\d+)/i);
+  if (rangeMatch) {
+    const min = parseInt(rangeMatch[1]);
+    const max = parseInt(rangeMatch[2]);
+    const midpoint = (min + max) / 2;
+    return midpoint * 650;
+  }
+
+  return null;
+}
+
+// POST /comercial/pricing/calculate - Calcular e atualizar preços automaticamente
+router.post('/pricing/calculate', async (req: Request, res: Response) => {
+  try {
+    const { dryRun = false, onlyWithoutValue = true } = req.body;
+
+    // Buscar deals que precisam de precificação
+    const where: any = {};
+    if (onlyWithoutValue) {
+      where.OR = [{ dealValue: null }, { dealValue: 0 }];
+    }
+    // Precisa ter alguma metragem
+    where.AND = [
+      {
+        OR: [
+          { metragemEstimada: { not: null } },
+          { metragemEstimadaN1: { not: null } },
+          { metragemSemArq: { not: null } },
+        ],
+      },
+    ];
+
+    const deals = await prisma.comercialData.findMany({
+      where,
+      select: {
+        id: true,
+        personName: true,
+        metragemEstimada: true,
+        metragemEstimadaN1: true,
+        metragemSemArq: true,
+        dealValue: true,
+      },
+    });
+
+    console.log(`[Pricing] Encontrados ${deals.length} deals para precificar`);
+
+    let updated = 0;
+    let skipped = 0;
+    const results: any[] = [];
+
+    for (const deal of deals) {
+      // Prioridade: metragemEstimadaN1 > metragemEstimada > metragemSemArq
+      const metragem = deal.metragemEstimadaN1 || deal.metragemEstimada || deal.metragemSemArq;
+      const calculatedValue = calculateDealValue(metragem);
+
+      if (calculatedValue && calculatedValue > 0) {
+        if (!dryRun) {
+          await prisma.comercialData.update({
+            where: { id: deal.id },
+            data: { dealValue: calculatedValue },
+          });
+        }
+        updated++;
+        results.push({
+          id: deal.id,
+          name: deal.personName,
+          metragem,
+          oldValue: deal.dealValue,
+          newValue: calculatedValue,
+        });
+      } else {
+        skipped++;
+      }
+    }
+
+    // Invalidar cache
+    if (!dryRun && updated > 0) {
+      comercialCache.clear();
+    }
+
+    console.log(`[Pricing] ${dryRun ? '[DRY RUN] ' : ''}Atualizados: ${updated}, Pulados: ${skipped}`);
+
+    res.json({
+      success: true,
+      dryRun,
+      updated,
+      skipped,
+      total: deals.length,
+      samples: results.slice(0, 10), // Primeiros 10 exemplos
+    });
+  } catch (error: any) {
+    console.error('[Pricing] Erro:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /comercial/pricing/table - Ver tabela de preços atual
+router.get('/pricing/table', (_req: Request, res: Response) => {
+  const table = Object.entries(PRICING_TABLE).map(([faixa, config]) => ({
+    faixa,
+    pontoMedio: config.midpoint,
+    precoM2: config.pricePerM2,
+    valorEstimado: config.midpoint * config.pricePerM2,
+  }));
+
+  res.json({
+    success: true,
+    precoBaseM2: 650,
+    table,
+  });
+});
+
+// =============================================
+// DISTRIBUIÇÃO AUTOMÁTICA DE LEADS
+// =============================================
+
+// GET /comercial/distribution/consultores - Lista consultores disponíveis
+router.get('/distribution/consultores', (_req: Request, res: Response) => {
+  try {
+    const byGroup = leadDistributionService.getConsultoresByGroup();
+    const consultores = {
+      renata: byGroup.renata,
+      joao: byGroup.joao,
+      spOutros: byGroup.spOutros,
+      all: leadDistributionService.getAllActiveConsultores(),
+    };
+
+    res.json({ success: true, consultores });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /comercial/distribution/stats - Estatísticas de distribuição
+router.get('/distribution/stats', async (_req: Request, res: Response) => {
+  try {
+    const stats = await leadDistributionService.getDistributionStats();
+    res.json({ success: true, stats });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /comercial/distribution/redistribute - Redistribuir leads sem consultor
+router.post('/distribution/redistribute', async (_req: Request, res: Response) => {
+  try {
+    console.log('[Distribution] Starting redistribution of unassigned leads...');
+    const result = await leadDistributionService.redistributeUnassignedLeads();
+
+    // Invalidar cache após redistribuição
+    invalidateComercialCache();
+
+    res.json({
+      success: true,
+      message: `Redistribuídos ${result.distributed} de ${result.total} leads`,
+      result,
+    });
+  } catch (error: any) {
+    console.error('[Distribution] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// PUT /comercial/distribution/consultor/:id/status - Ativar/desativar consultor
+router.put('/distribution/consultor/:id/status', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    const success = leadDistributionService.setConsultorActive(id, isActive);
+
+    if (success) {
+      res.json({ success: true, message: `Consultor ${id} ${isActive ? 'ativado' : 'desativado'}` });
+    } else {
+      res.status(404).json({ success: false, error: 'Consultor não encontrado' });
+    }
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// PUT /comercial/:id/consultor - Atribuir consultor manualmente
+router.put('/:id/consultor', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { consultor } = req.body;
+
+    const updated = await prisma.comercialData.update({
+      where: { id },
+      data: { consultorId: consultor },
+    });
+
+    // Invalidar cache
+    invalidateComercialCache();
+
+    res.json({
+      success: true,
+      message: `Consultor atribuído: ${consultor}`,
+      deal: updated,
+    });
+  } catch (error: any) {
+    console.error('[Distribution] Error assigning consultor:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
+// PROPOSTAS INTEGRADAS
+// =============================================
+
+// GET /comercial/:id/propostas - Lista propostas do lead
+router.get('/:id/propostas', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const propostas = await prisma.proposta.findMany({
+      where: { comercialId: id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        versao: true,
+        valorTotal: true,
+        valorM2: true,
+        metragem: true,
+        status: true,
+        pdfUrl: true,
+        enviadaEm: true,
+        createdAt: true,
+      },
+    });
+
+    res.json({ success: true, propostas });
+  } catch (error: any) {
+    console.error('[Propostas] Error listing:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /comercial/:id/proposta/gerar - Gera proposta e salva no lead
+router.post('/:id/proposta/gerar', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const {
+      // Metragens
+      metrosPiso = 0,
+      metrosParede = 0,
+      metrosTeto = 0,
+      metrosBancadas = 0,
+      metrosEscadas = 0,
+      metrosEspeciaisPequenos = 0,
+      metrosEspeciaisGrandes = 0,
+      metrosPiscina = 0,
+      // Produtos
+      pisoProduto = 'stelion',
+      paredeProduto = 'stelion',
+      // Preços base
+      precoBaseStelion = 910,
+      precoBaseLilit = 590,
+      // Desconto
+      desconto = 0,
+    } = req.body;
+
+    // Buscar dados do lead
+    const lead = await prisma.comercialData.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        personName: true,
+        personPhone: true,
+        personEmail: true,
+        cidadeExecucaoDesc: true,
+        metragemEstimada: true,
+      },
+    });
+
+    if (!lead) {
+      return res.status(404).json({ success: false, error: 'Lead não encontrado' });
+    }
+
+    // Calcular metragem total
+    const metragemTotal = parseFloat(metrosPiso) + parseFloat(metrosParede) + parseFloat(metrosTeto) +
+      parseFloat(metrosBancadas) + parseFloat(metrosEscadas) +
+      parseFloat(metrosEspeciaisPequenos) + parseFloat(metrosEspeciaisGrandes) + parseFloat(metrosPiscina);
+
+    // Calcular valores (simplificado - usar preço base STELION)
+    const precoM2 = precoBaseStelion;
+    let valorTotal = metragemTotal * precoM2;
+
+    // Aplicar desconto
+    if (desconto > 0) {
+      valorTotal = valorTotal * (1 - desconto / 100);
+    }
+
+    // Contar versão
+    const versaoAtual = await prisma.proposta.count({
+      where: { comercialId: id },
+    });
+
+    // Dados do cálculo para salvar
+    const dadosCalculo = {
+      metrosPiso,
+      metrosParede,
+      metrosTeto,
+      metrosBancadas,
+      metrosEscadas,
+      metrosEspeciaisPequenos,
+      metrosEspeciaisGrandes,
+      metrosPiscina,
+      pisoProduto,
+      paredeProduto,
+      precoBaseStelion,
+      precoBaseLilit,
+      desconto,
+      precoM2,
+      cliente: lead.personName,
+      endereco: lead.cidadeExecucaoDesc,
+    };
+
+    // Criar proposta no banco
+    const proposta = await prisma.proposta.create({
+      data: {
+        comercialId: id,
+        versao: versaoAtual + 1,
+        valorTotal,
+        valorM2: precoM2,
+        metragem: metragemTotal,
+        desconto: desconto || null,
+        dadosCalculo,
+        status: 'DRAFT',
+        validadeAte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 dias
+      },
+    });
+
+    // Retornar URL do gerador com dados pré-preenchidos
+    const queryParams = new URLSearchParams({
+      comercialId: id,
+      propostaId: proposta.id,
+      nomeCliente: lead.personName || '',
+      endereco: lead.cidadeExecucaoDesc || '',
+      metrosPiso: String(metrosPiso),
+      metrosParede: String(metrosParede),
+      metrosTeto: String(metrosTeto),
+      metrosBancadas: String(metrosBancadas),
+      metrosEscadas: String(metrosEscadas),
+      metrosEspeciaisPequenos: String(metrosEspeciaisPequenos),
+      metrosEspeciaisGrandes: String(metrosEspeciaisGrandes),
+      metrosPiscina: String(metrosPiscina),
+    });
+
+    const geradorUrl = `/propostas.html?${queryParams.toString()}`;
+
+    res.json({
+      success: true,
+      proposta: {
+        id: proposta.id,
+        versao: proposta.versao,
+        valorTotal,
+        metragem: metragemTotal,
+        precoM2,
+      },
+      geradorUrl,
+    });
+  } catch (error: any) {
+    console.error('[Propostas] Error generating:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// PUT /comercial/:id/proposta/:propostaId/pdf - Salva PDF da proposta e registra no CRM
+router.put('/:id/proposta/:propostaId/pdf', async (req: Request, res: Response) => {
+  try {
+    const { id, propostaId } = req.params;
+    const { pdfBase64, valorTotal, metragem } = req.body;
+
+    // 1. Atualizar proposta com PDF
+    const proposta = await prisma.proposta.update({
+      where: { id: propostaId },
+      data: {
+        pdfBase64,
+        valorTotal: valorTotal ? parseFloat(valorTotal) : undefined,
+        metragem: metragem ? parseFloat(metragem) : undefined,
+        status: 'DRAFT',
+      },
+    });
+
+    // 2. Buscar nome do cliente para o nome do anexo
+    const lead = await prisma.comercialData.findUnique({
+      where: { id },
+      select: { personName: true },
+    });
+
+    const nomeCliente = lead?.personName || 'Cliente';
+    const dataHoje = new Date().toISOString().split('T')[0];
+    const nomeArquivo = `Proposta-Monofloor-${nomeCliente.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '-')}-${dataHoje}.pdf`;
+
+    // 3. Criar registro de Orçamento Enviado automaticamente
+    const orcamentoEnviado = await prisma.orcamentoEnviado.create({
+      data: {
+        comercialId: id,
+        dataEnvio: new Date(),
+        valor: valorTotal ? parseFloat(valorTotal) : null,
+        metragem: metragem ? parseFloat(metragem) : null,
+        descricao: `Proposta v${proposta.versao} gerada`,
+        propostaId: propostaId,
+      },
+    });
+
+    // 4. Anexar PDF ao lead automaticamente
+    const anexo = await prisma.comercialAnexo.create({
+      data: {
+        comercialId: id,
+        nome: nomeArquivo,
+        tipo: 'PROPOSTA',
+        descricao: `Proposta v${proposta.versao} - ${formatCurrencyBR(valorTotal)} - ${metragem || 0}m²`,
+        fileData: pdfBase64,
+        mimeType: 'application/pdf',
+        fileSize: pdfBase64 ? Math.round(pdfBase64.length * 0.75) : 0, // Tamanho aproximado do base64
+      },
+    });
+
+    console.log(`[Propostas] PDF salvo, orçamento registrado e anexado ao lead ${id}`);
+
+    res.json({
+      success: true,
+      proposta,
+      orcamentoEnviado,
+      anexo: { id: anexo.id, nome: anexo.nome },
+    });
+  } catch (error: any) {
+    console.error('[Propostas] Error saving PDF:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Função auxiliar para formatar moeda
+function formatCurrencyBR(value: any): string {
+  if (!value) return 'R$ 0,00';
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
+}
+
+// POST /comercial/:id/proposta/:propostaId/enviar-whatsapp - Envia proposta via WhatsApp (com PDF via Z-API)
+router.post('/:id/proposta/:propostaId/enviar-whatsapp', async (req: Request, res: Response) => {
+  try {
+    const { id, propostaId } = req.params;
+
+    // Buscar proposta e lead
+    const proposta = await prisma.proposta.findUnique({
+      where: { id: propostaId },
+      include: {
+        comercial: {
+          select: {
+            personName: true,
+            personPhone: true,
+            primeiroNomeZapi: true,
+          },
+        },
+      },
+    });
+
+    if (!proposta) {
+      return res.status(404).json({ success: false, error: 'Proposta não encontrada' });
+    }
+
+    if (!proposta.comercial.personPhone) {
+      return res.status(400).json({ success: false, error: 'Lead sem telefone' });
+    }
+
+    if (!proposta.pdfBase64) {
+      return res.status(400).json({ success: false, error: 'Proposta sem PDF gerado' });
+    }
+
+    // Preparar dados para envio
+    const telefone = proposta.comercial.personPhone.replace(/\D/g, '');
+    const nomeCliente = proposta.comercial.primeiroNomeZapi || proposta.comercial.personName?.split(' ')[0] || 'Cliente';
+
+    // Mensagem
+    const valorFormatado = Number(proposta.valorTotal).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const mensagem = `Olá ${nomeCliente}! Segue a proposta comercial Monofloor no valor de ${valorFormatado}. Qualquer dúvida estou à disposição!`;
+
+    // Nome do arquivo
+    const dataHoje = new Date().toISOString().split('T')[0];
+    const nomeArquivo = `Proposta-Monofloor-${proposta.comercial.personName?.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '-') || 'Cliente'}-${dataHoje}.pdf`;
+
+    // Verificar se Z-API está configurado
+    if (!isWhatsAppConfigured()) {
+      console.log('[Propostas] Z-API não configurado, usando fallback (wa.me)');
+
+      // Marcar como enviada mesmo sem Z-API
+      await prisma.proposta.update({
+        where: { id: propostaId },
+        data: {
+          status: 'ENVIADA',
+          enviadaEm: new Date(),
+        },
+      });
+
+      return res.json({
+        success: true,
+        method: 'fallback',
+        whatsappUrl: `https://wa.me/55${telefone}?text=${encodeURIComponent(mensagem)}`,
+        telefone,
+        mensagem,
+        message: 'Z-API não configurado. Use o link para enviar manualmente.',
+      });
+    }
+
+    // Enviar PDF via Z-API
+    console.log(`[Propostas] Enviando proposta v${proposta.versao} para ${telefone} via Z-API`);
+
+    const documentResult = await sendWhatsAppDocument(
+      telefone,
+      proposta.pdfBase64,
+      nomeArquivo,
+      mensagem
+    );
+
+    if (!documentResult.success) {
+      console.error('[Propostas] Erro ao enviar PDF:', documentResult.error);
+      return res.status(500).json({
+        success: false,
+        error: `Erro ao enviar PDF: ${documentResult.error}`,
+        whatsappUrl: `https://wa.me/55${telefone}?text=${encodeURIComponent(mensagem)}`,
+      });
+    }
+
+    // Marcar como enviada
+    await prisma.proposta.update({
+      where: { id: propostaId },
+      data: {
+        status: 'ENVIADA',
+        enviadaEm: new Date(),
+      },
+    });
+
+    console.log(`[Propostas] ✅ Proposta v${proposta.versao} enviada com sucesso para ${telefone}`);
+
+    res.json({
+      success: true,
+      method: 'zapi',
+      messageId: documentResult.messageId,
+      zaapId: documentResult.zaapId,
+      telefone,
+      mensagem,
+      message: 'Proposta enviada com sucesso via WhatsApp!',
+    });
+  } catch (error: any) {
+    console.error('[Propostas] Error sending:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /comercial/:id/ultima-proposta - Retorna última proposta do lead
+router.get('/:id/ultima-proposta', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const proposta = await prisma.proposta.findFirst({
+      where: { comercialId: id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        versao: true,
+        valorTotal: true,
+        valorM2: true,
+        metragem: true,
+        status: true,
+        pdfBase64: true,
+        enviadaEm: true,
+        createdAt: true,
+        dadosCalculo: true,
+      },
+    });
+
+    res.json({ success: true, proposta });
+  } catch (error: any) {
+    console.error('[Propostas] Error getting last:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
+// ANEXOS DO LEAD (Projeto Arquitetônico, Documentos, etc)
+// =============================================
+
+// GET /comercial/:id/anexos - Listar anexos do lead
+router.get('/:id/anexos', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const anexos = await prisma.comercialAnexo.findMany({
+      where: { comercialId: id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        nome: true,
+        tipo: true,
+        descricao: true,
+        mimeType: true,
+        fileSize: true,
+        fileUrl: true,
+        createdAt: true,
+      },
+    });
+
+    res.json({ success: true, anexos });
+  } catch (error: any) {
+    console.error('[Anexos] Error listing:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /comercial/:id/anexos/:anexoId/download - Baixar anexo (com base64)
+router.get('/:id/anexos/:anexoId/download', async (req: Request, res: Response) => {
+  try {
+    const { id, anexoId } = req.params;
+
+    const anexo = await prisma.comercialAnexo.findFirst({
+      where: { id: anexoId, comercialId: id },
+    });
+
+    if (!anexo) {
+      return res.status(404).json({ success: false, error: 'Anexo não encontrado' });
+    }
+
+    res.json({
+      success: true,
+      anexo: {
+        id: anexo.id,
+        nome: anexo.nome,
+        mimeType: anexo.mimeType,
+        fileData: anexo.fileData,
+      }
+    });
+  } catch (error: any) {
+    console.error('[Anexos] Error downloading:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /comercial/:id/anexos - Criar anexo
+router.post('/:id/anexos', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { nome, tipo, descricao, fileData, mimeType, fileSize, fileUrl } = req.body;
+
+    if (!nome || !tipo) {
+      return res.status(400).json({ success: false, error: 'Nome e tipo são obrigatórios' });
+    }
+
+    // Verificar se o deal existe
+    const deal = await prisma.comercialData.findUnique({ where: { id } });
+    if (!deal) {
+      return res.status(404).json({ success: false, error: 'Lead não encontrado' });
+    }
+
+    const anexo = await prisma.comercialAnexo.create({
+      data: {
+        comercialId: id,
+        nome,
+        tipo,
+        descricao,
+        fileData,
+        mimeType,
+        fileSize,
+        fileUrl,
+      },
+      select: {
+        id: true,
+        nome: true,
+        tipo: true,
+        descricao: true,
+        mimeType: true,
+        fileSize: true,
+        fileUrl: true,
+        createdAt: true,
+      },
+    });
+
+    console.log(`[Anexos] Created for deal ${id}: ${nome} (${tipo})`);
+    res.json({ success: true, anexo });
+  } catch (error: any) {
+    console.error('[Anexos] Error creating:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE /comercial/:id/anexos/:anexoId - Deletar anexo
+router.delete('/:id/anexos/:anexoId', async (req: Request, res: Response) => {
+  try {
+    const { id, anexoId } = req.params;
+
+    const anexo = await prisma.comercialAnexo.findFirst({
+      where: { id: anexoId, comercialId: id },
+    });
+
+    if (!anexo) {
+      return res.status(404).json({ success: false, error: 'Anexo não encontrado' });
+    }
+
+    await prisma.comercialAnexo.delete({ where: { id: anexoId } });
+
+    console.log(`[Anexos] Deleted: ${anexo.nome}`);
+    res.json({ success: true, message: 'Anexo deletado com sucesso' });
+  } catch (error: any) {
+    console.error('[Anexos] Error deleting:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
+// ORÇAMENTOS ENVIADOS
+// =============================================
+
+// GET /comercial/:id/orcamentos-enviados - Listar orçamentos enviados
+router.get('/:id/orcamentos-enviados', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const orcamentos = await prisma.orcamentoEnviado.findMany({
+      where: { comercialId: id },
+      orderBy: { dataEnvio: 'desc' },
+      include: {
+        proposta: {
+          select: {
+            id: true,
+            versao: true,
+            valorTotal: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    res.json({ success: true, orcamentos });
+  } catch (error: any) {
+    console.error('[Orçamentos] Error listing:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /comercial/:id/orcamentos-enviados - Criar orçamento enviado
+router.post('/:id/orcamentos-enviados', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { dataEnvio, valor, descricao, metragem, observacoes, propostaId } = req.body;
+
+    if (!dataEnvio) {
+      return res.status(400).json({ success: false, error: 'Data de envio é obrigatória' });
+    }
+
+    // Verificar se o deal existe
+    const deal = await prisma.comercialData.findUnique({ where: { id } });
+    if (!deal) {
+      return res.status(404).json({ success: false, error: 'Lead não encontrado' });
+    }
+
+    const orcamento = await prisma.orcamentoEnviado.create({
+      data: {
+        comercialId: id,
+        dataEnvio: new Date(dataEnvio),
+        valor: valor ? parseFloat(valor) : null,
+        descricao,
+        metragem: metragem ? parseFloat(metragem) : null,
+        observacoes,
+        propostaId,
+      },
+      include: {
+        proposta: {
+          select: {
+            id: true,
+            versao: true,
+            valorTotal: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    console.log(`[Orçamentos] Created for deal ${id}: ${descricao || 'Sem descrição'}`);
+    res.json({ success: true, orcamento });
+  } catch (error: any) {
+    console.error('[Orçamentos] Error creating:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// PUT /comercial/:id/orcamentos-enviados/:orcamentoId - Atualizar orçamento
+router.put('/:id/orcamentos-enviados/:orcamentoId', async (req: Request, res: Response) => {
+  try {
+    const { id, orcamentoId } = req.params;
+    const { dataEnvio, valor, descricao, metragem, observacoes, propostaId } = req.body;
+
+    const existing = await prisma.orcamentoEnviado.findFirst({
+      where: { id: orcamentoId, comercialId: id },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Orçamento não encontrado' });
+    }
+
+    const orcamento = await prisma.orcamentoEnviado.update({
+      where: { id: orcamentoId },
+      data: {
+        dataEnvio: dataEnvio ? new Date(dataEnvio) : undefined,
+        valor: valor !== undefined ? (valor ? parseFloat(valor) : null) : undefined,
+        descricao,
+        metragem: metragem !== undefined ? (metragem ? parseFloat(metragem) : null) : undefined,
+        observacoes,
+        propostaId,
+      },
+      include: {
+        proposta: {
+          select: {
+            id: true,
+            versao: true,
+            valorTotal: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    console.log(`[Orçamentos] Updated: ${orcamentoId}`);
+    res.json({ success: true, orcamento });
+  } catch (error: any) {
+    console.error('[Orçamentos] Error updating:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE /comercial/:id/orcamentos-enviados/:orcamentoId - Deletar orçamento
+router.delete('/:id/orcamentos-enviados/:orcamentoId', async (req: Request, res: Response) => {
+  try {
+    const { id, orcamentoId } = req.params;
+
+    const existing = await prisma.orcamentoEnviado.findFirst({
+      where: { id: orcamentoId, comercialId: id },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Orçamento não encontrado' });
+    }
+
+    await prisma.orcamentoEnviado.delete({ where: { id: orcamentoId } });
+
+    console.log(`[Orçamentos] Deleted: ${orcamentoId}`);
+    res.json({ success: true, message: 'Orçamento deletado com sucesso' });
+  } catch (error: any) {
+    console.error('[Orçamentos] Error deleting:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

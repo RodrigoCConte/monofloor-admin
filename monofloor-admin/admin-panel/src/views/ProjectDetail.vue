@@ -1,10 +1,11 @@
 <!-- Cache bust v2: Role selector removed - using applicator's own role -->
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { projectsApi, applicatorsApi } from '../api';
 import html2canvas from 'html2canvas';
+import { onTaskUpdated, joinProject, leaveProject } from '../services/socket';
 
 const route = useRoute();
 const router = useRouter();
@@ -366,7 +367,28 @@ const currentStage = computed(() => {
 });
 
 // Get row class based on task status for Gantt coloring
-const getTaskRowClass = (task: any) => {
+// When tasks are grouped, we need to check ALL tasks in the group
+const getTaskRowClass = (task: any, taskIndex?: number) => {
+  // If taskIndex is provided, check if it's a grouped row
+  if (taskIndex !== undefined) {
+    const group = getGroupFromStart(taskIndex);
+    if (group.length > 1) {
+      // For groups: COMPLETED only if ALL are completed
+      // Otherwise, use the "worst" status
+      const allCompleted = group.every(t => t.status === 'COMPLETED');
+      const anyInProgress = group.some(t => t.status === 'IN_PROGRESS');
+      const anyBlocked = group.some(t => t.status === 'BLOCKED');
+
+      return {
+        'gantt-row-completed': allCompleted,
+        'gantt-row-in-progress': !allCompleted && anyInProgress,
+        'gantt-row-pending': !allCompleted && !anyInProgress && !anyBlocked,
+        'gantt-row-blocked': !allCompleted && anyBlocked,
+      };
+    }
+  }
+
+  // Single task
   return {
     'gantt-row-completed': task.status === 'COMPLETED',
     'gantt-row-in-progress': task.status === 'IN_PROGRESS',
@@ -1956,21 +1978,34 @@ const savePeopleAssignment = async () => {
 // Get assigned users for a task (for display)
 // Note: task.assignedUsers comes from API with { id, name, photoUrl, assignedAt } flat structure
 // team members also have flat structure (id, name, photoUrl directly, not nested under 'user')
+// IMPORTANT: Only show users that are still on the current team (filter out removed members)
 const getTaskAssignedUsers = (task: any) => {
   if (!task || !task.assignedUsers || !Array.isArray(task.assignedUsers) || task.assignedUsers.length === 0) {
     return [];
   }
-  return task.assignedUsers.map((au: any) => {
-    if (!au) return { name: 'Desconhecido', id: '' };
-    // au already has flat structure: { id, name, photoUrl }
-    if (au.name) {
-      return au;
-    }
-    // Fallback: try to find in team by userId
-    const userId = au.userId || au.id;
-    const teamMember = team.value.find((m: any) => m.id === userId);
-    return teamMember || { name: 'Desconhecido', id: userId || '' };
-  }).filter((u: any) => u && u.name);
+
+  // Get IDs of current team members
+  const teamMemberIds = new Set(team.value.map((m: any) => m.id));
+
+  return task.assignedUsers
+    .map((au: any) => {
+      if (!au) return null;
+      // au already has flat structure: { id, name, photoUrl }
+      const userId = au.id || au.userId;
+
+      // Only include users that are still on the team
+      if (!teamMemberIds.has(userId)) {
+        return null; // User was removed from team
+      }
+
+      if (au.name) {
+        return au;
+      }
+      // Fallback: try to find in team by userId
+      const teamMember = team.value.find((m: any) => m.id === userId);
+      return teamMember || null;
+    })
+    .filter((u: any) => u && u.name);
 };
 
 const generateTasks = async () => {
@@ -2298,11 +2333,39 @@ watch(() => project.value?.teamSize, async (newTeamSize, oldTeamSize) => {
   }
 });
 
+// Socket listener for real-time task updates
+let unsubscribeTaskUpdated: (() => void) | null = null;
+
 onMounted(async () => {
   await loadProject();
   // Auto-load night shift invites if project is night shift
   if (project.value?.isNightShift) {
     await loadNightShiftInvites();
+  }
+
+  // Join project room for real-time updates
+  const projectId = route.params.id as string;
+  if (projectId) {
+    joinProject(projectId);
+
+    // Listen for task updates to refresh Gantt chart
+    unsubscribeTaskUpdated = onTaskUpdated((data) => {
+      if (data.projectId === projectId) {
+        console.log('[Socket] Task updated, refreshing tasks:', data.taskTitle, data.newStatus);
+        loadTasks();
+      }
+    });
+  }
+});
+
+onUnmounted(() => {
+  // Leave project room and cleanup listener
+  const projectId = route.params.id as string;
+  if (projectId) {
+    leaveProject(projectId);
+  }
+  if (unsubscribeTaskUpdated) {
+    unsubscribeTaskUpdated();
   }
 });
 </script>
@@ -3415,7 +3478,7 @@ onMounted(async () => {
                     class="gantt-row-inline"
                     :class="[
                       { 'gantt-row-grouped-block': isGroupedRow(index) },
-                      getTaskRowClass(task)
+                      getTaskRowClass(task, index)
                     ]"
                     :style="{ minHeight: (isGroupedRow(index) ? getGroupFromStart(index).length * 44 : 44) + 'px' }"
                   >
@@ -7332,14 +7395,43 @@ onMounted(async () => {
 
 /* Gantt Row Status Colors */
 .gantt-row-completed {
-  background: rgba(34, 197, 94, 0.1) !important;
-  border-left: 3px solid #22c55e;
+  background: rgba(34, 197, 94, 0.25) !important;
+  border-left: 5px solid #22c55e !important;
+  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.3);
 }
 
 .gantt-row-completed .gantt-task-cell {
+  color: #22c55e !important;
+  font-weight: 600;
+}
+
+/* Checkmark for single task rows */
+.gantt-row-completed .task-row-single::before {
+  content: "✓";
   color: #22c55e;
-  text-decoration: line-through;
-  opacity: 0.8;
+  font-weight: bold;
+  margin-right: 8px;
+  font-size: 14px;
+}
+
+/* Checkmark for grouped task items */
+.gantt-row-completed .grouped-task-item::before {
+  content: "✓";
+  color: #22c55e;
+  font-weight: bold;
+  margin-right: 6px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.gantt-row-completed .gantt-bar {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%) !important;
+  opacity: 1 !important;
+}
+
+.gantt-row-completed .gantt-progress-text {
+  color: white !important;
+  font-weight: 600;
 }
 
 .gantt-row-in-progress {
@@ -7371,6 +7463,18 @@ onMounted(async () => {
   background: rgba(201, 169, 98, 0.05) !important;
   margin: 4px 0;
   box-shadow: 0 2px 8px rgba(201, 169, 98, 0.2);
+}
+
+/* Override grouped-block styles when task is completed */
+.gantt-row-grouped-block.gantt-row-completed {
+  border: 3px solid #22c55e !important;
+  background: rgba(34, 197, 94, 0.25) !important;
+  box-shadow: 0 2px 12px rgba(34, 197, 94, 0.4) !important;
+}
+
+.gantt-row-grouped-block.gantt-row-completed .gantt-task-cell {
+  color: #22c55e !important;
+  font-weight: 600;
 }
 
 /* Células agrupadas - display flex vertical apenas para task names e actions */

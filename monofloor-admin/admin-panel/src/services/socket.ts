@@ -73,6 +73,18 @@ export interface BatteryCriticalEvent {
   timestamp: Date;
 }
 
+export interface TaskUpdatedEvent {
+  projectId: string;
+  projectName: string;
+  taskId: string;
+  taskTitle: string;
+  userId: string;
+  userName: string;
+  newStatus: string;
+  newProgress: number;
+  timestamp: Date;
+}
+
 // Event listeners storage
 type EventCallback<T> = (data: T) => void;
 const listeners: { [key: string]: EventCallback<any>[] } = {};
@@ -137,6 +149,10 @@ export function connectSocket(): Socket {
     notifyListeners('battery:critical', data);
   });
 
+  socket.on('task:updated', (data: TaskUpdatedEvent) => {
+    notifyListeners('task:updated', data);
+  });
+
   return socket;
 }
 
@@ -187,6 +203,10 @@ export function onUserOffline(callback: EventCallback<UserOfflineEvent>): () => 
 
 export function onBatteryCritical(callback: EventCallback<BatteryCriticalEvent>): () => void {
   return addListener('battery:critical', callback);
+}
+
+export function onTaskUpdated(callback: EventCallback<TaskUpdatedEvent>): () => void {
+  return addListener('task:updated', callback);
 }
 
 /**

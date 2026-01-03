@@ -361,143 +361,164 @@ export async function migratePipedrive(): Promise<{
         };
 
         if (existing) {
-          // Update existing
+          // Update existing lead
           await prisma.comercialData.update({
             where: { id: existing.id },
             data: comercialData,
           });
 
-          // Update project name if different
-          if (existing.project.cliente !== title) {
+          // Update project name if different (only if has project)
+          if (existing.project && existing.project.cliente !== title) {
             await prisma.project.update({
-              where: { id: existing.projectId },
+              where: { id: existing.projectId! },
               data: { cliente: title },
             });
           }
 
           updated++;
         } else {
-          // Create new project and comercial data
-          const project = await prisma.project.create({
-            data: {
-              title: title, // Required field
-              cliente: title,
-              endereco: customFields.cidadeExecucaoDesc || customFields.cidadeExecucao || '',
-              m2Total: customFields.metragemEstimada && !isNaN(parseFloat(customFields.metragemEstimada)) ? parseFloat(customFields.metragemEstimada) : 0,
-              status: 'PAUSADO', // Valid ProjectStatus enum value for new deals
-              currentModule: 'COMERCIAL',
-            },
-          });
-
+          // Create new lead (WITHOUT creating a project)
+          // Project will be created only when lead is converted (GANHO)
           await prisma.comercialData.create({
             data: {
               ...comercialData,
-              projectId: project.id,
+              // projectId is null - lead starts without project
             },
           });
 
           imported++;
         }
 
-        // Import notes, activities, and files
-        const comercial = await prisma.comercialData.findUnique({
-          where: { pipedriveDealId: dealId },
-        });
+        // Import notes, activities, and files - TEMPORARILY DISABLED FOR FASTER IMPORT
+        // Can be enabled later for a second pass to import notes/activities/files
+        const IMPORT_ATTACHMENTS = false;
 
-        if (comercial && (deal.notes_count > 0 || deal.activities_count > 0 || deal.files_count > 0)) {
+        const comercial = IMPORT_ATTACHMENTS ? await prisma.comercialData.findUnique({
+          where: { pipedriveDealId: dealId },
+        }) : null;
+
+        if (comercial && IMPORT_ATTACHMENTS && (deal.notes_count > 0 || deal.activities_count > 0 || deal.files_count > 0)) {
           // Notes
           if (deal.notes_count > 0) {
-            const notes = await getPipedriveNotes(deal.id);
-            for (const note of notes) {
-              await prisma.pipedriveNote.upsert({
-                where: { pipedriveNoteId: note.id },
-                update: {
-                  content: note.content || '',
-                  addTime: note.add_time ? new Date(note.add_time) : null,
-                  updateTime: note.update_time ? new Date(note.update_time) : null,
-                  userId: note.user_id,
-                  userName: note.user?.name || null,
-                  pinned: note.pinned_to_deal_flag || false,
-                },
-                create: {
-                  comercialId: comercial.id,
-                  pipedriveNoteId: note.id,
-                  content: note.content || '',
-                  addTime: note.add_time ? new Date(note.add_time) : null,
-                  updateTime: note.update_time ? new Date(note.update_time) : null,
-                  userId: note.user_id,
-                  userName: note.user?.name || null,
-                  pinned: note.pinned_to_deal_flag || false,
-                },
-              });
+            try {
+              const notes = await getPipedriveNotes(deal.id);
+              for (const note of notes) {
+                try {
+                  await prisma.pipedriveNote.upsert({
+                    where: { pipedriveNoteId: note.id },
+                    update: {
+                      comercialId: comercial.id, // Ensure correct comercial association
+                      content: note.content || '',
+                      addTime: note.add_time ? new Date(note.add_time) : null,
+                      updateTime: note.update_time ? new Date(note.update_time) : null,
+                      userId: note.user_id,
+                      userName: note.user?.name || null,
+                      pinned: note.pinned_to_deal_flag || false,
+                    },
+                    create: {
+                      comercialId: comercial.id,
+                      pipedriveNoteId: note.id,
+                      content: note.content || '',
+                      addTime: note.add_time ? new Date(note.add_time) : null,
+                      updateTime: note.update_time ? new Date(note.update_time) : null,
+                      userId: note.user_id,
+                      userName: note.user?.name || null,
+                      pinned: note.pinned_to_deal_flag || false,
+                    },
+                  });
+                } catch (noteErr: any) {
+                  // Log but don't fail the whole deal
+                  console.error(`[Migration] Note ${note.id} failed:`, noteErr.message);
+                }
+              }
+            } catch (notesErr: any) {
+              console.error(`[Migration] Failed to fetch notes for deal ${deal.id}:`, notesErr.message);
             }
           }
 
           // Activities
           if (deal.activities_count > 0) {
-            const activities = await getPipedriveActivities(deal.id);
-            for (const activity of activities) {
-              await prisma.pipedriveActivity.upsert({
-                where: { pipedriveActivityId: activity.id },
-                update: {
-                  type: activity.type,
-                  subject: activity.subject,
-                  note: activity.note,
-                  dueDate: activity.due_date ? new Date(activity.due_date) : null,
-                  dueTime: activity.due_time,
-                  duration: activity.duration ? parseInt(activity.duration, 10) : null,
-                  done: activity.done || false,
-                  markedDoneTime: activity.marked_as_done_time ? new Date(activity.marked_as_done_time) : null,
-                  userId: activity.user_id,
-                  userName: activity.owner_name || null,
-                  addTime: activity.add_time ? new Date(activity.add_time) : null,
-                },
-                create: {
-                  comercialId: comercial.id,
-                  pipedriveActivityId: activity.id,
-                  type: activity.type,
-                  subject: activity.subject,
-                  note: activity.note,
-                  dueDate: activity.due_date ? new Date(activity.due_date) : null,
-                  dueTime: activity.due_time,
-                  duration: activity.duration ? parseInt(activity.duration, 10) : null,
-                  done: activity.done || false,
-                  markedDoneTime: activity.marked_as_done_time ? new Date(activity.marked_as_done_time) : null,
-                  userId: activity.user_id,
-                  userName: activity.owner_name || null,
-                  addTime: activity.add_time ? new Date(activity.add_time) : null,
-                },
-              });
+            try {
+              const activities = await getPipedriveActivities(deal.id);
+              for (const activity of activities) {
+                try {
+                  await prisma.pipedriveActivity.upsert({
+                    where: { pipedriveActivityId: activity.id },
+                    update: {
+                      comercialId: comercial.id,
+                      type: activity.type,
+                      subject: activity.subject,
+                      note: activity.note,
+                      dueDate: activity.due_date ? new Date(activity.due_date) : null,
+                      dueTime: activity.due_time,
+                      duration: activity.duration ? parseInt(activity.duration, 10) : null,
+                      done: activity.done || false,
+                      markedDoneTime: activity.marked_as_done_time ? new Date(activity.marked_as_done_time) : null,
+                      userId: activity.user_id,
+                      userName: activity.owner_name || null,
+                      addTime: activity.add_time ? new Date(activity.add_time) : null,
+                    },
+                    create: {
+                      comercialId: comercial.id,
+                      pipedriveActivityId: activity.id,
+                      type: activity.type,
+                      subject: activity.subject,
+                      note: activity.note,
+                      dueDate: activity.due_date ? new Date(activity.due_date) : null,
+                      dueTime: activity.due_time,
+                      duration: activity.duration ? parseInt(activity.duration, 10) : null,
+                      done: activity.done || false,
+                      markedDoneTime: activity.marked_as_done_time ? new Date(activity.marked_as_done_time) : null,
+                      userId: activity.user_id,
+                      userName: activity.owner_name || null,
+                      addTime: activity.add_time ? new Date(activity.add_time) : null,
+                    },
+                  });
+                } catch (actErr: any) {
+                  console.error(`[Migration] Activity ${activity.id} failed:`, actErr.message);
+                }
+              }
+            } catch (activitiesErr: any) {
+              console.error(`[Migration] Failed to fetch activities for deal ${deal.id}:`, activitiesErr.message);
             }
           }
 
           // Files
           if (deal.files_count > 0) {
-            const files = await getPipedriveFiles(deal.id);
-            for (const file of files) {
-              await prisma.pipedriveFile.upsert({
-                where: { pipedriveFileId: file.id },
-                update: {
-                  fileName: file.name || file.file_name || 'unknown',
-                  fileType: file.file_type,
-                  fileSize: file.file_size,
-                  fileUrl: file.url,
-                  addTime: file.add_time ? new Date(file.add_time) : null,
-                  userId: file.user_id,
-                  userName: file.person_name || null,
-                },
-                create: {
-                  comercialId: comercial.id,
-                  pipedriveFileId: file.id,
-                  fileName: file.name || file.file_name || 'unknown',
-                  fileType: file.file_type,
-                  fileSize: file.file_size,
-                  fileUrl: file.url,
-                  addTime: file.add_time ? new Date(file.add_time) : null,
-                  userId: file.user_id,
-                  userName: file.person_name || null,
-                },
-              });
+            try {
+              const files = await getPipedriveFiles(deal.id);
+              for (const file of files) {
+                try {
+                  await prisma.pipedriveFile.upsert({
+                    where: { pipedriveFileId: file.id },
+                    update: {
+                      comercialId: comercial.id,
+                      fileName: file.name || file.file_name || 'unknown',
+                      fileType: file.file_type,
+                      fileSize: file.file_size,
+                      fileUrl: file.url,
+                      addTime: file.add_time ? new Date(file.add_time) : null,
+                      userId: file.user_id,
+                      userName: file.person_name || null,
+                    },
+                    create: {
+                      comercialId: comercial.id,
+                      pipedriveFileId: file.id,
+                      fileName: file.name || file.file_name || 'unknown',
+                      fileType: file.file_type,
+                      fileSize: file.file_size,
+                      fileUrl: file.url,
+                      addTime: file.add_time ? new Date(file.add_time) : null,
+                      userId: file.user_id,
+                      userName: file.person_name || null,
+                    },
+                  });
+                } catch (fileErr: any) {
+                  console.error(`[Migration] File ${file.id} failed:`, fileErr.message);
+                }
+              }
+            } catch (filesErr: any) {
+              console.error(`[Migration] Failed to fetch files for deal ${deal.id}:`, filesErr.message);
             }
           }
         }

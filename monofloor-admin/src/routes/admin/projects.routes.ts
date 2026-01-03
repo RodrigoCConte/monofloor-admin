@@ -833,6 +833,7 @@ router.post(
           m2Teto: req.body.m2Teto || 0,
           mRodape: req.body.mRodape || 0,
           status: req.body.status || 'EM_EXECUCAO',
+          currentModule: 'EXECUCAO',
           estimatedHours: req.body.estimatedHours || null,
           consultor: req.body.consultor || null,
           material: req.body.material || null,

@@ -9,8 +9,21 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../../lib/prisma';
 import { ComercialStatus } from '@prisma/client';
+import { gptService } from '../../services/ai/gpt.service';
 
 const router = Router();
+
+/**
+ * Formata o primeiro nome para Z-API
+ * Ex: "ALTAIR DA SILVA" → "Altair"
+ * Ex: "joão pedro" → "João"
+ */
+function formatPrimeiroNome(nomeCompleto: string | null | undefined): string {
+  if (!nomeCompleto) return '';
+  const primeiroNome = nomeCompleto.trim().split(/\s+/)[0];
+  if (!primeiroNome) return '';
+  return primeiroNome.charAt(0).toUpperCase() + primeiroNome.slice(1).toLowerCase();
+}
 
 // Typeform form IDs
 const FORM_IDS = {
@@ -174,7 +187,28 @@ router.post('/lead', async (req: Request, res: Response) => {
     console.log(`[Typeform] Processing lead: ${nome} (${tipoCliente})`);
     console.log(`[Typeform] Contato: ${contato.nome}, ${contato.telefone}, ${contato.email}`);
     console.log(`[Typeform] Região: ${regiao?.codigo} (${cidadeDesc})`);
-    console.log(`[Typeform] Metragem: ${faixaMetragem?.faixa} (~${faixaMetragem?.estimativa}m²)`);
+    console.log(`[Typeform] Metragem faixa: ${faixaMetragem?.faixa} (~${faixaMetragem?.estimativa}m²)`);
+    console.log(`[Typeform] Descrição área: ${detalhesMetragem || 'N/A'}`);
+
+    // Usar IA para extrair metragem da descrição
+    // Fallback: faixa estimativa > 150m²
+    let metragemFinal = faixaMetragem?.estimativa || 150;
+
+    if (detalhesMetragem && detalhesMetragem.trim().length > 0) {
+      console.log(`[Typeform] Processando descrição com IA...`);
+      try {
+        metragemFinal = await gptService.extractMetragemFromDescription(
+          detalhesMetragem,
+          faixaMetragem?.estimativa
+        );
+        console.log(`[Typeform] ✅ Metragem extraída por IA: ${metragemFinal}m²`);
+      } catch (error) {
+        console.error(`[Typeform] ❌ Erro ao processar com IA:`, error);
+        console.log(`[Typeform] Usando fallback: ${metragemFinal}m²`);
+      }
+    } else {
+      console.log(`[Typeform] Sem descrição, usando faixa/fallback: ${metragemFinal}m²`);
+    }
 
     // Create project and comercial data
     const project = await prisma.project.create({
@@ -182,7 +216,7 @@ router.post('/lead', async (req: Request, res: Response) => {
         title: nome,
         cliente: nome,
         endereco: cidadeDesc || '',
-        m2Total: faixaMetragem?.estimativa || 0,
+        m2Total: metragemFinal,
         status: 'PAUSADO',
         currentModule: 'COMERCIAL',
       },
@@ -198,14 +232,14 @@ router.post('/lead', async (req: Request, res: Response) => {
         // Typeform tracking
         typeformResponseId: responseId,
         typeformSubmittedAt: new Date(submittedAt),
-        dealOrigin: 'Typeform',
+        dealOrigin: 'form orcamento',
         dealOriginId: `typeform_${responseId}`,
 
         // Person info
         personName: contato.nome || nome,
         personEmail: contato.email,
         personPhone: contato.telefone,
-        primeiroNomeZapi: contato.nome?.split(' ')[0] || nome.split(' ')[0],
+        primeiroNomeZapi: formatPrimeiroNome(contato.nome || nome),
         telefoneZapi: contato.telefone,
 
         // Project info
@@ -215,7 +249,7 @@ router.post('/lead', async (req: Request, res: Response) => {
         cidadeExecucao: regiao?.codigo,
         cidadeExecucaoDesc: cidadeDesc,
         metragemEstimadaN1: faixaMetragem?.faixa,
-        metragemEstimada: faixaMetragem?.estimativa?.toString(),
+        metragemEstimada: metragemFinal.toString(),
         descritivoArea: detalhesMetragem,
         dataPrevistaExec: previsaoExec,
 

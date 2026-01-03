@@ -14,6 +14,7 @@ import {
   emitBatteryCritical,
   emitLunchLeavingPrompt,
   emitPunctualityMultiplier,
+  emitTaskUpdated,
 } from '../../services/socket.service';
 import { isLunchTime } from '../../services/lunch-scheduler.service';
 import { sendRequestNotification } from '../../services/whatsapp.service';
@@ -4191,24 +4192,40 @@ router.get(
       // Filter tasks: only show tasks that are:
       // 1. COMPLETED - always show
       // 2. Non-completed BUT their dependency (dependsOnId) is COMPLETED
+      // 3. Tasks that are grouped with a visible task (previous task has groupWithNext=true)
       // This ensures tasks appear in proper sequence respecting dependencies
-      const tasks = userAssignedTasks.filter((task) => {
-        if (task.status === 'COMPLETED') {
-          return true; // Always show completed tasks
-        }
 
-        // Check if dependency task is completed (if there is one)
-        if (task.dependsOnId) {
-          const dependencyStatus = taskStatusMap.get(task.dependsOnId);
-          // Only show this task if its dependency is COMPLETED
-          if (dependencyStatus !== 'COMPLETED') {
-            return false; // Hide task - dependency not completed yet
+      // First pass: determine which tasks pass the dependency check
+      const visibleTaskIds = new Set<string>();
+      userAssignedTasks.forEach((task) => {
+        if (task.status === 'COMPLETED') {
+          visibleTaskIds.add(task.id);
+          return;
+        }
+        if (!task.dependsOnId) {
+          visibleTaskIds.add(task.id);
+          return;
+        }
+        const dependencyStatus = taskStatusMap.get(task.dependsOnId);
+        if (dependencyStatus === 'COMPLETED') {
+          visibleTaskIds.add(task.id);
+        }
+      });
+
+      // Second pass: also include tasks that are grouped with visible tasks
+      // A task is "grouped" if the previous task (by sortOrder) has groupWithNext=true
+      for (let i = 0; i < userAssignedTasks.length; i++) {
+        const task = userAssignedTasks[i];
+        if (i > 0) {
+          const prevTask = userAssignedTasks[i - 1];
+          // If previous task is visible AND has groupWithNext=true, include this task
+          if (visibleTaskIds.has(prevTask.id) && prevTask.groupWithNext) {
+            visibleTaskIds.add(task.id);
           }
         }
+      }
 
-        // Task has no dependency or dependency is completed - show it
-        return true;
-      });
+      const tasks = userAssignedTasks.filter((task) => visibleTaskIds.has(task.id));
 
       // Organize tasks by phase
       const tasksByPhase = {
@@ -4315,7 +4332,34 @@ router.get(
         // CURA fields for countdown display
         curaStartedAt: t.curaStartedAt,
         curaAutoCompletedAt: t.curaAutoCompletedAt,
+        // Group with next task for visual display
+        groupWithNext: t.groupWithNext,
       });
+
+      // Map task with additional deadline info for response
+      const mapTaskWithDeadline = (t: typeof tasks[0]) => {
+        // Calculate days remaining for this specific task
+        let taskDaysRemaining: number | null = null;
+        if (t.endDate) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const endDate = new Date(t.endDate);
+          endDate.setHours(0, 0, 0, 0);
+          const diffTime = endDate.getTime() - today.getTime();
+          taskDaysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+
+        return {
+          ...mapTask(t),
+          startDate: t.startDate,
+          endDate: t.endDate,
+          daysRemaining: taskDaysRemaining,
+          inputDays: t.inputDays, // Duration configured in admin (e.g., "1D" = 1 day)
+        };
+      };
+
+      // Get ALL tasks assigned to user (without dependency filter) for "Other Tasks" modal
+      const allUserTasksUnfiltered = userAssignedTasks.map(mapTaskWithDeadline);
 
       res.json({
         success: true,
@@ -4325,13 +4369,13 @@ router.get(
           phaseUnlocked,
 
           // Tasks for current phase (what should be shown now)
-          currentPhaseTasks: currentPhaseTasks.map(mapTask),
+          currentPhaseTasks: currentPhaseTasks.map(mapTaskWithDeadline),
 
           // All tasks organized by phase
           tasksByPhase: {
-            PREPARO: tasksByPhase.PREPARO.map(mapTask),
-            APLICACAO: tasksByPhase.APLICACAO.map(mapTask),
-            ACABAMENTO: tasksByPhase.ACABAMENTO.map(mapTask),
+            PREPARO: tasksByPhase.PREPARO.map(mapTaskWithDeadline),
+            APLICACAO: tasksByPhase.APLICACAO.map(mapTaskWithDeadline),
+            ACABAMENTO: tasksByPhase.ACABAMENTO.map(mapTaskWithDeadline),
           },
 
           // Progress by phase
@@ -4348,8 +4392,11 @@ router.get(
           },
 
           // Legacy support - currentTaskBlock for backward compatibility
-          currentTaskBlock: currentPhaseTasks.map(mapTask),
-          allTasks: tasks.map(mapTask),
+          currentTaskBlock: currentPhaseTasks.map(mapTaskWithDeadline),
+          allTasks: tasks.map(mapTaskWithDeadline),
+
+          // ALL user tasks (without dependency filter) - for "Other Tasks" modal
+          allUserTasks: allUserTasksUnfiltered,
         },
       });
     } catch (error) {
@@ -4647,7 +4694,10 @@ router.post(
         where: { id: taskId },
         include: {
           project: {
-            include: {
+            select: {
+              id: true,
+              title: true,
+              cliente: true,
               tasks: {
                 orderBy: { sortOrder: 'asc' },
                 select: { id: true, status: true, sortOrder: true, title: true, taskType: true },
@@ -4672,6 +4722,12 @@ router.post(
         throw new AppError('Tarefa de CURA nao pode ser concluida', 400, 'CURA_CANNOT_COMPLETE');
       }
 
+      // Get user name for socket emission
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      });
+
       // Complete the CURA task
       await prisma.projectTask.update({
         where: { id: taskId },
@@ -4683,6 +4739,19 @@ router.post(
       });
 
       console.log(`⚡ CURA task ${taskId} completed early by user ${userId}`);
+
+      // Emit socket event for real-time Gantt update
+      emitTaskUpdated({
+        projectId: task.project.id,
+        projectName: task.project.title || task.project.cliente || 'Projeto',
+        taskId: task.id,
+        taskTitle: task.title,
+        userId,
+        userName: user?.name || 'Usuário',
+        newStatus: 'COMPLETED',
+        newProgress: 100,
+        timestamp: new Date(),
+      });
 
       // Find and start the next task
       const nextTask = task.project.tasks.find(
@@ -4704,6 +4773,19 @@ router.post(
         await prisma.projectTask.update({
           where: { id: nextTask.id },
           data: updateData,
+        });
+
+        // Emit socket event for next task starting
+        emitTaskUpdated({
+          projectId: task.project.id,
+          projectName: task.project.title || task.project.cliente || 'Projeto',
+          taskId: nextTask.id,
+          taskTitle: nextTask.title,
+          userId,
+          userName: user?.name || 'Usuário',
+          newStatus: 'IN_PROGRESS',
+          newProgress: 0,
+          timestamp: new Date(),
         });
 
         nextTaskStarted = { id: nextTask.id, title: nextTask.title };
@@ -4890,6 +4972,19 @@ router.post(
               progress: newProgress,
               completionType: isIntegral ? 'INTEGRAL' : 'PARTIAL',
             },
+          });
+
+          // Emit socket event for real-time Gantt update
+          emitTaskUpdated({
+            projectId: checkin.projectId,
+            projectName: checkin.project.title || checkin.project.cliente || 'Projeto',
+            taskId: task.id,
+            taskTitle: task.title,
+            userId,
+            userName: user?.name || 'Usuário',
+            newStatus,
+            newProgress,
+            timestamp: new Date(),
           });
 
           // Calculate XP based on progress gain (proportional to 50 XP for 100%)

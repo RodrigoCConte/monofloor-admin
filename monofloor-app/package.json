@@ -1,17 +1,26 @@
 {
   "name": "monofloor-app",
   "version": "1.0.0",
-  "description": "",
+  "description": "Aplicativo mobile para equipes de obra Monofloor",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "cap:sync": "npx cap sync",
+    "cap:open:ios": "npx cap open ios",
+    "cap:build:ios": "npx cap sync ios && npx cap open ios",
+    "cap:copy": "npx cap copy"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/RodrigoCConte/monofloor-app.git"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "monofloor",
+    "mobile",
+    "construction",
+    "flooring"
+  ],
+  "author": "Monofloor",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
@@ -19,6 +28,21 @@
   },
   "homepage": "https://github.com/RodrigoCConte/monofloor-app#readme",
   "devDependencies": {
-    "puppeteer": "^24.33.0"
+    "puppeteer": "^24.33.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/camera": "^8.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/geolocation": "^8.0.0",
+    "@capacitor/haptics": "^8.0.0",
+    "@capacitor/ios": "^8.0.0",
+    "@capacitor/keyboard": "^8.0.0",
+    "@capacitor/local-notifications": "^8.0.0",
+    "@capacitor/push-notifications": "^8.0.0",
+    "@capacitor/splash-screen": "^8.0.0",
+    "@capacitor/status-bar": "^8.0.0"
   }
 }

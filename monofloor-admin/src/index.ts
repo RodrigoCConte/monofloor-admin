@@ -13,6 +13,8 @@ import { startCuraScheduler } from './services/cura-scheduler.service';
 import { detectAndProcessLunchSkips } from './services/lunch-skipped-detection.service';
 import { processAllProjectResponsibilities } from './services/report-responsibility.service';
 import { startComercialFollowUpScheduler } from './services/comercial-followup.service';
+import { startTypeformPolling, stopTypeformPolling } from './services/typeform-polling.service';
+import { leadDistributionService } from './services/lead-distribution.service';
 import prisma from './lib/prisma';
 
 // Create HTTP server for Socket.io
@@ -84,6 +86,14 @@ async function main() {
 
       // Start comercial follow-up scheduler
       startComercialFollowUpScheduler();
+
+      // Initialize lead distribution state (load last assigned consultores)
+      leadDistributionService.initializeDistributionState().catch((err: Error) => {
+        console.error('❌ Error initializing lead distribution:', err.message);
+      });
+
+      // Start Typeform polling for new leads (with auto-distribution)
+      startTypeformPolling();
 
       // Start video job worker
       videoJobWorker.start();
@@ -269,6 +279,7 @@ async function main() {
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down...');
   videoJobWorker.stop();
+  stopTypeformPolling();
   await prisma.$disconnect();
   process.exit(0);
 });
@@ -276,6 +287,7 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down...');
   videoJobWorker.stop();
+  stopTypeformPolling();
   await prisma.$disconnect();
   process.exit(0);
 });

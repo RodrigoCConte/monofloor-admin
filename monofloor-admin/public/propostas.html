@@ -386,7 +386,13 @@
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Proposta-Monofloor-${Date.now()}.pdf`;
+
+        // Nome do arquivo com nome do cliente
+        const nomeCliente = document.getElementById('nomeCliente')?.value || 'Cliente';
+        const nomeClienteLimpo = nomeCliente.trim().replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '-');
+        const dataHoje = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        a.download = `Proposta-Monofloor-${nomeClienteLimpo}-${dataHoje}.pdf`;
+
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
@@ -396,6 +402,14 @@
         status.style.color = '#22c55e';
 
         console.log('✅ Proposta baixada com sucesso!');
+
+        // Callback para o CRM se veio de lá
+        if (window.dealIdCRM) {
+          await salvarPropostaNoCRM(valorTotal, metragemTotal, {
+            stelion: { metragem: metragemTotalStelion, total: valorTotalStelion },
+            lilit: { metragem: metragemTotalLilit, total: valorTotalLilit }
+          }, blob);
+        }
 
       } catch (error) {
         console.error('❌ Erro ao gerar proposta:', error);
@@ -415,6 +429,130 @@
     };
 
     console.log('✅ HEAD SCRIPT: gerarProposta() definida!');
+
+    // ============================================
+    // GERAR LINK DO PDF (COM TRACKING)
+    // Fluxo: Gera PDF -> Salva no CRM -> Cria link -> Abre
+    // ============================================
+    window.gerarPropostaHTML = async function() {
+      console.log('🔗 GERAR LINK: Iniciando...');
+
+      const btn = document.getElementById('btnGerarHTML');
+      const status = document.getElementById('statusProposta');
+      const htmlLinkDiv = document.getElementById('htmlLink');
+
+      try {
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
+        btn.style.cursor = 'wait';
+        htmlLinkDiv.style.display = 'none';
+
+        // Ler query params da URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const dealId = urlParams.get('dealId');
+        const clienteFromUrl = urlParams.get('cliente');
+
+        if (!dealId) {
+          throw new Error('Este recurso só funciona quando aberto pelo CRM (precisa do dealId)');
+        }
+
+        const API_BASE = window.location.hostname === 'localhost'
+          ? 'http://localhost:3000'
+          : 'https://devoted-wholeness-production.up.railway.app';
+
+        // ====== PASSO 1: Verificar se já tem proposta com PDF ======
+        status.textContent = '🔍 Verificando proposta...';
+        status.style.color = '#3b82f6';
+
+        let propostaId = null;
+        const propostaRes = await fetch(`${API_BASE}/api/admin/comercial/${dealId}/ultima-proposta`);
+
+        if (propostaRes.ok) {
+          const propostaData = await propostaRes.json();
+          if (propostaData.proposta?.pdfBase64) {
+            propostaId = propostaData.proposta.id;
+            console.log('✅ Proposta com PDF encontrada:', propostaId);
+          }
+        }
+
+        // Se não tem proposta com PDF, gerar primeiro
+        if (!propostaId) {
+          status.textContent = '📄 Gerando PDF primeiro...';
+
+          // Chamar a função de gerar proposta PDF e esperar
+          await window.gerarProposta();
+
+          // Aguardar um pouco e buscar novamente
+          await new Promise(r => setTimeout(r, 2000));
+
+          const propostaRes2 = await fetch(`${API_BASE}/api/admin/comercial/${dealId}/ultima-proposta`);
+          if (propostaRes2.ok) {
+            const propostaData2 = await propostaRes2.json();
+            if (propostaData2.proposta?.pdfBase64) {
+              propostaId = propostaData2.proposta.id;
+            }
+          }
+        }
+
+        if (!propostaId) {
+          throw new Error('Não foi possível gerar a proposta. Tente gerar o PDF primeiro.');
+        }
+
+        // ====== PASSO 2: Gerar link público ======
+        status.textContent = '🔗 Gerando link público...';
+
+        const linkResponse = await fetch(`${API_BASE}/api/proposals/generate-html`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ propostaId }),
+        });
+
+        if (!linkResponse.ok) {
+          const error = await linkResponse.json();
+          throw new Error(error.error || 'Erro ao gerar link');
+        }
+
+        const result = await linkResponse.json();
+
+        // ====== PASSO 3: Mostrar e abrir ======
+        status.textContent = '✅ Link gerado!';
+        status.style.color = '#22c55e';
+
+        const linkUrl = document.getElementById('htmlLinkUrl');
+        linkUrl.href = result.url;
+        linkUrl.textContent = result.url;
+        htmlLinkDiv.style.display = 'block';
+
+        // Abrir o PDF em nova aba
+        window.open(result.url, '_blank');
+
+        console.log('✅ Link do PDF:', result.url);
+
+      } catch (error) {
+        console.error('❌ Erro:', error);
+        status.textContent = '❌ ' + error.message;
+        status.style.color = '#ef4444';
+      } finally {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+      }
+    };
+
+    // Copiar link para clipboard
+    window.copyHtmlLink = function() {
+      const linkUrl = document.getElementById('htmlLinkUrl').href;
+      navigator.clipboard.writeText(linkUrl).then(() => {
+        const status = document.getElementById('statusProposta');
+        status.textContent = '📋 Link copiado para a área de transferência!';
+        status.style.color = '#22c55e';
+        setTimeout(() => {
+          status.textContent = '';
+        }, 3000);
+      });
+    };
+
+    console.log('✅ HEAD SCRIPT: gerarPropostaHTML() definida!');
 
     // ============================================
     // CALCULADORA DE PRAZOS - DEFINIDA NO HEAD
@@ -1294,26 +1432,62 @@
             </div>
           </div>
 
-          <!-- BOTÃO GERAR PROPOSTA -->
+          <!-- BOTÕES GERAR PROPOSTA -->
           <div style="margin-top: 30px; text-align: center;">
-            <button id="btnGerarProposta" onclick="gerarProposta()" style="
-              background: linear-gradient(135deg, #c9a962 0%, #a88b4a 100%);
-              color: #000000;
-              border: none;
-              padding: 18px 48px;
-              font-size: 18px;
-              font-weight: 700;
-              border-radius: 12px;
-              cursor: pointer;
-              text-transform: uppercase;
-              letter-spacing: 1px;
-              box-shadow: 0 4px 12px rgba(201, 169, 98, 0.3);
-              transition: all 0.3s ease;
-            " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(201, 169, 98, 0.4)'"
-               onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(201, 169, 98, 0.3)'">
-              📄 Gerar Proposta em PDF
-            </button>
+            <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+              <button id="btnGerarProposta" onclick="gerarProposta()" style="
+                background: linear-gradient(135deg, #c9a962 0%, #a88b4a 100%);
+                color: #000000;
+                border: none;
+                padding: 18px 48px;
+                font-size: 18px;
+                font-weight: 700;
+                border-radius: 12px;
+                cursor: pointer;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                box-shadow: 0 4px 12px rgba(201, 169, 98, 0.3);
+                transition: all 0.3s ease;
+              " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(201, 169, 98, 0.4)'"
+                 onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(201, 169, 98, 0.3)'">
+                📄 Gerar Proposta em PDF
+              </button>
+
+              <button id="btnGerarHTML" onclick="gerarPropostaHTML()" style="
+                background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+                color: #ffffff;
+                border: none;
+                padding: 18px 48px;
+                font-size: 18px;
+                font-weight: 700;
+                border-radius: 12px;
+                cursor: pointer;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+                transition: all 0.3s ease;
+              " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(59, 130, 246, 0.4)'"
+                 onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(59, 130, 246, 0.3)'">
+                🌐 Gerar em HTML (com tracking)
+              </button>
+            </div>
             <div id="statusProposta" style="margin-top: 15px; font-size: 14px; color: #999999;"></div>
+            <div id="htmlLink" style="margin-top: 15px; display: none;">
+              <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 16px;">
+                <p style="color: #3b82f6; font-weight: 600; margin-bottom: 8px;">🔗 Link da proposta gerado:</p>
+                <a id="htmlLinkUrl" href="#" target="_blank" style="color: #60a5fa; word-break: break-all;"></a>
+                <button onclick="copyHtmlLink()" style="
+                  margin-top: 12px;
+                  background: #3b82f6;
+                  color: white;
+                  border: none;
+                  padding: 8px 16px;
+                  border-radius: 6px;
+                  cursor: pointer;
+                  font-size: 14px;
+                ">📋 Copiar Link</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1610,8 +1784,7 @@
     // ============================================
     // CÁLCULO DE PREÇOS
     // ============================================
-    const MAO_OBRA_M2 = 120; // R$ 120 por m²
-    const IMPOSTOS_PERCENT = 0.17; // 17%
+    // Nota: MAO_OBRA_M2 e IMPOSTOS_PERCENT já definidos no início do script (linhas ~15-16)
 
     function formatarMoeda(valor) {
       return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1740,6 +1913,12 @@
 
       document.getElementById('resumoTotalGeral').textContent = formatarMoeda(valorGeral);
       document.getElementById('resumoMetragemGeral').textContent = metragemGeral.toFixed(2);
+
+      // Atualizar campos usados pela geração de proposta
+      document.getElementById('metragemTotalStelionDisplay').textContent = metragemTotalStelion.toFixed(2);
+      document.getElementById('metragemTotalLilitDisplay').textContent = metragemTotalLilit.toFixed(2);
+      document.getElementById('totalStelion').textContent = formatarMoeda(valorTotalStelion);
+      document.getElementById('totalLilit').textContent = formatarMoeda(valorTotalLilit);
 
       // Calcular e atualizar valor médio por m² (separado por produto)
       const valorMedioM2Stelion = metragemTotalStelion > 0 ? valorTotalStelion / metragemTotalStelion : 0;
@@ -1905,8 +2084,173 @@
     // ============================================
     // INICIALIZAÇÃO
     // ============================================
+
+    // Função para preencher campos a partir de query params (integração CRM)
+    function preencherDadosDoCRM() {
+      const urlParams = new URLSearchParams(window.location.search);
+
+      // Verificar se há parâmetros do CRM
+      if (urlParams.has('dealId')) {
+        console.log('📋 Dados do CRM detectados, preenchendo campos...');
+
+        // Armazenar dealId para uso posterior (callback para o CRM)
+        window.dealIdCRM = urlParams.get('dealId');
+
+        // Nome do cliente
+        if (urlParams.has('cliente')) {
+          const nomeClienteInput = document.getElementById('nomeCliente');
+          if (nomeClienteInput) nomeClienteInput.value = urlParams.get('cliente');
+        }
+
+        // Endereço
+        if (urlParams.has('endereco')) {
+          const enderecoInput = document.getElementById('endereco');
+          if (enderecoInput) enderecoInput.value = urlParams.get('endereco');
+        }
+
+        // Cidade
+        if (urlParams.has('cidade')) {
+          const enderecoInput = document.getElementById('endereco');
+          if (enderecoInput && !enderecoInput.value) {
+            enderecoInput.value = urlParams.get('cidade');
+          }
+        }
+
+        // Detalhes do projeto
+        let detalhes = [];
+        if (urlParams.has('tipoProjeto')) detalhes.push('Tipo: ' + urlParams.get('tipoProjeto'));
+        if (urlParams.has('area')) detalhes.push('Área: ' + urlParams.get('area'));
+        if (urlParams.has('estadoObra')) detalhes.push('Estado: ' + urlParams.get('estadoObra'));
+        if (urlParams.has('arquiteto')) detalhes.push('Arquiteto: ' + urlParams.get('arquiteto'));
+        if (urlParams.has('consultor')) detalhes.push('Consultor: ' + urlParams.get('consultor'));
+
+        if (detalhes.length > 0) {
+          const detalhesInput = document.getElementById('detalhes');
+          if (detalhesInput) detalhesInput.value = detalhes.join('\n');
+        }
+
+        // Metragem - preencher no campo de piso por padrão
+        if (urlParams.has('metragem')) {
+          const metragem = parseFloat(urlParams.get('metragem'));
+          if (metragem > 0) {
+            const metrosPisoInput = document.getElementById('metrosPiso');
+            if (metrosPisoInput) {
+              metrosPisoInput.value = metragem;
+              console.log('📐 Metragem preenchida:', metragem, 'm²');
+            }
+          }
+        }
+
+        // Data prevista de execução
+        if (urlParams.has('dataPrevistaExec')) {
+          const previsaoDataInput = document.getElementById('previsaoData');
+          if (previsaoDataInput) {
+            previsaoDataInput.value = urlParams.get('dataPrevistaExec');
+            console.log('📅 Data prevista preenchida:', urlParams.get('dataPrevistaExec'));
+          }
+        }
+
+        // Mostrar toast informando que campos foram preenchidos
+        setTimeout(() => {
+          showToast('📋 Dados do CRM carregados! Confira e ajuste se necessário.', 'info');
+        }, 500);
+
+        console.log('✅ Campos preenchidos a partir do CRM');
+      }
+    }
+
+    // Função para salvar proposta gerada de volta no CRM
+    async function salvarPropostaNoCRM(valorTotal, metragem, dadosCalculo, pdfBlob) {
+      try {
+        console.log('💾 Salvando proposta no CRM...');
+
+        // Usar a API do admin panel
+        const API_BASE = window.location.origin;
+        const dealId = window.dealIdCRM;
+
+        // 1. Criar registro da proposta
+        const response = await fetch(`${API_BASE}/api/admin/comercial/${dealId}/proposta/gerar`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('admin_token') || ''}`
+          },
+          body: JSON.stringify({
+            valorTotal,
+            metragem,
+            dadosCalculo
+          })
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log('✅ Proposta criada no CRM:', result);
+
+          // 2. Se temos o PDF blob, converter para base64 e salvar
+          if (pdfBlob && result.proposta && result.proposta.id) {
+            try {
+              console.log('📄 Convertendo PDF para base64...');
+              const pdfBase64 = await blobToBase64(pdfBlob);
+
+              // Salvar PDF no banco
+              const pdfResponse = await fetch(`${API_BASE}/api/admin/comercial/${dealId}/proposta/${result.proposta.id}/pdf`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${localStorage.getItem('admin_token') || ''}`
+                },
+                body: JSON.stringify({
+                  pdfBase64,
+                  valorTotal,
+                  metragem
+                })
+              });
+
+              if (pdfResponse.ok) {
+                const pdfResult = await pdfResponse.json();
+                console.log('✅ PDF salvo no CRM!', pdfResult);
+                showToast('✅ Proposta v' + result.proposta.versao + ' salva e anexada ao lead!', 'success');
+              } else {
+                console.error('❌ Erro ao salvar PDF');
+                showToast('⚠️ Proposta criada, mas PDF não foi salvo', 'warning');
+              }
+            } catch (pdfError) {
+              console.error('❌ Erro ao processar PDF:', pdfError);
+              showToast('⚠️ Proposta criada, mas PDF não foi salvo', 'warning');
+            }
+          } else {
+            showToast('✅ Proposta v' + (result.proposta?.versao || '?') + ' salva no CRM!', 'success');
+          }
+        } else {
+          const error = await response.json();
+          console.error('❌ Erro ao salvar no CRM:', error);
+          showToast('⚠️ Proposta gerada, mas não foi salva no CRM', 'warning');
+        }
+      } catch (error) {
+        console.error('❌ Erro ao conectar com CRM:', error);
+        showToast('⚠️ Proposta gerada localmente. CRM indisponível.', 'warning');
+      }
+    }
+
+    // Helper para converter Blob para Base64
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          // Retornar apenas a parte base64 (sem o prefixo data:...)
+          const base64 = reader.result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
     function initializeApp() {
       console.log('🚀 Inicializando aplicação...');
+
+      // Preencher dados do CRM se vieram via query params
+      preencherDadosDoCRM();
 
       // Prevenir Enter de dar submit no formulário - VERSÃO ROBUSTA
       const form = document.getElementById('proposalForm'); // ID correto!

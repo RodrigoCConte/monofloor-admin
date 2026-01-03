@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { config } from './config';
+import { PrismaClient } from '@prisma/client';
 
 // Force rebuild: 2024-12-21T01:15:00Z - PostgreSQL file storage
 import { errorHandler } from './middleware/errorHandler';
@@ -11,6 +12,8 @@ import { mobileRoutes } from './routes/mobile';
 import { webhookRoutes } from './routes/webhooks';
 import proposalsRoutes from './routes/proposals.routes';
 import filesRoutes from './routes/files.routes';
+
+const prisma = new PrismaClient();
 
 const app = express();
 
@@ -29,6 +32,7 @@ const allowedOrigins = [
   'http://localhost:8080',
   'http://localhost:3000',
   'http://localhost:3001',
+  'http://localhost:1111',
   // Production URLs
   'https://monofloor.com.br',
   'https://app.monofloor.com.br',
@@ -75,6 +79,9 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // Serve video processor static files
 app.use('/video-processor', express.static(path.join(__dirname, '../public/video-processor')));
 
+// Serve propostas.html and other public static files
+app.use(express.static(path.join(__dirname, '../public')));
+
 // Serve admin panel static files (Vue.js build)
 const adminPanelPath = path.join(__dirname, '../admin-panel/dist');
 app.use('/admin', express.static(adminPanelPath));
@@ -108,6 +115,294 @@ app.use('/api/webhooks', webhookRoutes);
 
 // File serving from PostgreSQL database
 app.use('/files', filesRoutes);
+
+// Public proposal page route - serves pre-converted images with tracking
+// Supports both old format (/p/abc123) and new format (/p/2026/Proposta_Nome_abc123)
+app.get('/p/:slug(*)', async (req, res) => {
+  try {
+    const slug = req.params.slug;
+
+    const proposta = await prisma.proposta.findUnique({
+      where: { htmlSlug: slug },
+      select: {
+        id: true,
+        htmlImages: true, // Imagens pré-convertidas
+        comercial: {
+          select: { personName: true }
+        }
+      }
+    });
+
+    if (!proposta) {
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Proposta não encontrada</title></head>
+        <body style="font-family: sans-serif; text-align: center; padding: 50px; background: #000; color: #fff;">
+          <h1>Proposta não encontrada</h1>
+          <p>Esta proposta pode ter expirado ou o link está incorreto.</p>
+        </body>
+        </html>
+      `);
+    }
+
+    if (!proposta.htmlImages) {
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Proposta não disponível</title></head>
+        <body style="font-family: sans-serif; text-align: center; padding: 50px; background: #000; color: #fff;">
+          <h1>Proposta não disponível</h1>
+          <p>Esta proposta precisa ser regenerada. Por favor, solicite um novo link.</p>
+        </body>
+        </html>
+      `);
+    }
+
+    // Registrar visualização inicial (tracking)
+    const userAgent = req.headers['user-agent'] || '';
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0] ||
+               req.socket.remoteAddress || 'unknown';
+
+    const botPatterns = [/bot/i, /crawler/i, /spider/i, /googlebot/i, /bingbot/i, /whatsapp/i, /facebookexternalhit/i, /Facebot/i, /Twitterbot/i, /LinkedInBot/i, /Slackbot/i, /TelegramBot/i];
+    const isBot = botPatterns.some(p => p.test(userAgent));
+
+    let deviceType = 'desktop';
+    if (/mobile/i.test(userAgent)) deviceType = 'mobile';
+    else if (/tablet|ipad/i.test(userAgent)) deviceType = 'tablet';
+
+    const clienteName = proposta.comercial?.personName || 'Cliente';
+
+    // Se for bot (WhatsApp, Facebook, etc), retornar HTML leve com apenas meta tags OG
+    if (isBot) {
+      console.log(`🤖 [Bot] ${userAgent.substring(0, 50)} acessando proposta ${slug}`);
+      const ogHtml = generateBotFriendlyHTML(slug, clienteName);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(ogHtml);
+    }
+
+    const sessionId = require('crypto').randomBytes(16).toString('hex');
+
+    await prisma.propostaView.create({
+      data: {
+        propostaId: proposta.id,
+        ip,
+        userAgent,
+        deviceType,
+        isBot,
+        sessionId
+      }
+    });
+
+    console.log(`📊 [Tracking] Proposta ${slug} visualizada - IP: ${ip}, Device: ${deviceType}`);
+
+    // Usar imagens pré-convertidas (RÁPIDO!)
+    const images: string[] = JSON.parse(proposta.htmlImages);
+    console.log(`✅ Carregando ${images.length} imagem(s) pré-convertidas`);
+
+    // Gerar HTML com as imagens do PDF
+    const html = generateProposalImageHTML(slug, sessionId, clienteName, images);
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+
+  } catch (error) {
+    console.error('Erro ao buscar proposta:', error);
+    res.status(500).send('Erro ao carregar proposta');
+  }
+});
+
+// Função para gerar HTML com imagens do PDF e tracking
+function generateProposalImageHTML(slug: string, sessionId: string, clienteName: string, images: string[]): string {
+  const imagesHtml = images.map((img, idx) => `
+    <div class="page">
+      <img src="${img}" alt="Proposta página ${idx + 1}" loading="lazy" />
+    </div>
+  `).join('');
+
+  const ogTitle = `Proposta Monofloor - ${clienteName}`;
+  const ogDescription = 'Proposta comercial exclusiva Monofloor - Premium Unique Surfaces';
+  const ogImage = 'https://propostas.monofloor.cloud/og-image.jpg';
+  const ogUrl = `https://propostas.monofloor.cloud/p/${slug}`;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${ogTitle}</title>
+
+  <!-- Open Graph / WhatsApp / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="${ogUrl}">
+  <meta property="og:title" content="${ogTitle}">
+  <meta property="og:description" content="${ogDescription}">
+  <meta property="og:image" content="${ogImage}">
+  <meta property="og:image:width" content="800">
+  <meta property="og:image:height" content="1185">
+  <meta property="og:site_name" content="Monofloor">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${ogTitle}">
+  <meta name="twitter:description" content="${ogDescription}">
+  <meta name="twitter:image" content="${ogImage}">
+
+  <link rel="icon" type="image/png" href="https://monofloor.com.br/favicon.ico">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #000;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0;
+      margin: 0;
+    }
+
+    .container {
+      max-width: 500px;
+      width: 100%;
+      background: #000;
+    }
+
+    .page {
+      margin: 0;
+      padding: 0;
+      background: #000;
+    }
+
+    .page img {
+      width: 100%;
+      height: auto;
+      display: block;
+      margin: 0;
+      padding: 0;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+      font-size: 12px;
+      background: #000;
+    }
+
+    .footer a {
+      color: #c9a962;
+      text-decoration: none;
+    }
+
+    @media (max-width: 600px) {
+      .container { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    ${imagesHtml}
+
+    <div class="footer">
+      <p>Proposta Monofloor - ${clienteName}</p>
+      <p style="margin-top: 8px;"><a href="https://monofloor.com.br" target="_blank">monofloor.com.br</a></p>
+    </div>
+  </div>
+
+  <!-- Tracking Script -->
+  <script>
+    (function() {
+      const slug = '${slug}';
+      const sessionId = '${sessionId}';
+      const apiBase = window.location.origin;
+      let startTime = Date.now();
+      let maxScroll = 0;
+      let lastUpdate = 0;
+
+      function updateScroll() {
+        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+        const docHeight = Math.max(document.body.scrollHeight - window.innerHeight, 1);
+        const scrollPercent = Math.min(100, Math.round((scrollTop / docHeight) * 100));
+        if (scrollPercent > maxScroll) maxScroll = scrollPercent;
+      }
+
+      window.addEventListener('scroll', updateScroll);
+      updateScroll();
+
+      function sendTracking(final = false) {
+        const timeOnPage = Math.round((Date.now() - startTime) / 1000);
+        if (!final && Date.now() - lastUpdate < 1000) return;
+        lastUpdate = Date.now();
+
+        const data = { slug, sessionId, timeOnPage, scrollDepth: maxScroll };
+
+        if (final && navigator.sendBeacon) {
+          navigator.sendBeacon(apiBase + '/api/proposals/track', new Blob([JSON.stringify(data)], { type: 'application/json' }));
+        } else {
+          fetch(apiBase + '/api/proposals/track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+            keepalive: true
+          }).catch(() => {});
+        }
+      }
+
+      setInterval(() => sendTracking(false), 10000);
+      window.addEventListener('beforeunload', () => sendTracking(true));
+      window.addEventListener('pagehide', () => sendTracking(true));
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') sendTracking(true);
+      });
+      setTimeout(() => sendTracking(false), 3000);
+    })();
+  </script>
+</body>
+</html>`;
+}
+
+// HTML leve para bots (WhatsApp, Facebook, etc) - apenas meta tags OG
+function generateBotFriendlyHTML(slug: string, clienteName: string): string {
+  const ogTitle = `Proposta Monofloor - ${clienteName}`;
+  const ogDescription = 'Proposta comercial exclusiva Monofloor - Premium Unique Surfaces';
+  const ogImage = 'https://propostas.monofloor.cloud/og-image.jpg';
+  const ogUrl = `https://propostas.monofloor.cloud/p/${slug}`;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${ogTitle}</title>
+
+  <!-- Open Graph / WhatsApp / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="${ogUrl}">
+  <meta property="og:title" content="${ogTitle}">
+  <meta property="og:description" content="${ogDescription}">
+  <meta property="og:image" content="${ogImage}">
+  <meta property="og:image:width" content="800">
+  <meta property="og:image:height" content="1185">
+  <meta property="og:site_name" content="Monofloor">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${ogTitle}">
+  <meta name="twitter:description" content="${ogDescription}">
+  <meta name="twitter:image" content="${ogImage}">
+
+  <link rel="icon" type="image/png" href="https://monofloor.com.br/favicon.ico">
+</head>
+<body style="background: #000; color: #fff; font-family: sans-serif; text-align: center; padding: 50px;">
+  <h1>${ogTitle}</h1>
+  <p>${ogDescription}</p>
+  <p><a href="${ogUrl}" style="color: #c9a962;">Abrir proposta</a></p>
+</body>
+</html>`;
+}
 
 // Error handling
 app.use(errorHandler);

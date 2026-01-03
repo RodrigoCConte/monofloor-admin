@@ -3,6 +3,7 @@ import { HelpRequestStatus, HelpRequestType } from '@prisma/client';
 import { body, param, query, validationResult } from 'express-validator';
 import { adminAuth } from '../../middleware/auth';
 import { getSocketServer } from '../../services/socket.service';
+import { sendPushToUser } from '../../services/push.service';
 import prisma from '../../lib/prisma';
 
 const router = Router();
@@ -261,6 +262,21 @@ router.put(
         });
       }
 
+      // Also send push notification
+      const statusLabels: Record<string, string> = {
+        IN_PROGRESS: 'em andamento',
+        RESOLVED: 'resolvida',
+        CANCELLED: 'cancelada',
+      };
+      sendPushToUser(request.userId, {
+        title: 'Solicitacao Atualizada',
+        body: `Sua solicitacao de ${request.type === 'MATERIAL' ? 'material' : 'ajuda'} esta ${statusLabels[status] || status}`,
+        icon: '/icons/icon-192.png',
+        badge: '/icons/badge-72.png',
+        tag: `help-request-${request.id}`,
+        data: { type: 'helpRequest:updated', id: request.id, status },
+      }).catch(console.error);
+
       res.json({
         success: true,
         data: updated,
@@ -327,6 +343,17 @@ router.post(
         });
       }
 
+      // Also send push notification
+      sendPushToUser(request.userId, {
+        title: 'Solicitacao Resolvida!',
+        body: `Sua solicitacao de ${request.type === 'MATERIAL' ? 'material' : 'ajuda'} foi resolvida.${adminNotes ? ` Obs: ${adminNotes}` : ''}`,
+        icon: '/icons/icon-192.png',
+        badge: '/icons/badge-72.png',
+        tag: `help-request-${request.id}`,
+        data: { type: 'helpRequest:resolved', id: request.id },
+        requireInteraction: true,
+      }).catch(console.error);
+
       res.json({
         success: true,
         message: 'Solicitacao resolvida com sucesso',
@@ -389,6 +416,16 @@ router.post(
           type: request.type,
         });
       }
+
+      // Also send push notification
+      sendPushToUser(request.userId, {
+        title: 'Solicitacao Cancelada',
+        body: `Sua solicitacao de ${request.type === 'MATERIAL' ? 'material' : 'ajuda'} foi cancelada.`,
+        icon: '/icons/icon-192.png',
+        badge: '/icons/badge-72.png',
+        tag: `help-request-${request.id}`,
+        data: { type: 'helpRequest:cancelled', id: request.id },
+      }).catch(console.error);
 
       res.json({
         success: true,

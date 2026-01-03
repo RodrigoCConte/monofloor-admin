@@ -450,6 +450,64 @@ export const comercialApi = {
   completeFollowUp: (followUpId: string, resultado: string) =>
     api.put(`/api/admin/comercial/followups/${followUpId}/realizar`, { resultado }),
   getTodayFollowUps: () => api.get('/api/admin/comercial/followups/hoje'),
+
+  // Propostas - Geração e Envio
+  getPropostas: (comercialId: string) =>
+    api.get(`/api/admin/comercial/${comercialId}/propostas`),
+  gerarProposta: (comercialId: string, dados?: {
+    metragem?: number;
+    valorTotal?: number;
+    valorM2?: number;
+  }) => api.post(`/api/admin/comercial/${comercialId}/proposta/gerar`, dados || {}),
+  getUltimaProposta: (comercialId: string) =>
+    api.get(`/api/admin/comercial/${comercialId}/ultima-proposta`),
+  salvarPropostaPdf: (comercialId: string, propostaId: string, data: {
+    pdfUrl?: string;
+    pdfBase64?: string;
+  }) => api.put(`/api/admin/comercial/${comercialId}/proposta/${propostaId}/pdf`, data),
+  enviarPropostaWhatsApp: (comercialId: string, propostaId: string, data: {
+    phoneNumber: string;
+    message?: string;
+  }) => api.post(`/api/admin/comercial/${comercialId}/proposta/${propostaId}/enviar-whatsapp`, data),
+
+  // Anexos do Lead (Projeto Arquitetônico, Documentos, etc)
+  getAnexos: (comercialId: string) =>
+    api.get(`/api/admin/comercial/${comercialId}/anexos`),
+  downloadAnexo: (comercialId: string, anexoId: string) =>
+    api.get(`/api/admin/comercial/${comercialId}/anexos/${anexoId}/download`),
+  createAnexo: (comercialId: string, data: {
+    nome: string;
+    tipo: string;
+    descricao?: string;
+    fileData?: string;
+    mimeType?: string;
+    fileSize?: number;
+    fileUrl?: string;
+  }) => api.post(`/api/admin/comercial/${comercialId}/anexos`, data),
+  deleteAnexo: (comercialId: string, anexoId: string) =>
+    api.delete(`/api/admin/comercial/${comercialId}/anexos/${anexoId}`),
+
+  // Orçamentos Enviados
+  getOrcamentosEnviados: (comercialId: string) =>
+    api.get(`/api/admin/comercial/${comercialId}/orcamentos-enviados`),
+  createOrcamentoEnviado: (comercialId: string, data: {
+    dataEnvio: string;
+    valor?: number;
+    descricao?: string;
+    metragem?: number;
+    observacoes?: string;
+    propostaId?: string;
+  }) => api.post(`/api/admin/comercial/${comercialId}/orcamentos-enviados`, data),
+  updateOrcamentoEnviado: (comercialId: string, orcamentoId: string, data: {
+    dataEnvio?: string;
+    valor?: number;
+    descricao?: string;
+    metragem?: number;
+    observacoes?: string;
+    propostaId?: string;
+  }) => api.put(`/api/admin/comercial/${comercialId}/orcamentos-enviados/${orcamentoId}`, data),
+  deleteOrcamentoEnviado: (comercialId: string, orcamentoId: string) =>
+    api.delete(`/api/admin/comercial/${comercialId}/orcamentos-enviados/${orcamentoId}`),
 };
 
 // =============================================
@@ -543,4 +601,37 @@ export const whatsappApi = {
   // Message logs
   getMessageLogs: (params?: { comercialId?: string; status?: string; limit?: number }) =>
     api.get('/api/admin/comercial/whatsapp/logs', { params }),
+};
+
+// Scheduling API (Holidays, Saturday Schedules, Absences)
+export const schedulingApi = {
+  // Holidays
+  getHolidays: (params?: { year?: number; type?: string; includeInactive?: boolean }) =>
+    api.get('/api/admin/scheduling/holidays', { params }),
+  createHoliday: (data: { date: string; name: string; year?: number; description?: string; type?: string }) =>
+    api.post('/api/admin/scheduling/holidays', data),
+  updateHoliday: (id: string, data: any) =>
+    api.put(`/api/admin/scheduling/holidays/${id}`, data),
+  deleteHoliday: (id: string) =>
+    api.delete(`/api/admin/scheduling/holidays/${id}`),
+  seedHolidays: (year: number) =>
+    api.post(`/api/admin/scheduling/holidays/seed?year=${year}`),
+
+  // Saturday Schedules
+  getSaturdaySchedules: (params?: { date?: string; userId?: string; projectId?: string; status?: string; startDate?: string; endDate?: string }) =>
+    api.get('/api/admin/scheduling/saturdays', { params }),
+  createSaturdaySchedule: (data: { date: string; userIds: string[]; projectId?: string }) =>
+    api.post('/api/admin/scheduling/saturdays', data),
+  updateSaturdaySchedule: (id: string, data: { status?: string; projectId?: string }) =>
+    api.put(`/api/admin/scheduling/saturdays/${id}`, data),
+  deleteSaturdaySchedule: (id: string) =>
+    api.delete(`/api/admin/scheduling/saturdays/${id}`),
+  markNoShow: (id: string, xpPenalty?: number) =>
+    api.post(`/api/admin/scheduling/saturdays/${id}/mark-no-show`, { xpPenalty }),
+
+  // Absences
+  getAbsences: (params?: { userId?: string; type?: string; startDate?: string; endDate?: string; justified?: boolean }) =>
+    api.get('/api/admin/scheduling/absences', { params }),
+  justifyAbsence: (id: string, data: { justification: string; refundXp?: boolean }) =>
+    api.put(`/api/admin/scheduling/absences/${id}/justify`, data),
 };

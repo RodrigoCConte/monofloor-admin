@@ -65,4 +65,14 @@ export const config = {
     adminPanelUrl: process.env.ADMIN_PANEL_URL || 'http://localhost:5173',
     mobileAppUrl: process.env.MOBILE_APP_URL || 'http://localhost:3000',
   },
+
+  // Typeform
+  typeform: {
+    apiKey: process.env.TYPEFORM_API_KEY || '',
+    formIds: {
+      waitlist: 'uQwmO6L6',
+      contrato: 'MR7zP9Sl',
+    },
+    pollingIntervalMs: 60000, // 1 minuto
+  },
 };

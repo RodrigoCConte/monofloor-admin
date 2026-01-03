@@ -1,12 +1,13 @@
 <template>
   <div class="crm">
-    <!-- Header -->
-    <header class="crm-header">
+    <!-- Header - Hidden during loading -->
+    <header class="crm-header" v-if="!loading">
       <div class="crm-header__top">
         <div class="crm-header__title-row">
           <!-- Pixel Train with Smoke -->
           <div class="pixel-train">
             <svg class="train-svg" viewBox="0 0 64 40" fill="none">
+              <g transform="translate(64,0) scale(-1,1)">
               <!-- Smoke particles -->
               <circle class="smoke smoke-1" cx="20" cy="8" r="3" fill="#666"/>
               <circle class="smoke smoke-2" cx="14" cy="5" r="2.5" fill="#888"/>
@@ -32,6 +33,7 @@
               <!-- Details -->
               <rect x="14" y="24" width="20" height="2" fill="#c9a962"/>
               <rect x="36" y="28" width="14" height="2" fill="#c9a962"/>
+              </g>
             </svg>
           </div>
 
@@ -284,7 +286,7 @@
     </header>
 
     <!-- Filters Bar -->
-    <div v-if="showFilters" class="filters-bar">
+    <div v-if="showFilters && !loading" class="filters-bar">
       <div class="filter-group">
         <label class="filter-label">Buscar</label>
         <input
@@ -304,6 +306,7 @@
       <div class="filter-group">
         <label class="filter-label">Período</label>
         <select class="filter-select" v-model="selectedPeriod">
+          <option value="">Todos</option>
           <option value="7">Últimos 7 dias</option>
           <option value="30">Últimos 30 dias</option>
           <option value="90">Últimos 90 dias</option>
@@ -329,7 +332,7 @@
     </div>
 
     <!-- Pipeline -->
-    <div class="pipeline" ref="pipelineRef">
+    <div class="pipeline" ref="pipelineRef" v-if="!loading">
       <div
         v-for="(stage, stageIndex) in stages"
         :key="stage.id"
@@ -373,11 +376,26 @@
             >
               <div class="deal-card__header">
                 <span class="deal-card__name">{{ deal.clientName || 'Sem nome' }}</span>
-                <span class="deal-card__id">#{{ deal.id.slice(-4) }}</span>
+                <span class="deal-card__id">#{{ deal.pipedriveDealId || deal.id.slice(-4) }}</span>
+              </div>
+
+              <!-- Tags: Tipo Cliente + Metragem -->
+              <div class="deal-card__tags" v-if="deal.tipoCliente || deal.metragemEstimadaN1">
+                <span v-if="deal.tipoCliente" class="deal-card__tag deal-card__tag--tipo">
+                  {{ deal.tipoCliente === 'Consumidor Final' ? '🏠' : '👷' }} {{ deal.tipoCliente }}
+                </span>
+                <span v-if="deal.metragemEstimadaN1" class="deal-card__tag deal-card__tag--m2">
+                  📐 {{ deal.metragemEstimadaN1 }}
+                </span>
               </div>
 
               <div class="deal-card__value">
                 {{ formatCurrency(deal.value || 0) }}
+              </div>
+
+              <!-- Cidade -->
+              <div class="deal-card__location" v-if="deal.cidadeExecucao">
+                📍 {{ deal.cidadeExecucao }}
               </div>
 
               <div class="deal-card__footer">
@@ -393,8 +411,8 @@
                 <button class="deal-action" title="WhatsApp" @click.stop="sendWhatsApp(deal)">
                   💬
                 </button>
-                <button class="deal-action" title="Agendar" @click.stop="scheduleMeeting(deal)">
-                  📅
+                <button class="deal-action" title="Pipedrive" @click.stop="openPipedriveLink(deal.pipedriveUrl)">
+                  🔗
                 </button>
                 <button class="deal-action" title="Mais" @click.stop="openMenu(deal, $event)">
                   ⋯
@@ -414,50 +432,477 @@
     <!-- Deal Detail Modal -->
     <Teleport to="body">
       <div v-if="selectedDeal" class="modal-overlay" @click.self="closeDealDetail">
-        <div class="modal">
+        <div class="modal modal--large">
           <div class="modal__header">
-            <h2 class="modal__title">{{ selectedDeal.clientName }}</h2>
-            <button class="modal__close" @click="closeDealDetail">✕</button>
+            <div class="modal__header-content">
+              <h2 class="modal__title">{{ selectedDeal.clientName }}</h2>
+              <div class="modal__badges">
+                <span v-if="selectedDeal.tipoCliente" class="badge badge--tipo">
+                  {{ selectedDeal.tipoCliente }}
+                </span>
+                <span v-if="selectedDeal.tipoProjeto" class="badge badge--projeto">
+                  {{ selectedDeal.tipoProjeto }}
+                </span>
+              </div>
+            </div>
+            <div class="modal__actions">
+              <a v-if="selectedDeal.pipedriveUrl" :href="selectedDeal.pipedriveUrl" target="_blank" class="btn btn--ghost btn--icon" title="Abrir no Pipedrive">
+                🔗
+              </a>
+              <button class="modal__close" @click="closeDealDetail">✕</button>
+            </div>
           </div>
-          <div class="modal__body">
-            <div class="detail-grid">
-              <div class="detail-item">
-                <span class="detail-label">Valor</span>
-                <span class="detail-value detail-value--large">
-                  {{ formatCurrency(selectedDeal.value || 0) }}
-                </span>
+          <div class="modal__body modal__body--scroll">
+            <!-- Valor e Status -->
+            <div class="detail-section">
+              <h3 class="detail-section__title">Resumo</h3>
+              <div class="detail-grid detail-grid--highlight">
+                <div class="detail-item detail-item--highlight">
+                  <span class="detail-label">Valor</span>
+                  <template v-if="editingField === 'value'">
+                    <input
+                      type="number"
+                      class="inline-edit-input inline-edit-input--large"
+                      v-model="editingValue"
+                      @blur="handleFieldBlur('value')"
+                      @keydown="handleFieldKeydown($event, 'value')"
+                      ref="editInput"
+                      autofocus
+                    />
+                  </template>
+                  <span v-else class="detail-value detail-value--large detail-value--editable" @click="startEditing('value', selectedDeal.value)" title="Clique para editar">
+                    {{ formatCurrency(selectedDeal.value || 0) }}
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Estágio</span>
+                  <span class="detail-value detail-value--stage" :style="{ '--stage-color': getStageColor(selectedDeal.status) }">
+                    {{ stages.find(s => s.id === selectedDeal?.status)?.emoji }}
+                    {{ stages.find(s => s.id === selectedDeal?.status)?.name || 'N/A' }}
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Dias no Estágio</span>
+                  <span class="detail-value" :class="getDaysClass(selectedDeal.daysInStage)">
+                    {{ selectedDeal.daysInStage || 0 }} dias
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Consultor</span>
+                  <template v-if="editingField === 'consultor'">
+                    <select
+                      class="inline-edit-select"
+                      v-model="editingValue"
+                      @blur="handleFieldBlur('consultor')"
+                      @change="saveField('consultor')"
+                      autofocus
+                    >
+                      <option value="">Selecione...</option>
+                      <option v-for="c in availableConsultores" :key="c" :value="c">{{ c }}</option>
+                    </select>
+                  </template>
+                  <span v-else class="detail-value detail-value--editable" @click="startEditing('consultor', selectedDeal.consultor)" title="Clique para editar">
+                    {{ selectedDeal.consultor || 'N/A' }}
+                  </span>
+                </div>
               </div>
-              <div class="detail-item">
-                <span class="detail-label">Estágio</span>
-                <span class="detail-value">
-                  {{ stages.find(s => s.id === selectedDeal?.status)?.name || 'N/A' }}
-                </span>
+            </div>
+
+            <!-- Contato -->
+            <div class="detail-section">
+              <h3 class="detail-section__title">Contato</h3>
+              <div class="detail-grid">
+                <div class="detail-item">
+                  <span class="detail-label">Telefone</span>
+                  <template v-if="editingField === 'phone'">
+                    <input
+                      type="tel"
+                      class="inline-edit-input"
+                      v-model="editingValue"
+                      @blur="handleFieldBlur('phone')"
+                      @keydown="handleFieldKeydown($event, 'phone')"
+                      placeholder="(11) 99999-9999"
+                      autofocus
+                    />
+                  </template>
+                  <span v-else class="detail-value detail-value--editable" @click="startEditing('phone', selectedDeal.phone)" title="Clique para editar">
+                    📱 {{ selectedDeal.phone || 'N/A' }}
+                    <span class="edit-action" @click.stop="sendWhatsApp(selectedDeal)">💬</span>
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Email</span>
+                  <template v-if="editingField === 'personEmail'">
+                    <input
+                      type="email"
+                      class="inline-edit-input"
+                      v-model="editingValue"
+                      @blur="handleFieldBlur('personEmail')"
+                      @keydown="handleFieldKeydown($event, 'personEmail')"
+                      placeholder="email@exemplo.com"
+                      autofocus
+                    />
+                  </template>
+                  <span v-else class="detail-value detail-value--editable" @click="startEditing('personEmail', selectedDeal.personEmail)" title="Clique para editar">
+                    {{ selectedDeal.personEmail || 'N/A' }}
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">WhatsApp (Z-API)</span>
+                  <span class="detail-value">{{ selectedDeal.telefoneZapi || selectedDeal.phone || 'N/A' }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Nome Z-API</span>
+                  <span class="detail-value">{{ selectedDeal.primeiroNomeZapi || 'N/A' }}</span>
+                </div>
               </div>
-              <div class="detail-item">
-                <span class="detail-label">Consultor</span>
-                <span class="detail-value">{{ selectedDeal.consultor || 'N/A' }}</span>
+            </div>
+
+            <!-- Projeto -->
+            <div class="detail-section">
+              <h3 class="detail-section__title">Dados do Projeto</h3>
+              <div class="detail-grid">
+                <div class="detail-item detail-item--full">
+                  <span class="detail-label">Endereço</span>
+                  <template v-if="editingField === 'endereco'">
+                    <input
+                      type="text"
+                      class="inline-edit-input inline-edit-input--full"
+                      v-model="editingValue"
+                      @blur="handleFieldBlur('endereco')"
+                      @keydown="handleFieldKeydown($event, 'endereco')"
+                      placeholder="Rua, número, bairro, cidade"
+                      autofocus
+                    />
+                  </template>
+                  <span v-else class="detail-value detail-value--editable" @click="startEditing('endereco', selectedDeal.endereco || selectedDeal.cidadeExecucaoDesc)" title="Clique para editar">
+                    {{ selectedDeal.endereco || selectedDeal.cidadeExecucaoDesc || 'N/A' }}
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Cidade</span>
+                  <template v-if="editingField === 'cidadeExecucao'">
+                    <input
+                      type="text"
+                      class="inline-edit-input"
+                      v-model="editingValue"
+                      @blur="handleFieldBlur('cidadeExecucao')"
+                      @keydown="handleFieldKeydown($event, 'cidadeExecucao')"
+                      placeholder="São Paulo"
+                      autofocus
+                    />
+                  </template>
+                  <span v-else class="detail-value detail-value--editable" @click="startEditing('cidadeExecucao', selectedDeal.cidadeExecucao)" title="Clique para editar">
+                    {{ selectedDeal.cidadeExecucao || 'N/A' }}
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">M² Estimado</span>
+                  <template v-if="editingField === 'metragemEstimada'">
+                    <input
+                      type="number"
+                      class="inline-edit-input"
+                      v-model="editingValue"
+                      @blur="handleFieldBlur('metragemEstimada')"
+                      @keydown="handleFieldKeydown($event, 'metragemEstimada')"
+                      placeholder="150"
+                      autofocus
+                    />
+                  </template>
+                  <span v-else class="detail-value detail-value--metric detail-value--editable" @click="startEditing('metragemEstimada', selectedDeal.metragemEstimada || selectedDeal.m2Total)" title="Clique para editar">
+                    {{ selectedDeal.metragemEstimada || selectedDeal.m2Total || 0 }} m²
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Faixa Metragem</span>
+                  <span class="detail-value">{{ selectedDeal.metragemEstimadaN1 || 'N/A' }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Estado da Obra</span>
+                  <template v-if="editingField === 'estadoObra'">
+                    <input
+                      type="text"
+                      class="inline-edit-input"
+                      v-model="editingValue"
+                      @blur="handleFieldBlur('estadoObra')"
+                      @keydown="handleFieldKeydown($event, 'estadoObra')"
+                      placeholder="Em andamento"
+                      autofocus
+                    />
+                  </template>
+                  <span v-else class="detail-value detail-value--editable" @click="startEditing('estadoObra', selectedDeal.estadoObra)" title="Clique para editar">
+                    {{ selectedDeal.estadoObra || 'N/A' }}
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Budget Estimado</span>
+                  <template v-if="editingField === 'budgetEstimado'">
+                    <input
+                      type="text"
+                      class="inline-edit-input"
+                      v-model="editingValue"
+                      @blur="handleFieldBlur('budgetEstimado')"
+                      @keydown="handleFieldKeydown($event, 'budgetEstimado')"
+                      placeholder="R$ 50.000 - R$ 100.000"
+                      autofocus
+                    />
+                  </template>
+                  <span v-else class="detail-value detail-value--editable" @click="startEditing('budgetEstimado', selectedDeal.budgetEstimado)" title="Clique para editar">
+                    {{ selectedDeal.budgetEstimado || 'N/A' }}
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Data Prevista Execução</span>
+                  <template v-if="editingField === 'dataPrevistaExec'">
+                    <input
+                      type="text"
+                      class="inline-edit-input"
+                      v-model="editingValue"
+                      @blur="handleFieldBlur('dataPrevistaExec')"
+                      @keydown="handleFieldKeydown($event, 'dataPrevistaExec')"
+                      placeholder="Jan/2026"
+                      autofocus
+                    />
+                  </template>
+                  <span v-else class="detail-value detail-value--editable" @click="startEditing('dataPrevistaExec', selectedDeal.dataPrevistaExec)" title="Clique para editar">
+                    {{ selectedDeal.dataPrevistaExec || 'N/A' }}
+                  </span>
+                </div>
               </div>
-              <div class="detail-item">
-                <span class="detail-label">Dias no estágio</span>
-                <span class="detail-value">{{ selectedDeal.daysInStage || 0 }} dias</span>
+            </div>
+
+            <!-- Arquiteto/Escritório -->
+            <div class="detail-section" v-if="selectedDeal.tipoCliente === 'Arquiteto' || selectedDeal.nomeEscritorio">
+              <h3 class="detail-section__title">Arquiteto / Escritório</h3>
+              <div class="detail-grid">
+                <div class="detail-item">
+                  <span class="detail-label">Nome do Escritório</span>
+                  <template v-if="editingField === 'nomeEscritorio'">
+                    <input
+                      type="text"
+                      class="inline-edit-input"
+                      v-model="editingValue"
+                      @blur="handleFieldBlur('nomeEscritorio')"
+                      @keydown="handleFieldKeydown($event, 'nomeEscritorio')"
+                      placeholder="Nome do escritório"
+                      autofocus
+                    />
+                  </template>
+                  <span v-else class="detail-value detail-value--editable" @click="startEditing('nomeEscritorio', selectedDeal.nomeEscritorio)" title="Clique para editar">
+                    {{ selectedDeal.nomeEscritorio || 'N/A' }}
+                  </span>
+                </div>
+                <div class="detail-item detail-item--full">
+                  <span class="detail-label">Detalhes do Arquiteto</span>
+                  <template v-if="editingField === 'detalhesArquiteto'">
+                    <textarea
+                      class="inline-edit-textarea"
+                      v-model="editingValue"
+                      @blur="handleFieldBlur('detalhesArquiteto')"
+                      @keydown.esc="cancelEditing"
+                      placeholder="Detalhes sobre o arquiteto..."
+                      rows="3"
+                      autofocus
+                    ></textarea>
+                  </template>
+                  <span v-else class="detail-value detail-value--editable" @click="startEditing('detalhesArquiteto', selectedDeal.detalhesArquiteto)" title="Clique para editar">
+                    {{ selectedDeal.detalhesArquiteto || 'N/A' }}
+                  </span>
+                </div>
               </div>
-              <div class="detail-item detail-item--full">
-                <span class="detail-label">Endereço</span>
-                <span class="detail-value">{{ selectedDeal.endereco || 'N/A' }}</span>
+            </div>
+
+            <!-- Resumo/Observações -->
+            <div class="detail-section">
+              <h3 class="detail-section__title">Observações</h3>
+              <div class="detail-grid">
+                <div class="detail-item detail-item--full">
+                  <span class="detail-label">Resumo</span>
+                  <template v-if="editingField === 'resumo'">
+                    <textarea
+                      class="inline-edit-textarea"
+                      v-model="editingValue"
+                      @blur="handleFieldBlur('resumo')"
+                      @keydown.esc="cancelEditing"
+                      placeholder="Resumo do projeto..."
+                      rows="3"
+                      autofocus
+                    ></textarea>
+                  </template>
+                  <span v-else class="detail-value detail-value--text detail-value--editable" @click="startEditing('resumo', selectedDeal.resumo)" title="Clique para editar">
+                    {{ selectedDeal.resumo || 'Clique para adicionar...' }}
+                  </span>
+                </div>
+                <div class="detail-item detail-item--full">
+                  <span class="detail-label">Descritivo da Área</span>
+                  <template v-if="editingField === 'descritivoArea'">
+                    <textarea
+                      class="inline-edit-textarea"
+                      v-model="editingValue"
+                      @blur="handleFieldBlur('descritivoArea')"
+                      @keydown.esc="cancelEditing"
+                      placeholder="Descrição da área..."
+                      rows="3"
+                      autofocus
+                    ></textarea>
+                  </template>
+                  <span v-else class="detail-value detail-value--text detail-value--editable" @click="startEditing('descritivoArea', selectedDeal.descritivoArea)" title="Clique para editar">
+                    {{ selectedDeal.descritivoArea || 'Clique para adicionar...' }}
+                  </span>
+                </div>
               </div>
-              <div class="detail-item">
-                <span class="detail-label">M² Total</span>
-                <span class="detail-value">{{ selectedDeal.m2Total || 0 }} m²</span>
+            </div>
+
+            <!-- Anexos do Projeto -->
+            <div class="detail-section">
+              <div class="detail-section__header">
+                <h3 class="detail-section__title">📎 Anexos</h3>
+                <button class="btn btn--sm btn--primary" @click="openAnexoModal">
+                  + Adicionar
+                </button>
               </div>
-              <div class="detail-item">
-                <span class="detail-label">Telefone</span>
-                <span class="detail-value">{{ selectedDeal.phone || 'N/A' }}</span>
+              <div v-if="loadingAnexos" class="detail-loading">Carregando anexos...</div>
+              <div v-else-if="anexos.length === 0" class="detail-empty">
+                Nenhum anexo. Adicione projetos arquitetônicos, plantas e documentos.
+              </div>
+              <div v-else class="anexos-list">
+                <div v-for="anexo in anexos" :key="anexo.id" class="anexo-item">
+                  <div class="anexo-item__icon">
+                    {{ anexo.mimeType?.includes('pdf') ? '📄' : anexo.mimeType?.includes('image') ? '🖼️' : '📁' }}
+                  </div>
+                  <div class="anexo-item__info">
+                    <span class="anexo-item__nome">{{ anexo.nome }}</span>
+                    <span class="anexo-item__meta">
+                      {{ getTipoAnexoLabel(anexo.tipo) }}
+                      <span v-if="anexo.fileSize"> • {{ formatFileSize(anexo.fileSize) }}</span>
+                    </span>
+                  </div>
+                  <div class="anexo-item__actions">
+                    <button class="btn btn--ghost btn--sm" @click="downloadAnexo(anexo)" title="Baixar">
+                      ⬇️
+                    </button>
+                    <button class="btn btn--ghost btn--sm btn--danger" @click="deleteAnexo(anexo)" title="Excluir">
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Orçamentos Enviados -->
+            <div class="detail-section">
+              <div class="detail-section__header">
+                <h3 class="detail-section__title">📤 Orçamentos Enviados</h3>
+                <button class="btn btn--sm btn--primary" @click="openOrcamentoModal">
+                  + Registrar Envio
+                </button>
+              </div>
+              <div v-if="loadingOrcamentos" class="detail-loading">Carregando orçamentos...</div>
+              <div v-else-if="orcamentosEnviados.length === 0" class="detail-empty">
+                Nenhum orçamento enviado registrado.
+              </div>
+              <div v-else class="orcamentos-list">
+                <div v-for="orc in orcamentosEnviados" :key="orc.id" class="orcamento-item">
+                  <div class="orcamento-item__date">
+                    {{ formatOrcamentoDate(orc.dataEnvio) }}
+                  </div>
+                  <div class="orcamento-item__info">
+                    <span class="orcamento-item__valor" v-if="orc.valor">
+                      {{ formatCurrency(orc.valor) }}
+                    </span>
+                    <span class="orcamento-item__metragem" v-if="orc.metragem">
+                      {{ orc.metragem }}m²
+                    </span>
+                    <span class="orcamento-item__proposta" v-if="orc.proposta">
+                      Proposta v{{ orc.proposta.versao }}
+                    </span>
+                  </div>
+                  <div class="orcamento-item__desc" v-if="orc.descricao || orc.observacoes">
+                    {{ orc.descricao || orc.observacoes }}
+                  </div>
+                  <button class="btn btn--ghost btn--sm btn--danger" @click="deleteOrcamentoEnviado(orc)" title="Excluir">
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Metadados Pipedrive -->
+            <div class="detail-section detail-section--meta">
+              <h3 class="detail-section__title">Metadados</h3>
+              <div class="detail-grid detail-grid--small">
+                <div class="detail-item">
+                  <span class="detail-label">ID Pipedrive</span>
+                  <span class="detail-value detail-value--mono">{{ selectedDeal.pipedriveDealId || 'N/A' }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Criado em</span>
+                  <span class="detail-value">{{ formatDate(selectedDeal.dealAddTime) }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Atualizado em</span>
+                  <span class="detail-value">{{ formatDate(selectedDeal.dealUpdateTime) }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">Última sync</span>
+                  <span class="detail-value">{{ formatDate(selectedDeal.pipedriveSyncedAt) }}</span>
+                </div>
               </div>
             </div>
           </div>
-          <div class="modal__footer">
-            <button class="btn btn--outline" @click="closeDealDetail">Fechar</button>
-            <button class="btn btn--primary" @click="editDeal(selectedDeal)">Editar</button>
+          <div class="modal__footer modal__footer--proposals">
+            <div class="modal__footer-left">
+              <button class="btn btn--outline" @click="closeDealDetail">Fechar</button>
+            </div>
+            <div class="modal__footer-right">
+              <!-- Botão Ver Proposta (aparece se houver proposta com PDF) -->
+              <button
+                v-if="ultimaProposta && ultimaProposta.pdfBase64"
+                class="btn btn--info"
+                @click="abrirProposta"
+              >
+                📥 Ver Proposta v{{ ultimaProposta.versao }}
+              </button>
+              <!-- Botão Enviar Proposta (aparece se houver proposta gerada) -->
+              <button
+                v-if="ultimaProposta"
+                class="btn btn--success"
+                @click="enviarPropostaWhatsApp"
+                :disabled="enviandoProposta"
+              >
+                <span v-if="enviandoProposta">Enviando...</span>
+                <span v-else>📤 Enviar Proposta v{{ ultimaProposta.versao }}</span>
+              </button>
+              <!-- Botão Gerar HTML (aparece se houver proposta gerada) -->
+              <button
+                v-if="ultimaProposta"
+                class="btn btn--info"
+                @click="gerarPropostaHTML"
+                :disabled="gerandoHTML"
+              >
+                <span v-if="gerandoHTML">Gerando HTML...</span>
+                <span v-else>🌐 Gerar Link HTML</span>
+              </button>
+              <!-- Botão Gerar Proposta -->
+              <button
+                class="btn btn--gold"
+                @click="gerarProposta"
+                :disabled="gerandoProposta"
+              >
+                <span v-if="gerandoProposta">Gerando...</span>
+                <span v-else>📝 Gerar Proposta</span>
+              </button>
+              <!-- WhatsApp simples -->
+              <button class="btn btn--secondary" @click="sendWhatsApp(selectedDeal)">💬 WhatsApp</button>
+            </div>
+            <!-- Link HTML (se existir) -->
+            <div v-if="htmlPropostaUrl" class="html-link-box">
+              <div class="html-link-box__header">
+                <span>🔗 Link da proposta com tracking:</span>
+                <button class="btn btn--small btn--secondary" @click="copyHtmlLink">📋 Copiar</button>
+              </div>
+              <a :href="htmlPropostaUrl" target="_blank" class="html-link-box__url">{{ htmlPropostaUrl }}</a>
+            </div>
           </div>
         </div>
       </div>
@@ -561,6 +1006,98 @@
       </div>
     </Teleport>
 
+    <!-- Modal Adicionar Anexo -->
+    <Teleport to="body">
+      <div v-if="showAnexoModal" class="modal-overlay" @click.self="closeAnexoModal">
+        <div class="modal">
+          <div class="modal__header">
+            <h2 class="modal__title">📎 Adicionar Anexo</h2>
+            <button class="modal__close" @click="closeAnexoModal">✕</button>
+          </div>
+          <div class="modal__body">
+            <div class="form-group">
+              <label class="form-label">Tipo *</label>
+              <select class="form-select" v-model="novoAnexo.tipo">
+                <option v-for="tipo in tiposAnexo" :key="tipo.value" :value="tipo.value">
+                  {{ tipo.label }}
+                </option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Arquivo</label>
+              <input type="file" class="form-input" @change="handleAnexoFileSelect" accept="*/*" />
+              <p class="form-hint">Máximo 10MB. PDF, imagens, documentos.</p>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nome *</label>
+              <input type="text" class="form-input" v-model="novoAnexo.nome" placeholder="Nome do arquivo" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Descrição</label>
+              <textarea class="form-textarea" v-model="novoAnexo.descricao" placeholder="Descrição opcional..." rows="2"></textarea>
+            </div>
+          </div>
+          <div class="modal__footer">
+            <button class="btn btn--outline" @click="closeAnexoModal">Cancelar</button>
+            <button class="btn btn--primary" @click="createAnexo" :disabled="!novoAnexo.nome">
+              Adicionar Anexo
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Modal Registrar Orçamento Enviado -->
+    <Teleport to="body">
+      <div v-if="showOrcamentoModal" class="modal-overlay" @click.self="closeOrcamentoModal">
+        <div class="modal">
+          <div class="modal__header">
+            <h2 class="modal__title">📤 Registrar Orçamento Enviado</h2>
+            <button class="modal__close" @click="closeOrcamentoModal">✕</button>
+          </div>
+          <div class="modal__body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Data de Envio *</label>
+                <input type="date" class="form-input" v-model="novoOrcamento.dataEnvio" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Valor (R$)</label>
+                <input type="number" class="form-input" v-model="novoOrcamento.valor" step="0.01" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Metragem (m²)</label>
+                <input type="number" class="form-input" v-model="novoOrcamento.metragem" step="0.01" />
+              </div>
+              <div class="form-group" v-if="ultimaProposta">
+                <label class="form-label">Vincular Proposta</label>
+                <select class="form-select" v-model="novoOrcamento.propostaId">
+                  <option value="">Nenhuma</option>
+                  <option :value="ultimaProposta.id">Proposta v{{ ultimaProposta.versao }}</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Descrição</label>
+              <input type="text" class="form-input" v-model="novoOrcamento.descricao" placeholder="Ex: Orçamento enviado por email" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Observações</label>
+              <textarea class="form-textarea" v-model="novoOrcamento.observacoes" placeholder="Observações adicionais..." rows="2"></textarea>
+            </div>
+          </div>
+          <div class="modal__footer">
+            <button class="btn btn--outline" @click="closeOrcamentoModal">Cancelar</button>
+            <button class="btn btn--primary" @click="createOrcamentoEnviado" :disabled="!novoOrcamento.dataEnvio">
+              Registrar Envio
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Loading State - Pixel Train on Infinity Track -->
     <div v-if="loading" class="loading-overlay">
       <div class="loading-content">
@@ -590,7 +1127,7 @@
               <animateMotion dur="3.5s" repeatCount="indefinite" rotate="auto">
                 <mpath href="#infinityPath"/>
               </animateMotion>
-              <g transform="scale(0.4) translate(-32, -20)">
+              <g transform="scale(-0.4, 0.4) translate(-32, -20)">
                 <!-- Chimney -->
                 <rect x="18" y="0" width="6" height="8" fill="#1a1a1a"/>
                 <!-- Boiler -->
@@ -636,9 +1173,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useToast } from '@/composables/useToast';
+import { useAuthStore } from '@/stores/auth';
+import { comercialApi } from '@/api';
 import PipelineSettings from '@/components/crm/PipelineSettings.vue';
+
+const authStore = useAuthStore();
 
 interface Deal {
   id: string;
@@ -673,6 +1214,42 @@ interface StageForSettings {
   isDefault?: boolean;
 }
 
+interface Proposta {
+  id: string;
+  versao: number;
+  valorTotal: number;
+  valorM2?: number;
+  desconto?: number;
+  status: string;
+  pdfUrl?: string;
+  pdfBase64?: string;
+  metragem?: number;
+  createdAt: string;
+  dadosCalculo?: {
+    metragemTotalStelion?: number;
+    materiaisStelion?: number;
+    maoObraStelion?: number;
+    impostosStelion?: number;
+    valorTotalStelion?: number;
+    metragemTotalLilit?: number;
+    materiaisLilit?: number;
+    maoObraLilit?: number;
+    impostosLilit?: number;
+    valorTotalLilit?: number;
+    metragemTotal?: number;
+    materiaisTotal?: number;
+    maoObraTotal?: number;
+    impostosTotal?: number;
+    precoBaseStelion?: number;
+    precoBaseLilit?: number;
+    pisoStelion?: number;
+    paredeStelion?: number;
+    pisoLilit?: number;
+    paredeLilit?: number;
+    [key: string]: any;
+  };
+}
+
 const toast = useToast();
 
 // State
@@ -689,12 +1266,97 @@ const pipelineRef = ref<HTMLElement | null>(null);
 // Filters
 const searchQuery = ref('');
 const selectedConsultor = ref('');
-const selectedPeriod = ref('30');
+const selectedPeriod = ref(''); // Todos por padrão
 const sortBy = ref('recent');
 
 // Specialist Selector
 const showSpecialistModal = ref(false);
 const selectedSpecialist = ref('');
+
+// Inline Editing
+const editingField = ref<string | null>(null);
+const editingValue = ref<string>('');
+const savingField = ref(false);
+
+// Lista de consultores para o dropdown
+const availableConsultores = ref<string[]>([
+  'Renata Garcia Penna',
+  'João Farah',
+  'Isabela de Moraes',
+  'Gabriel Accardo',
+  'amanda vantini',
+]);
+
+// Propostas
+const ultimaProposta = ref<Proposta | null>(null);
+const loadingProposta = ref(false);
+const gerandoProposta = ref(false);
+const enviandoProposta = ref(false);
+const gerandoHTML = ref(false);
+const htmlPropostaUrl = ref<string | null>(null);
+
+// Anexos do Lead
+interface Anexo {
+  id: string;
+  nome: string;
+  tipo: string;
+  descricao?: string;
+  mimeType?: string;
+  fileSize?: number;
+  fileUrl?: string;
+  createdAt: string;
+}
+
+const anexos = ref<Anexo[]>([]);
+const loadingAnexos = ref(false);
+const showAnexoModal = ref(false);
+const novoAnexo = ref({
+  nome: '',
+  tipo: 'PROJETO_ARQUITETONICO',
+  descricao: '',
+  fileData: '',
+  mimeType: '',
+  fileSize: 0
+});
+
+const tiposAnexo = [
+  { value: 'PROPOSTA', label: 'Proposta' },
+  { value: 'PROJETO_ARQUITETONICO', label: 'Projeto Arquitetônico' },
+  { value: 'PLANTA', label: 'Planta' },
+  { value: 'DOCUMENTO', label: 'Documento' },
+  { value: 'IMAGEM', label: 'Imagem' },
+  { value: 'OUTRO', label: 'Outro' }
+];
+
+// Orçamentos Enviados
+interface OrcamentoEnviado {
+  id: string;
+  dataEnvio: string;
+  valor?: number;
+  descricao?: string;
+  metragem?: number;
+  observacoes?: string;
+  propostaId?: string;
+  proposta?: {
+    id: string;
+    versao: number;
+    valorTotal: number;
+    status: string;
+  };
+  createdAt: string;
+}
+
+const orcamentosEnviados = ref<OrcamentoEnviado[]>([]);
+const loadingOrcamentos = ref(false);
+const showOrcamentoModal = ref(false);
+const novoOrcamento = ref({
+  dataEnvio: new Date().toISOString().split('T')[0],
+  valor: 0,
+  descricao: '',
+  metragem: 0,
+  observacoes: '',
+  propostaId: ''
+});
 
 // New Deal Form
 const newDeal = ref({
@@ -804,8 +1466,22 @@ const filteredDeals = computed(() => {
     const q = searchQuery.value.toLowerCase();
     result = result.filter(d =>
       d.clientName?.toLowerCase().includes(q) ||
-      d.endereco?.toLowerCase().includes(q)
+      d.endereco?.toLowerCase().includes(q) ||
+      d.personEmail?.toLowerCase().includes(q) ||
+      d.phone?.includes(q)
     );
+  }
+
+  // Filtro por período
+  if (selectedPeriod.value) {
+    const days = parseInt(selectedPeriod.value);
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    result = result.filter(d => {
+      if (!d.dealAddTime) return true; // Inclui deals sem data
+      const dealDate = new Date(d.dealAddTime);
+      return dealDate >= cutoffDate;
+    });
   }
 
   // Filtro por consultor (filtro da barra)
@@ -820,11 +1496,21 @@ const filteredDeals = computed(() => {
 
   // Ordenação
   switch (sortBy.value) {
-    case 'oldest':
-      result.sort((a, b) => (a.daysInStage || 0) - (b.daysInStage || 0));
-      break;
     case 'recent':
-      result.sort((a, b) => (b.daysInStage || 0) - (a.daysInStage || 0));
+      // Mais recentes primeiro (por data de criação)
+      result.sort((a, b) => {
+        const dateA = new Date(a.dealAddTime || 0).getTime();
+        const dateB = new Date(b.dealAddTime || 0).getTime();
+        return dateB - dateA; // Maior data = mais recente = primeiro
+      });
+      break;
+    case 'oldest':
+      // Mais antigos primeiro (por data de criação)
+      result.sort((a, b) => {
+        const dateA = new Date(a.dealAddTime || 0).getTime();
+        const dateB = new Date(b.dealAddTime || 0).getTime();
+        return dateA - dateB; // Menor data = mais antigo = primeiro
+      });
       break;
     case 'value-high':
       result.sort((a, b) => (b.value || 0) - (a.value || 0));
@@ -839,9 +1525,11 @@ const filteredDeals = computed(() => {
       result.sort((a, b) => (b.clientName || '').localeCompare(a.clientName || ''));
       break;
     case 'days-high':
+      // Mais dias no estágio = parados há mais tempo
       result.sort((a, b) => (b.daysInStage || 0) - (a.daysInStage || 0));
       break;
     case 'days-low':
+      // Menos dias no estágio = entraram recentemente no estágio
       result.sort((a, b) => (a.daysInStage || 0) - (b.daysInStage || 0));
       break;
   }
@@ -895,6 +1583,25 @@ const getDaysClass = (days?: number) => {
   if (days > 14) return 'deal-card__days--danger';
   if (days > 7) return 'deal-card__days--warning';
   return '';
+};
+
+const getStageColor = (stageId?: string): string => {
+  const stage = stages.value.find(s => s.id === stageId);
+  if (!stage) return '#6366f1';
+  return colorMap[stage.color] || stage.color || '#6366f1';
+};
+
+const formatDate = (dateStr?: string | Date): string => {
+  if (!dateStr) return 'N/A';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 };
 
 // Drag & Drop
@@ -966,7 +1673,7 @@ const toggleFilters = () => {
 const clearFilters = () => {
   searchQuery.value = '';
   selectedConsultor.value = '';
-  selectedPeriod.value = '30';
+  selectedPeriod.value = '';
   sortBy.value = 'recent';
 };
 
@@ -1016,25 +1723,686 @@ const createDeal = async () => {
   }
 };
 
-const openDealDetail = (deal: Deal) => {
+const openDealDetail = async (deal: Deal) => {
   selectedDeal.value = deal;
+  ultimaProposta.value = null;
+  anexos.value = [];
+  orcamentosEnviados.value = [];
+
+  // Buscar última proposta, anexos e orçamentos em paralelo
+  await Promise.all([
+    fetchUltimaProposta(deal.id),
+    fetchAnexos(deal.id),
+    fetchOrcamentosEnviados(deal.id)
+  ]);
 };
 
 const closeDealDetail = () => {
   selectedDeal.value = null;
+  ultimaProposta.value = null;
+  anexos.value = [];
+  orcamentosEnviados.value = [];
+};
+
+// Funções de Proposta
+const fetchUltimaProposta = async (dealId: string) => {
+  loadingProposta.value = true;
+  try {
+    const response = await comercialApi.getUltimaProposta(dealId);
+    if (response.data?.proposta) {
+      ultimaProposta.value = response.data.proposta;
+    }
+  } catch (error: any) {
+    // 404 significa que não há proposta - é esperado
+    if (error.response?.status !== 404) {
+      console.error('Erro ao buscar proposta:', error);
+    }
+  } finally {
+    loadingProposta.value = false;
+  }
+};
+
+// =============================================
+// FUNÇÕES DE ANEXOS
+// =============================================
+const fetchAnexos = async (dealId: string) => {
+  loadingAnexos.value = true;
+  try {
+    const response = await comercialApi.getAnexos(dealId);
+    if (response.data.success) {
+      anexos.value = response.data.anexos;
+    }
+  } catch (error: any) {
+    console.error('Erro ao buscar anexos:', error);
+  } finally {
+    loadingAnexos.value = false;
+  }
+};
+
+const openAnexoModal = () => {
+  novoAnexo.value = {
+    nome: '',
+    tipo: 'PROJETO_ARQUITETONICO',
+    descricao: '',
+    fileData: '',
+    mimeType: '',
+    fileSize: 0
+  };
+  showAnexoModal.value = true;
+};
+
+const closeAnexoModal = () => {
+  showAnexoModal.value = false;
+};
+
+const handleAnexoFileSelect = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+
+  // Limite de 10MB
+  if (file.size > 10 * 1024 * 1024) {
+    toast.error('Arquivo muito grande. Máximo 10MB');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const result = e.target?.result as string;
+    const base64 = result?.split(',')[1] || '';
+    novoAnexo.value.fileData = base64;
+    novoAnexo.value.mimeType = file.type;
+    novoAnexo.value.fileSize = file.size;
+    novoAnexo.value.nome = novoAnexo.value.nome || file.name;
+  };
+  reader.readAsDataURL(file);
+};
+
+const createAnexo = async () => {
+  if (!selectedDeal.value || !novoAnexo.value.nome) {
+    toast.warning('Nome é obrigatório');
+    return;
+  }
+
+  try {
+    const response = await comercialApi.createAnexo(selectedDeal.value.id, {
+      nome: novoAnexo.value.nome,
+      tipo: novoAnexo.value.tipo,
+      descricao: novoAnexo.value.descricao || undefined,
+      fileData: novoAnexo.value.fileData || undefined,
+      mimeType: novoAnexo.value.mimeType || undefined,
+      fileSize: novoAnexo.value.fileSize || undefined
+    });
+
+    if (response.data.success) {
+      toast.success('Anexo adicionado!');
+      anexos.value.unshift(response.data.anexo);
+      closeAnexoModal();
+    }
+  } catch (error: any) {
+    console.error('Erro ao criar anexo:', error);
+    toast.error('Erro ao adicionar anexo');
+  }
+};
+
+const downloadAnexo = async (anexo: Anexo) => {
+  if (!selectedDeal.value) return;
+
+  try {
+    const response = await comercialApi.downloadAnexo(selectedDeal.value.id, anexo.id);
+    if (response.data.success && response.data.anexo.fileData) {
+      const byteCharacters = atob(response.data.anexo.fileData);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: anexo.mimeType || 'application/octet-stream' });
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = anexo.nome;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } else {
+      toast.warning('Anexo sem arquivo para download');
+    }
+  } catch (error: any) {
+    console.error('Erro ao baixar anexo:', error);
+    toast.error('Erro ao baixar anexo');
+  }
+};
+
+const deleteAnexo = async (anexo: Anexo) => {
+  if (!selectedDeal.value) return;
+  if (!confirm(`Excluir anexo "${anexo.nome}"?`)) return;
+
+  try {
+    const response = await comercialApi.deleteAnexo(selectedDeal.value.id, anexo.id);
+    if (response.data.success) {
+      toast.success('Anexo excluído!');
+      anexos.value = anexos.value.filter(a => a.id !== anexo.id);
+    }
+  } catch (error: any) {
+    console.error('Erro ao excluir anexo:', error);
+    toast.error('Erro ao excluir anexo');
+  }
+};
+
+const formatFileSize = (bytes?: number): string => {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const getTipoAnexoLabel = (tipo: string): string => {
+  return tiposAnexo.find(t => t.value === tipo)?.label || tipo;
+};
+
+// =============================================
+// FUNÇÕES DE ORÇAMENTOS ENVIADOS
+// =============================================
+const fetchOrcamentosEnviados = async (dealId: string) => {
+  loadingOrcamentos.value = true;
+  try {
+    const response = await comercialApi.getOrcamentosEnviados(dealId);
+    if (response.data.success) {
+      orcamentosEnviados.value = response.data.orcamentos;
+    }
+  } catch (error: any) {
+    console.error('Erro ao buscar orçamentos:', error);
+  } finally {
+    loadingOrcamentos.value = false;
+  }
+};
+
+const openOrcamentoModal = () => {
+  novoOrcamento.value = {
+    dataEnvio: new Date().toISOString().split('T')[0],
+    valor: ultimaProposta.value?.valorTotal ? Number(ultimaProposta.value.valorTotal) : 0,
+    descricao: '',
+    metragem: selectedDeal.value?.metragemEstimada || selectedDeal.value?.m2Total || 0,
+    observacoes: '',
+    propostaId: ultimaProposta.value?.id || ''
+  };
+  showOrcamentoModal.value = true;
+};
+
+const closeOrcamentoModal = () => {
+  showOrcamentoModal.value = false;
+};
+
+const createOrcamentoEnviado = async () => {
+  if (!selectedDeal.value || !novoOrcamento.value.dataEnvio) {
+    toast.warning('Data de envio é obrigatória');
+    return;
+  }
+
+  try {
+    const response = await comercialApi.createOrcamentoEnviado(selectedDeal.value.id, {
+      dataEnvio: novoOrcamento.value.dataEnvio,
+      valor: novoOrcamento.value.valor || undefined,
+      descricao: novoOrcamento.value.descricao || undefined,
+      metragem: novoOrcamento.value.metragem || undefined,
+      observacoes: novoOrcamento.value.observacoes || undefined,
+      propostaId: novoOrcamento.value.propostaId || undefined
+    });
+
+    if (response.data.success) {
+      toast.success('Orçamento registrado!');
+      orcamentosEnviados.value.unshift(response.data.orcamento);
+      closeOrcamentoModal();
+    }
+  } catch (error: any) {
+    console.error('Erro ao criar orçamento:', error);
+    toast.error('Erro ao registrar orçamento');
+  }
+};
+
+const deleteOrcamentoEnviado = async (orcamento: OrcamentoEnviado) => {
+  if (!selectedDeal.value) return;
+  if (!confirm('Excluir registro de orçamento enviado?')) return;
+
+  try {
+    const response = await comercialApi.deleteOrcamentoEnviado(selectedDeal.value.id, orcamento.id);
+    if (response.data.success) {
+      toast.success('Registro excluído!');
+      orcamentosEnviados.value = orcamentosEnviados.value.filter(o => o.id !== orcamento.id);
+    }
+  } catch (error: any) {
+    console.error('Erro ao excluir orçamento:', error);
+    toast.error('Erro ao excluir registro');
+  }
+};
+
+const formatOrcamentoDate = (dateStr: string): string => {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+
+const gerarProposta = async () => {
+  if (!selectedDeal.value) return;
+
+  const deal = selectedDeal.value;
+
+  // Montar query params para o gerador de propostas
+  const params = new URLSearchParams();
+
+  // Campos de informação do cliente
+  if (deal.clientName) params.set('cliente', deal.clientName);
+  if (deal.phone) params.set('telefone', deal.phone);
+  if (deal.personEmail) params.set('email', deal.personEmail);
+  if (deal.endereco) params.set('endereco', deal.endereco);
+  if (deal.cidadeExecucao) params.set('cidade', deal.cidadeExecucao);
+
+  // Metragem
+  const metragem = deal.metragemEstimada || deal.m2Total || deal.metragemEstimadaN1;
+  if (metragem) params.set('metragem', String(metragem));
+
+  // Tipo de projeto / área
+  if (deal.tipoProjeto) params.set('tipoProjeto', deal.tipoProjeto);
+  if (deal.descritivoArea) params.set('area', deal.descritivoArea);
+
+  // Estado da obra
+  if (deal.estadoObra) params.set('estadoObra', deal.estadoObra);
+
+  // Arquiteto
+  if (deal.nomeEscritorio) params.set('arquiteto', deal.nomeEscritorio);
+
+  // ID do deal para callback
+  params.set('dealId', deal.id);
+
+  // Consultor
+  const consultor = selectedSpecialist.value || selectedConsultor.value || deal.consultor;
+  if (consultor) params.set('consultor', consultor);
+
+  // Data prevista de execução
+  if (deal.dataPrevistaExec) {
+    // dataPrevistaExec pode ser Date ou string ISO - converter para YYYY-MM-DD
+    const dataExec = new Date(deal.dataPrevistaExec as string);
+    if (!isNaN(dataExec.getTime())) {
+      const dataStr = dataExec.toISOString().split('T')[0] as string;
+      params.set('dataPrevistaExec', dataStr);
+    }
+  }
+
+  // Abrir gerador de propostas em nova aba
+  // Em dev local, o backend roda na porta 3000; em prod, usa a mesma origem
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const baseUrl = apiUrl || 'http://localhost:3000';
+  const propostasUrl = `${baseUrl}/propostas.html?${params.toString()}`;
+
+  window.open(propostasUrl, '_blank');
+
+  toast.info('Gerador de propostas aberto em nova aba');
+};
+
+// Função para abrir/baixar PDF da proposta
+const abrirProposta = () => {
+  if (!ultimaProposta.value || !ultimaProposta.value.pdfBase64) {
+    toast.warning('Proposta sem PDF. Gere uma nova proposta primeiro.');
+    return;
+  }
+
+  try {
+    // Converter base64 para blob
+    const byteCharacters = atob(ultimaProposta.value.pdfBase64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'application/pdf' });
+
+    // Criar URL e abrir
+    const url = window.URL.createObjectURL(blob);
+
+    // Abrir em nova aba
+    window.open(url, '_blank');
+
+    // Limpar URL depois de um tempo
+    setTimeout(() => window.URL.revokeObjectURL(url), 10000);
+
+    toast.success('Proposta aberta em nova aba');
+  } catch (error) {
+    console.error('Erro ao abrir proposta:', error);
+    toast.error('Erro ao abrir proposta');
+  }
+};
+
+const enviarPropostaWhatsApp = async () => {
+  if (!selectedDeal.value || !ultimaProposta.value) return;
+
+  const deal = selectedDeal.value;
+  const proposta = ultimaProposta.value;
+
+  if (!deal.phone) {
+    toast.warning('Lead sem telefone cadastrado');
+    return;
+  }
+
+  if (!proposta.pdfBase64) {
+    toast.warning('Proposta sem PDF gerado. Gere uma nova proposta primeiro.');
+    return;
+  }
+
+  enviandoProposta.value = true;
+
+  try {
+    const phone = deal.phone.replace(/\D/g, '');
+    const nomeCliente = deal.primeiroNomeZapi || deal.clientName?.split(' ')[0] || 'Cliente';
+    const nomeVendedor = selectedSpecialist.value?.split(' ')[0] ||
+                         selectedConsultor.value?.split(' ')[0] ||
+                         deal.consultor?.split(' ')[0] ||
+                         authStore.user?.name?.split(' ')[0] ||
+                         'especialista';
+
+    const valorFormatado = new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(proposta.valorTotal);
+
+    const mensagem = `Olá ${nomeCliente}! Aqui é o ${nomeVendedor} da Monofloor. Conforme conversamos, segue a proposta no valor de ${valorFormatado}. Qualquer dúvida estou à disposição!`;
+
+    // Converter base64 para blob/file
+    const byteCharacters = atob(proposta.pdfBase64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'application/pdf' });
+
+    const dataHoje = new Date().toISOString().split('T')[0];
+    const nomeArquivo = `Proposta-Monofloor-${deal.clientName?.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '-') || 'Cliente'}-${dataHoje}.pdf`;
+
+    const file = new File([blob], nomeArquivo, { type: 'application/pdf' });
+
+    // Tentar usar Web Share API (funciona bem em mobile e alguns desktops)
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          title: `Proposta Monofloor - ${deal.clientName}`,
+          text: mensagem,
+          files: [file]
+        });
+        toast.success('✅ Compartilhamento aberto! Selecione WhatsApp para enviar.');
+
+        // Marcar como enviada
+        await comercialApi.enviarPropostaWhatsApp(deal.id, proposta.id, {
+          phoneNumber: phone,
+          message: mensagem
+        });
+        await fetchUltimaProposta(deal.id);
+        return;
+      } catch (shareError: any) {
+        if (shareError.name !== 'AbortError') {
+          console.log('Web Share falhou, usando fallback:', shareError);
+        } else {
+          // Usuário cancelou o compartilhamento
+          return;
+        }
+      }
+    }
+
+    // Baixar o PDF automaticamente
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomeArquivo;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    // Pequeno delay para garantir que o download iniciou
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Abrir WhatsApp na conversa
+    const whatsappUrl = `https://wa.me/55${phone}?text=${encodeURIComponent(mensagem)}`;
+    window.open(whatsappUrl, '_blank');
+
+    toast.info('📥 PDF baixado! Arraste para a conversa do WhatsApp ou clique em 📎', { duration: 6000 });
+
+    // Marcar como enviada
+    await comercialApi.enviarPropostaWhatsApp(deal.id, proposta.id, {
+      phoneNumber: phone,
+      message: mensagem
+    });
+    await fetchUltimaProposta(deal.id);
+
+  } catch (error) {
+    console.error('Erro ao enviar proposta:', error);
+    toast.error('Erro ao enviar proposta via WhatsApp');
+  } finally {
+    enviandoProposta.value = false;
+  }
+};
+
+// Gerar proposta em HTML com tracking
+const gerarPropostaHTML = async () => {
+  if (!selectedDeal.value || !ultimaProposta.value) {
+    toast.warning('Selecione um lead e gere uma proposta primeiro');
+    return;
+  }
+
+  gerandoHTML.value = true;
+  try {
+    const deal = selectedDeal.value;
+    const proposta = ultimaProposta.value;
+
+    // Usar os dados do cálculo da proposta
+    const dadosCalculo = proposta.dadosCalculo || {};
+
+    const payload = {
+      propostaId: proposta.id,
+      clienteNome: deal.personName || deal.title || 'Cliente',
+      metragemTotalStelion: dadosCalculo.metragemTotalStelion || 0,
+      materiaisStelion: dadosCalculo.materiaisStelion || 0,
+      maoObraStelion: dadosCalculo.maoObraStelion || 0,
+      impostosStelion: dadosCalculo.impostosStelion || 0,
+      valorTotalStelion: dadosCalculo.valorTotalStelion || 0,
+      metragemTotalLilit: dadosCalculo.metragemTotalLilit || 0,
+      materiaisLilit: dadosCalculo.materiaisLilit || 0,
+      maoObraLilit: dadosCalculo.maoObraLilit || 0,
+      impostosLilit: dadosCalculo.impostosLilit || 0,
+      valorTotalLilit: dadosCalculo.valorTotalLilit || 0,
+      metragemTotal: dadosCalculo.metragemTotal || Number(proposta.metragem) || 0,
+      materiaisTotal: dadosCalculo.materiaisTotal || 0,
+      maoObraTotal: dadosCalculo.maoObraTotal || 0,
+      impostosTotal: dadosCalculo.impostosTotal || 0,
+      valorTotal: Number(proposta.valorTotal) || 0,
+      precoBaseStelion: dadosCalculo.precoBaseStelion || 910,
+      precoBaseLilit: dadosCalculo.precoBaseLilit || 590,
+      pisoStelion: dadosCalculo.pisoStelion || 0,
+      paredeStelion: dadosCalculo.paredeStelion || 0,
+      pisoLilit: dadosCalculo.pisoLilit || 0,
+      paredeLilit: dadosCalculo.paredeLilit || 0,
+    };
+
+    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/proposals/generate-html`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Erro ao gerar HTML');
+    }
+
+    const result = await response.json();
+    htmlPropostaUrl.value = result.url;
+    toast.success('Link HTML gerado com sucesso!');
+
+  } catch (error: any) {
+    console.error('Erro ao gerar HTML:', error);
+    toast.error(error.message || 'Erro ao gerar proposta HTML');
+  } finally {
+    gerandoHTML.value = false;
+  }
+};
+
+// Copiar link HTML para clipboard
+const copyHtmlLink = () => {
+  if (htmlPropostaUrl.value) {
+    navigator.clipboard.writeText(htmlPropostaUrl.value).then(() => {
+      toast.success('Link copiado para a área de transferência!');
+    });
+  }
+};
+
+// Inline Edit Functions
+const startEditing = (field: string, currentValue: string | number | null | undefined) => {
+  editingField.value = field;
+  editingValue.value = String(currentValue || '');
+};
+
+const cancelEditing = () => {
+  editingField.value = null;
+  editingValue.value = '';
+};
+
+const saveField = async (field: string) => {
+  if (!selectedDeal.value || savingField.value) return;
+
+  const dealId = selectedDeal.value.id;
+  const newValue = editingValue.value.trim();
+
+  // Se o valor não mudou, apenas cancela a edição
+  const originalValue = String(getFieldValue(selectedDeal.value, field) || '');
+  if (newValue === originalValue) {
+    cancelEditing();
+    return;
+  }
+
+  savingField.value = true;
+
+  try {
+    // Mapear nome do campo do frontend para backend
+    const fieldMap: Record<string, string> = {
+      'clientName': 'personName',
+      'phone': 'personPhone',
+      'personEmail': 'personEmail',
+      'endereco': 'endereco',
+      'cidadeExecucao': 'cidadeExecucao',
+      'metragemEstimada': 'metragemEstimada',
+      'estadoObra': 'estadoObra',
+      'budgetEstimado': 'budgetEstimado',
+      'dataPrevistaExec': 'dataPrevistaExec',
+      'nomeEscritorio': 'nomeEscritorio',
+      'detalhesArquiteto': 'detalhesArquiteto',
+      'resumo': 'resumo',
+      'descritivoArea': 'descritivoArea',
+      'consultor': 'consultorId',
+      'value': 'dealValue',
+    };
+
+    const backendField = fieldMap[field] || field;
+    const updateData: Record<string, any> = {};
+
+    // Converter valor se necessário
+    if (field === 'value' || field === 'metragemEstimada') {
+      updateData[backendField] = parseFloat(newValue) || 0;
+    } else {
+      updateData[backendField] = newValue;
+    }
+
+    await comercialApi.update(dealId, updateData);
+
+    // Atualizar o deal local
+    if (selectedDeal.value) {
+      (selectedDeal.value as any)[field] = field === 'value' ? parseFloat(newValue) || 0 : newValue;
+
+      // Também atualizar na lista de deals
+      const dealIndex = deals.value.findIndex(d => d.id === dealId);
+      if (dealIndex !== -1) {
+        (deals.value[dealIndex] as any)[field] = field === 'value' ? parseFloat(newValue) || 0 : newValue;
+      }
+    }
+
+    toast.success('Campo atualizado');
+  } catch (error) {
+    console.error('Error saving field:', error);
+    toast.error('Erro ao salvar campo');
+  } finally {
+    savingField.value = false;
+    cancelEditing();
+  }
+};
+
+const getFieldValue = (deal: Deal, field: string): string | number | null | undefined => {
+  return (deal as any)[field];
+};
+
+const handleFieldBlur = (field: string) => {
+  // Salvar ao sair do campo
+  saveField(field);
+};
+
+const handleFieldKeydown = (event: KeyboardEvent, field: string) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    saveField(field);
+  } else if (event.key === 'Escape') {
+    cancelEditing();
+  }
 };
 
 const editDeal = (deal: Deal) => {
-  // TODO: Implement edit
-  console.log('Edit deal:', deal);
+  // Abrir o primeiro campo para edição
+  startEditing('clientName', deal.clientName);
 };
 
 const sendWhatsApp = (deal: Deal) => {
   if (deal.phone) {
     const phone = deal.phone.replace(/\D/g, '');
-    window.open(`https://wa.me/55${phone}`, '_blank');
+
+    // Nome do cliente para Z-API (primeiro nome formatado)
+    const nomeCliente = deal.primeiroNomeZapi || deal.clientName?.split(' ')[0] || 'Cliente';
+
+    // Nome do vendedor - prioridade:
+    // 1. Consultor selecionado no filtro do header (selectedSpecialist)
+    // 2. Consultor selecionado no filtro da barra (selectedConsultor)
+    // 3. Consultor do próprio deal
+    // 4. Usuário logado como fallback
+    let nomeVendedor = 'especialista';
+    if (selectedSpecialist.value) {
+      nomeVendedor = selectedSpecialist.value.split(' ')[0] || 'especialista';
+    } else if (selectedConsultor.value) {
+      nomeVendedor = selectedConsultor.value.split(' ')[0] || 'especialista';
+    } else if (deal.consultor && deal.consultor !== 'N/A') {
+      nomeVendedor = deal.consultor.split(' ')[0] || 'especialista';
+    } else if (authStore.user?.name) {
+      nomeVendedor = authStore.user.name.split(' ')[0] || 'especialista';
+    }
+
+    // Metragem do projeto
+    const metragem = deal.metragemEstimada || deal.m2 || 'sua área';
+
+    // Detectar gênero do consultor (masculino: João, Gabriel)
+    const nomesMasculinos = ['joão', 'joao', 'gabriel'];
+    const artigoGenero = nomesMasculinos.includes(nomeVendedor.toLowerCase()) ? 'o' : 'a';
+
+    // Montar mensagem
+    const mensagem = `Olá ${nomeCliente}, tudo bem? Sou ${nomeVendedor}, especialista da Monofloor e serei ${artigoGenero} responsável por cuidar do seu projeto. Vi que fez uma solicitação de ${metragem}m². Quer me falar um pouco mais sobre o projeto?`;
+
+    // Encodar mensagem para URL
+    const mensagemEncoded = encodeURIComponent(mensagem);
+
+    window.open(`https://wa.me/55${phone}?text=${mensagemEncoded}`, '_blank');
   } else {
     toast.warning('Deal sem telefone cadastrado');
+  }
+};
+
+const openPipedriveLink = (url: string | undefined) => {
+  if (url) {
+    window.open(url, '_blank');
+  } else {
+    toast.warning('Link do Pipedrive não disponível');
   }
 };
 
@@ -1120,7 +2488,8 @@ const fetchDeals = async () => {
   const startTime = Date.now();
 
   try {
-    const response = await fetch(`/api/admin/comercial?days=${selectedPeriod.value}`);
+    // Carregar TODOS os deals (cache no servidor por 5 min)
+    const response = await fetch(`/api/admin/comercial`);
     if (!response.ok) throw new Error('Falha ao carregar deals');
 
     const data = await response.json();
@@ -1137,15 +2506,38 @@ const fetchDeals = async () => {
     }
 
     deals.value = rawDeals.map((d: any) => ({
+      // Spread original data para manter todos os campos do Pipedrive
       ...d,
+      // Campos principais formatados
       clientName: d.personName || d.project?.cliente || d.pipedriveRawData?.title || 'Sem nome',
       value: parseFloat(d.dealValue) || parseFloat(d.pipedriveRawData?.value) || 0,
       status: mapStatus(d.stageName || d.status),
-      consultor: d.ownerUserName || 'N/A',
+      consultor: d.consultorId || d.ownerUserName || 'N/A',
       phone: d.personPhone || '',
       endereco: d.project?.endereco || d.cidadeExecucaoDesc || '',
       m2Total: parseFloat(d.project?.m2Total) || parseFloat(d.metragemEstimada) || 0,
-      daysInStage: calculateDaysInStage(d.stageChangeTime || d.dealAddTime)
+      daysInStage: calculateDaysInStage(d.stageChangeTime || d.dealAddTime),
+      // Campos do Pipedrive preservados
+      personEmail: d.personEmail || '',
+      tipoCliente: d.tipoCliente || '',
+      tipoProjeto: d.tipoProjeto || '',
+      nomeEscritorio: d.nomeEscritorio || '',
+      budgetEstimado: d.budgetEstimado || '',
+      cidadeExecucao: d.cidadeExecucao || '',
+      metragemEstimada: d.metragemEstimada || '',
+      metragemEstimadaN1: d.metragemEstimadaN1 || '',
+      estadoObra: d.estadoObra || '',
+      dataPrevistaExec: d.dataPrevistaExec || '',
+      detalhesArquiteto: d.detalhesArquiteto || '',
+      descritivoArea: d.descritivoArea || '',
+      resumo: d.resumo || '',
+      primeiroNomeZapi: d.primeiroNomeZapi || '',
+      telefoneZapi: d.telefoneZapi || '',
+      pipedriveUrl: d.pipedriveUrl || `https://monofloor.pipedrive.com/deal/${d.pipedriveDealId}`,
+      pipedriveDealId: d.pipedriveDealId || '',
+      dealAddTime: d.dealAddTime,
+      dealUpdateTime: d.dealUpdateTime,
+      pipedriveSyncedAt: d.pipedriveSyncedAt
     }));
   } catch (error) {
     console.error('Error fetching deals:', error);
@@ -2231,6 +3623,103 @@ onMounted(() => {
   background: rgba(0, 0, 0, 0.2);
 }
 
+.modal__footer--proposals {
+  justify-content: space-between;
+}
+
+.modal__footer-left,
+.modal__footer-right {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.btn--gold {
+  background: linear-gradient(135deg, #c9a962, #b8963e);
+  color: #1a1a1a;
+  font-weight: 600;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.btn--gold:hover:not(:disabled) {
+  background: linear-gradient(135deg, #d4b56e, #c9a962);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(201, 169, 98, 0.3);
+}
+
+.btn--gold:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn--info {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  font-weight: 600;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.btn--info:hover:not(:disabled) {
+  background: linear-gradient(135deg, #60a5fa, #3b82f6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.btn--info:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* HTML Link Box */
+.html-link-box {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 12px;
+}
+
+.html-link-box__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+.html-link-box__url {
+  color: #60a5fa;
+  word-break: break-all;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.html-link-box__url:hover {
+  text-decoration: underline;
+}
+
+.btn--success {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: white;
+  font-weight: 600;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.btn--success:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2dd468, #22c55e);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.btn--success:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* ============================================
    FORM ELEMENTS
    ============================================ */
@@ -2323,6 +3812,289 @@ onMounted(() => {
   font-size: 1.5rem;
   font-weight: 800;
   color: #4ade80;
+}
+
+.detail-value--link {
+  cursor: pointer;
+  color: #60a5fa;
+  transition: color 0.15s ease;
+}
+
+.detail-value--link:hover {
+  color: #93c5fd;
+  text-decoration: underline;
+}
+
+.detail-value--stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(var(--stage-color), 0.2);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+}
+
+.detail-value--metric {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #c9a962;
+}
+
+.detail-value--mono {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.detail-value--text {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Inline Editing */
+.detail-value--editable {
+  cursor: pointer;
+  padding: 4px 8px;
+  margin: -4px -8px;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  position: relative;
+}
+
+.detail-value--editable:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(201, 169, 98, 0.3);
+}
+
+.detail-value--editable:hover::after {
+  content: '✏️';
+  font-size: 0.7rem;
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.6;
+}
+
+.inline-edit-input,
+.inline-edit-select,
+.inline-edit-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: white;
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid #c9a962;
+  border-radius: var(--radius-sm);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(201, 169, 98, 0.2);
+  transition: all 0.15s ease;
+}
+
+.inline-edit-input:focus,
+.inline-edit-select:focus,
+.inline-edit-textarea:focus {
+  border-color: #e0c080;
+  box-shadow: 0 0 0 4px rgba(201, 169, 98, 0.3);
+}
+
+.inline-edit-input--large {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #4ade80;
+}
+
+.inline-edit-input--full {
+  width: 100%;
+}
+
+.inline-edit-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c9a962' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+  padding-right: 40px;
+}
+
+.inline-edit-select option {
+  background: #1a1a1a;
+  color: white;
+  padding: 8px;
+}
+
+.inline-edit-textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.edit-action {
+  margin-left: 8px;
+  padding: 4px 8px;
+  background: rgba(201, 169, 98, 0.2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.edit-action:hover {
+  background: rgba(201, 169, 98, 0.4);
+}
+
+/* Detail Sections */
+.detail-section {
+  margin-bottom: 24px;
+}
+
+.detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.detail-section__title {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #c9a962;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(201, 169, 98, 0.3);
+}
+
+.detail-section--meta {
+  opacity: 0.7;
+}
+
+.detail-section--meta .detail-section__title {
+  color: rgba(255, 255, 255, 0.5);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.detail-grid--highlight {
+  background: rgba(201, 169, 98, 0.1);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  border: 1px solid rgba(201, 169, 98, 0.2);
+}
+
+.detail-grid--small .detail-item {
+  padding: 8px 12px;
+}
+
+.detail-item--highlight {
+  background: rgba(74, 222, 128, 0.1);
+  border-color: rgba(74, 222, 128, 0.2);
+}
+
+/* Modal Header Enhanced */
+.modal__header-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modal__badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.modal__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge--tipo {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.badge--projeto {
+  background: rgba(168, 85, 247, 0.2);
+  color: #d8b4fe;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.btn--icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+
+.btn--secondary {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.btn--secondary:hover {
+  background: rgba(59, 130, 246, 0.3);
+}
+
+/* Deal Card Enhanced */
+.deal-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.deal-card__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.deal-card__tag--tipo {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.deal-card__tag--m2 {
+  background: rgba(201, 169, 98, 0.15);
+  color: #c9a962;
+  border: 1px solid rgba(201, 169, 98, 0.3);
+}
+
+.deal-card__location {
+  font-size: 0.7rem;
+  color: var(--gray-600);
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ============================================
@@ -2515,5 +4287,182 @@ onMounted(() => {
   .detail-item--full {
     grid-column: span 1;
   }
+}
+
+/* =============================================
+   ANEXOS E ORÇAMENTOS ENVIADOS
+   ============================================= */
+
+.detail-section__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.detail-section__header .detail-section__title {
+  margin-bottom: 0;
+}
+
+.detail-loading {
+  text-align: center;
+  color: #888;
+  padding: 16px;
+  font-size: 14px;
+}
+
+.detail-empty {
+  text-align: center;
+  color: #666;
+  padding: 20px;
+  font-size: 13px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  border: 1px dashed #ddd;
+}
+
+/* Anexos List */
+.anexos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.anexo-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #eee;
+}
+
+.anexo-item__icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.anexo-item__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.anexo-item__nome {
+  font-weight: 500;
+  font-size: 14px;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.anexo-item__meta {
+  font-size: 12px;
+  color: #888;
+}
+
+.anexo-item__actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Orçamentos List */
+.orcamentos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.orcamento-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f0f7ff;
+  border-radius: 8px;
+  border: 1px solid #d0e3f7;
+}
+
+.orcamento-item__date {
+  font-weight: 600;
+  font-size: 13px;
+  color: #2563eb;
+  background: #dbeafe;
+  padding: 4px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.orcamento-item__info {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.orcamento-item__valor {
+  font-weight: 600;
+  color: #16a34a;
+  font-size: 14px;
+}
+
+.orcamento-item__metragem {
+  font-size: 13px;
+  color: #666;
+}
+
+.orcamento-item__proposta {
+  font-size: 12px;
+  color: #6366f1;
+  background: #eef2ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.orcamento-item__desc {
+  font-size: 12px;
+  color: #666;
+  flex: 1;
+  min-width: 100px;
+}
+
+/* Form Elements */
+.form-hint {
+  font-size: 12px;
+  color: #888;
+  margin-top: 4px;
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* Button Variants */
+.btn--sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.btn--danger:hover {
+  background: #fee2e2;
+  color: #dc2626;
 }
 </style>

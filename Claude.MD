@@ -317,6 +317,10 @@ npm run dev
 - **Admin**: admin@monofloor.com.br / admin123
 - **Mobile**: joao@monofloor.com.br / senha123
 
+### API Keys Externas:
+- **Hostinger API**: `gtBGTroy2FPgOXmhpD08ffvGOOQD6uFznQ21U6iC089f2eeb`
+- **VPS Hostinger**: 72.61.56.150 (root / qS4wv19mLrB;c@rOGeX,)
+
 ---
 
 ## O Que Falta Implementar

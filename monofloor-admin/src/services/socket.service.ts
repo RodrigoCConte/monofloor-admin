@@ -1,9 +1,18 @@
 /**
  * Socket.io Service
  * Manages Socket.io instance and provides event emission functions
+ * Now also sends push notifications for all user-facing events
  */
 
 import { Server } from 'socket.io';
+import {
+  sendPushToUser,
+  sendRoleEvolutionPush,
+  sendLunchReminderPush,
+  sendGPSAutoCheckoutPush,
+  sendXPBonusPush,
+  sendXPPenaltyPush,
+} from './push.service';
 
 let io: Server | null = null;
 
@@ -158,6 +167,8 @@ export function emitLunchReminder(data: {
     // Also notify admin
     io.to('admin').emit('lunch:reminder', data);
   }
+  // Also send push notification
+  sendLunchReminderPush(data.userId, data.reminderNumber).catch(console.error);
 }
 
 /**
@@ -193,6 +204,8 @@ export function emitRoleEvolution(data: {
     io.to('admin').emit('role:evolution', data);
     console.log(`[Socket] Emitted role:evolution to user:${data.userId} - ${data.oldRole} -> ${data.newRole}`);
   }
+  // Also send push notification
+  sendRoleEvolutionPush(data.userId, data.oldRole, data.newRole).catch(console.error);
 }
 
 /**
@@ -232,6 +245,8 @@ export function emitXPGained(data: {
     io.to('admin').emit('xp:gained', data);
     console.log(`[Socket] Emitted xp:gained to user:${data.userId} - +${data.amount} XP`);
   }
+  // Also send push notification
+  sendXPBonusPush(data.userId, data.amount, data.reason || 'XP ganho!').catch(console.error);
 }
 
 /**
@@ -250,6 +265,8 @@ export function emitXPLost(data: {
     io.to('admin').emit('xp:lost', data);
     console.log(`[Socket] Emitted xp:lost to user:${data.userId} - -${data.amount} XP`);
   }
+  // Also send push notification
+  sendXPPenaltyPush(data.userId, data.amount, 'Sistema', data.reason || 'XP perdido').catch(console.error);
 }
 
 /**
@@ -271,6 +288,16 @@ export function emitCampaignWinner(data: {
     io.to('admin').emit('campaign:winner', data);
     console.log(`[Socket] Emitted campaign:winner to user:${data.userId} - ${data.position}º lugar em "${data.campaignName}"`);
   }
+  // Also send push notification
+  sendPushToUser(data.userId, {
+    title: 'Parabens! Voce ganhou!',
+    body: `${data.position}º lugar na campanha "${data.campaignName}"${data.prize ? ` - ${data.prize}` : ''} (+${data.xpReward} XP)`,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/badge-72.png',
+    tag: 'campaign-winner',
+    data: { type: 'campaign:winner', campaignId: data.campaignId, position: data.position },
+    requireInteraction: true,
+  }).catch(console.error);
 }
 
 /**
@@ -295,6 +322,16 @@ export function emitBadgeEarned(data: {
     io.to('admin').emit('badge:earned', data);
     console.log(`[Socket] Emitted badge:earned to user:${data.userId} - Badge "${data.badgeName}"`);
   }
+  // Also send push notification
+  sendPushToUser(data.userId, {
+    title: 'Nova Conquista Desbloqueada!',
+    body: `Voce ganhou a conquista "${data.badgeName}"${data.reason ? ` - ${data.reason}` : ''}`,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/badge-72.png',
+    tag: `badge-${data.badgeId}`,
+    data: { type: 'badge:earned', badgeId: data.badgeId, badgeName: data.badgeName },
+    requireInteraction: true,
+  }).catch(console.error);
 }
 
 /**
@@ -337,6 +374,15 @@ export function emitNotificationToUser(userId: string, data: {
     });
     console.log(`[Socket] Emitted notification:new to user:${userId} - "${data.title}"`);
   }
+  // Also send push notification
+  sendPushToUser(userId, {
+    title: data.title,
+    body: data.message,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/badge-72.png',
+    tag: `notification-${data.id}`,
+    data: { type: 'notification:new', id: data.id, xpReward: data.xpReward },
+  }).catch(console.error);
 }
 
 /**
@@ -361,6 +407,50 @@ export function emitPunctualityMultiplier(data: {
     io.to('admin').emit('punctuality:multiplier', data);
     console.log(`[Socket] Emitted punctuality:multiplier to user:${data.userId} - ${data.multiplier}x (${data.streak} dias)`);
   }
+  // Also send push notification
+  if (data.isPunctual) {
+    sendPushToUser(data.userId, {
+      title: `Pontualidade ${data.multiplier.toFixed(1)}x!`,
+      body: `+${data.xpEarned} XP - ${data.streak} dias consecutivos`,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/badge-72.png',
+      tag: 'punctuality',
+      data: { type: 'punctuality:multiplier', multiplier: data.multiplier, streak: data.streak },
+    }).catch(console.error);
+  } else if (data.streakBroken) {
+    sendPushToUser(data.userId, {
+      title: 'Sequencia Perdida',
+      body: `Voce chegou ${data.minutesLate} minutos atrasado. Sua sequencia foi zerada.`,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/badge-72.png',
+      tag: 'punctuality',
+      data: { type: 'punctuality:broken', minutesLate: data.minutesLate },
+    }).catch(console.error);
+  }
+}
+
+/**
+ * Emit task updated event to admin and project room
+ * Triggered when a task status/progress changes via mobile app
+ */
+export function emitTaskUpdated(data: {
+  projectId: string;
+  projectName: string;
+  taskId: string;
+  taskTitle: string;
+  userId: string;
+  userName: string;
+  newStatus: string;
+  newProgress: number;
+  timestamp: Date;
+}): void {
+  if (io) {
+    // Notify admin room
+    io.to('admin').emit('task:updated', data);
+    // Notify project room (for ProjectDetail.vue)
+    io.to(`project:${data.projectId}`).emit('task:updated', data);
+    console.log(`[Socket] Emitted task:updated for project:${data.projectId} - Task "${data.taskTitle}" -> ${data.newStatus} (${data.newProgress}%)`);
+  }
 }
 
 /**
@@ -383,4 +473,6 @@ export function emitGPSAutoCheckout(data: {
     io.to('admin').emit('gps:autoCheckout', data);
     console.log(`[Socket] Emitted gps:autoCheckout to user:${data.userId} - GPS off for 10+ minutes`);
   }
+  // Also send push notification
+  sendGPSAutoCheckoutPush(data.userId, data.projectName).catch(console.error);
 }
