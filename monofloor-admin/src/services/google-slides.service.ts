@@ -871,50 +871,157 @@ async function applyClientInfoOverlays(
   detalhes = detalhes.replace(/\s*-?\s*(\d+[.,]?\d*)\s*m²/gi, '').replace(/área\s*:?\s*/gi, '').trim();
   if (!detalhes) detalhes = '-';
 
-  const fields = [
-    { label: 'Cliente', value: data.clienteNome || '-' },
-    { label: 'Local', value: data.clienteLocal || '-' },
-    { label: 'Detalhes', value: detalhes },
-    { label: 'Área total', value: data.areaTotalInterna ? `${data.areaTotalInterna.toFixed(2)} m² (10% de perda)` : '-' },
-  ];
+  // Espaçamentos
+  const paddingY = 15; // Espaço vertical entre elementos
+  const lineHeight = valueFontSize * 1.3; // Altura de cada linha de texto
 
-  const rowHeight = blockHeight / fields.length;
+  // Largura máxima para valores (para quebra de linha)
+  const maxValueWidth = blockWidth - paddingX * 2 - labelWidth - 20;
 
-  for (let i = 0; i < fields.length; i++) {
-    const field = fields[i];
-    const rowY = blockY + blockHeight - ((i + 1) * rowHeight) + (rowHeight / 2) - (valueFontSize / 3);
+  // Função para quebrar texto em múltiplas linhas
+  const wrapText = (text: string, maxWidth: number, font: any, fontSize: number): string[] => {
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
 
-    // Desenhar label (bold)
-    page.drawText(field.label, {
-      x: blockMarginX + paddingX,
-      y: rowY,
-      size: labelFontSize,
-      font: fontBold,
-      color: white,
-    });
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const testWidth = font.widthOfTextAtSize(testLine, fontSize);
 
-    // Desenhar valor ao lado
-    page.drawText(field.value, {
+      if (testWidth > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+    return lines.length > 0 ? lines : ['-'];
+  };
+
+  // Preparar dados dos campos
+  const clienteValue = data.clienteNome || '-';
+  const localValue = data.clienteLocal || '-';
+  const detalhesLines = wrapText(detalhes, maxValueWidth, fontRegular, valueFontSize);
+  const areaValue = data.areaTotalInterna ? `${data.areaTotalInterna.toFixed(2)} m² (10% de perda)` : '-';
+
+  // Calcular alturas de cada seção
+  const clienteHeight = Math.max(labelFontSize, valueFontSize) + paddingY * 2;
+  const localHeight = Math.max(labelFontSize, valueFontSize) + paddingY * 2;
+  const detalhesHeight = Math.max(labelFontSize, detalhesLines.length * lineHeight) + paddingY * 2;
+  const areaHeight = Math.max(labelFontSize, valueFontSize) + paddingY * 2;
+
+  // Posição Y inicial (topo do bloco, descendo)
+  let currentY = blockY + blockHeight - paddingY;
+
+  // === CLIENTE ===
+  currentY -= Math.max(labelFontSize, valueFontSize);
+  page.drawText('Cliente', {
+    x: blockMarginX + paddingX,
+    y: currentY,
+    size: labelFontSize,
+    font: fontBold,
+    color: white,
+  });
+  page.drawText(clienteValue, {
+    x: blockMarginX + paddingX + labelWidth,
+    y: currentY + (labelFontSize - valueFontSize) / 2,
+    size: valueFontSize,
+    font: fontRegular,
+    color: white,
+  });
+  console.log(`✅ Campo: Cliente = "${clienteValue}"`);
+
+  // Linha divisória após Cliente
+  currentY -= paddingY;
+  page.drawLine({
+    start: { x: blockMarginX + paddingX, y: currentY },
+    end: { x: blockMarginX + blockWidth - paddingX, y: currentY },
+    thickness: 1,
+    color: white,
+  });
+
+  // === LOCAL ===
+  currentY -= paddingY + Math.max(labelFontSize, valueFontSize);
+  page.drawText('Local', {
+    x: blockMarginX + paddingX,
+    y: currentY,
+    size: labelFontSize,
+    font: fontBold,
+    color: white,
+  });
+  page.drawText(localValue, {
+    x: blockMarginX + paddingX + labelWidth,
+    y: currentY + (labelFontSize - valueFontSize) / 2,
+    size: valueFontSize,
+    font: fontRegular,
+    color: white,
+  });
+  console.log(`✅ Campo: Local = "${localValue}"`);
+
+  // Linha divisória após Local
+  currentY -= paddingY;
+  page.drawLine({
+    start: { x: blockMarginX + paddingX, y: currentY },
+    end: { x: blockMarginX + blockWidth - paddingX, y: currentY },
+    thickness: 1,
+    color: white,
+  });
+
+  // === DETALHES (múltiplas linhas) ===
+  currentY -= paddingY + labelFontSize;
+  const detalhesLabelY = currentY;
+  page.drawText('Detalhes', {
+    x: blockMarginX + paddingX,
+    y: detalhesLabelY,
+    size: labelFontSize,
+    font: fontBold,
+    color: white,
+  });
+
+  // Desenhar cada linha do valor de Detalhes
+  let detalhesTextY = detalhesLabelY + (labelFontSize - valueFontSize) / 2;
+  for (let i = 0; i < detalhesLines.length; i++) {
+    page.drawText(detalhesLines[i], {
       x: blockMarginX + paddingX + labelWidth,
-      y: rowY,
+      y: detalhesTextY - (i * lineHeight),
       size: valueFontSize,
       font: fontRegular,
       color: white,
     });
-
-    // Desenhar linha divisória branca (exceto após o último)
-    if (i < fields.length - 1) {
-      const lineY = blockY + blockHeight - ((i + 1) * rowHeight);
-      page.drawLine({
-        start: { x: blockMarginX + paddingX, y: lineY },
-        end: { x: blockMarginX + blockWidth - paddingX, y: lineY },
-        thickness: 1,
-        color: white,
-      });
-    }
-
-    console.log(`✅ Campo: ${field.label} = "${field.value}"`);
   }
+  console.log(`✅ Campo: Detalhes = "${detalhes}" (${detalhesLines.length} linhas)`);
+
+  // Atualizar currentY para a última linha do Detalhes
+  const detalhesBottomY = detalhesTextY - ((detalhesLines.length - 1) * lineHeight) - valueFontSize;
+  currentY = Math.min(currentY - labelFontSize, detalhesBottomY);
+
+  // Linha divisória após Detalhes (considerando a última linha do texto)
+  currentY -= paddingY;
+  page.drawLine({
+    start: { x: blockMarginX + paddingX, y: currentY },
+    end: { x: blockMarginX + blockWidth - paddingX, y: currentY },
+    thickness: 1,
+    color: white,
+  });
+
+  // === ÁREA TOTAL ===
+  currentY -= paddingY + Math.max(labelFontSize, valueFontSize);
+  page.drawText('Área total', {
+    x: blockMarginX + paddingX,
+    y: currentY,
+    size: labelFontSize,
+    font: fontBold,
+    color: white,
+  });
+  page.drawText(areaValue, {
+    x: blockMarginX + paddingX + labelWidth,
+    y: currentY + (labelFontSize - valueFontSize) / 2,
+    size: valueFontSize,
+    font: fontRegular,
+    color: white,
+  });
+  console.log(`✅ Campo: Área total = "${areaValue}"`)
 
   console.log('✅ Bloco de informações aplicado na página 23');
 }
