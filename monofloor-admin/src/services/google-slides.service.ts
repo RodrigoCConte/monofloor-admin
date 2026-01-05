@@ -136,12 +136,12 @@ function createProposalHTML(data: ProposalData): string {
     }
 
     .product-name {
-      font-family: 'Inter', sans-serif;
+      font-family: 'NiteClub', 'Inter', sans-serif;
       letter-spacing: 3px;
       font-size: 44px;
       font-weight: normal;
       text-transform: uppercase;
-      color: transparent; /* Invisível - será adicionado via pdf-lib */
+      color: #ffffff;
       display: inline-block;
     }
 
@@ -589,12 +589,12 @@ function createSurfacesTableHTML(data: ProposalData): string {
     }
 
     .product-name {
-      font-family: 'Inter', sans-serif;
+      font-family: 'NiteClub', 'Inter', sans-serif;
       letter-spacing: 2px;
       font-size: 24px;
       font-weight: normal;
       text-transform: uppercase;
-      color: transparent; /* Invisível - será adicionado via pdf-lib */
+      color: #ffffff;
     }
 
     .surface-desc {
@@ -1150,13 +1150,6 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
       slide27Pages.forEach(page => finalPdf.addPage(page));
       console.log('✅ Slide 27 adicionado');
     }
-
-    // Aplicar nomes dos produtos com fonte NITECLUB
-    // slide26 está no índice 24 (após 24 páginas do template: 0-23)
-    const slide26PageIndex = 24;
-    const slide27PageIndex = slide27Buffer ? 25 : null;
-    console.log('🔤 Aplicando fonte NITECLUB aos nomes dos produtos...');
-    await applyProductNamesWithNiteclub(finalPdf, data, slide26PageIndex, slide27PageIndex);
 
     const finalPdfBytes = await finalPdf.save();
     const finalBuffer = Buffer.from(finalPdfBytes);
