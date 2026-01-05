@@ -470,6 +470,16 @@ export const comercialApi = {
     message?: string;
   }) => api.post(`/api/admin/comercial/${comercialId}/proposta/${propostaId}/enviar-whatsapp`, data),
 
+  // Analytics de Visualização da Proposta
+  getPropostaAnalytics: (propostaId: string) =>
+    api.get(`/api/proposals/${propostaId}/analytics`),
+
+  // Session Recordings (Gravações de Tela)
+  getRecordings: (propostaId: string) =>
+    api.get(`/api/proposals/${propostaId}/recordings`),
+  getRecording: (recordingId: string) =>
+    api.get(`/api/proposals/recording/${recordingId}`),
+
   // Anexos do Lead (Projeto Arquitetônico, Documentos, etc)
   getAnexos: (comercialId: string) =>
     api.get(`/api/admin/comercial/${comercialId}/anexos`),

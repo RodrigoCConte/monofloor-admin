@@ -1266,6 +1266,7 @@ model Proposta {
   comercial          ComercialData    @relation(fields: [comercialId], references: [id], onDelete: Cascade)
   orcamentosEnviados OrcamentoEnviado[]
   views              PropostaView[]
+  recordings         SessionRecording[]
 
   @@index([comercialId])
   @@index([status])
@@ -1294,6 +1295,33 @@ model PropostaView {
   @@index([viewedAt])
   @@index([ip])
   @@map("proposta_views")
+}
+
+// Gravação de sessão do cliente visualizando proposta (rrweb)
+model SessionRecording {
+  id            String   @id @default(uuid())
+  propostaId    String   @map("proposta_id")
+  viewId        String?  @map("view_id") // Referência à view
+  sessionId     String   @map("session_id") // ID da sessão
+  startedAt     DateTime @default(now()) @map("started_at")
+  endedAt       DateTime? @map("ended_at")
+  duration      Int?     // Duração em segundos
+  // Dados comprimidos (gzip base64)
+  eventsData    String   @map("events_data") @db.Text // Eventos rrweb comprimidos
+  eventsCount   Int      @default(0) @map("events_count") // Quantidade de eventos
+  // Metadados
+  deviceType    String?  @map("device_type")
+  screenWidth   Int?     @map("screen_width")
+  screenHeight  Int?     @map("screen_height")
+  // Controle de expiração
+  expiresAt     DateTime @map("expires_at") // Data de expiração (1 semana)
+
+  proposta      Proposta @relation(fields: [propostaId], references: [id], onDelete: Cascade)
+
+  @@index([propostaId])
+  @@index([sessionId])
+  @@index([expiresAt])
+  @@map("session_recordings")
 }
 
 model FollowUp {
@@ -2192,6 +2220,7 @@ enum ComercialStatus {
   GANHO
   PERDIDO
   CONGELADO
+  ARQUIVADO
 }
 
 enum PropostaStatus {

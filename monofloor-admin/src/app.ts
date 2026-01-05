@@ -360,6 +360,77 @@ function generateProposalImageHTML(slug: string, sessionId: string, clienteName:
       setTimeout(() => sendTracking(false), 3000);
     })();
   </script>
+
+  <!-- Session Recording (rrweb) -->
+  <script>
+    (function() {
+      var sessionId = '${sessionId}';
+      var slug = '${slug}';
+      var apiBase = window.location.origin;
+      var recordedEvents = [];
+      var isRecording = false;
+
+      // Carregar rrweb
+      var rrwebScript = document.createElement('script');
+      rrwebScript.src = 'https://cdn.jsdelivr.net/npm/rrweb@2.0.0-alpha.11/dist/rrweb.min.js';
+      rrwebScript.onload = function() {
+        isRecording = true;
+        rrweb.record({
+          emit: function(event) {
+            recordedEvents.push(event);
+          },
+          sampling: {
+            mousemove: 50,
+            mouseInteraction: true,
+            scroll: 150,
+            input: 'last'
+          },
+          maskAllInputs: true,
+          recordCrossOriginIframes: false
+        });
+
+        // Enviar eventos a cada 10 segundos
+        setInterval(function() {
+          if (recordedEvents.length > 0) {
+            sendRecordingBatch();
+          }
+        }, 10000);
+
+        // Enviar ao sair da página
+        window.addEventListener('beforeunload', function() {
+          if (recordedEvents.length > 0) {
+            sendRecordingBatch(true);
+          }
+        });
+      };
+      document.head.appendChild(rrwebScript);
+
+      function sendRecordingBatch(final) {
+        if (recordedEvents.length === 0) return;
+
+        var eventsToSend = recordedEvents.slice();
+        recordedEvents = [];
+
+        var data = {
+          slug: slug,
+          sessionId: sessionId,
+          events: eventsToSend,
+          isFinal: !!final
+        };
+
+        if (final && navigator.sendBeacon) {
+          navigator.sendBeacon(apiBase + '/api/proposals/recording', new Blob([JSON.stringify(data)], { type: 'application/json' }));
+        } else {
+          fetch(apiBase + '/api/proposals/recording', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+            keepalive: true
+          }).catch(function() {});
+        }
+      }
+    })();
+  </script>
 </body>
 </html>`;
 }

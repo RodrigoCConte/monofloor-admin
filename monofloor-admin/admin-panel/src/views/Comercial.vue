@@ -221,14 +221,18 @@
         </div>
 
         <div class="crm-header__actions">
-          <button class="btn btn--ghost" @click="showPipelineSettings = true" title="Configurar Pipeline">
-            <span>⚙️</span>
-          </button>
           <button class="btn btn--outline" @click="toggleFilters">
-            <span>⚡</span> Filtros
+            <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+            </svg>
+            Filtros
           </button>
           <button class="btn btn--primary" @click="openNewDeal()">
-            <span>+</span> Novo Deal
+            <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Novo Deal
           </button>
         </div>
       </div>
@@ -236,7 +240,14 @@
       <!-- KPIs Row -->
       <div class="crm-kpis">
         <div class="kpi-card kpi-card--deals">
-          <div class="kpi-card__icon">🎯</div>
+          <div class="kpi-card__icon">
+            <!-- Target Icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="12" cy="12" r="10"/>
+              <circle cx="12" cy="12" r="6"/>
+              <circle cx="12" cy="12" r="2" fill="currentColor"/>
+            </svg>
+          </div>
           <div class="kpi-card__content">
             <span class="kpi-card__value">{{ totalDeals }}</span>
             <span class="kpi-card__label">Deals Ativos</span>
@@ -244,7 +255,15 @@
         </div>
 
         <div class="kpi-card kpi-card--pipeline">
-          <div class="kpi-card__icon">💰</div>
+          <div class="kpi-card__icon">
+            <!-- Money/Coins Icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="9" cy="9" r="7"/>
+              <path d="M9 6v6M6 9h6"/>
+              <circle cx="15" cy="15" r="7" fill="var(--yellow)" stroke="currentColor"/>
+              <path d="M15 12v6M12 15h6"/>
+            </svg>
+          </div>
           <div class="kpi-card__content">
             <span class="kpi-card__value">{{ formatCurrency(totalValue) }}</span>
             <span class="kpi-card__label">Em Pipeline</span>
@@ -252,15 +271,28 @@
         </div>
 
         <div class="kpi-card kpi-card--won">
-          <div class="kpi-card__icon">🏆</div>
+          <div class="kpi-card__icon">
+            <!-- Trophy Icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M6 4h12v6a6 6 0 01-12 0V4z" fill="var(--yellow)"/>
+              <path d="M6 4H4a2 2 0 000 4h2M18 4h2a2 2 0 010 4h-2"/>
+              <path d="M12 16v4M8 22h8"/>
+            </svg>
+          </div>
           <div class="kpi-card__content">
-            <span class="kpi-card__value">{{ getStageDeals('GANHO').length }}</span>
+            <span class="kpi-card__value">{{ getStageDeals('Ganho').length }}</span>
             <span class="kpi-card__label">Ganhos</span>
           </div>
         </div>
 
         <div class="kpi-card kpi-card--conversion">
-          <div class="kpi-card__icon">📈</div>
+          <div class="kpi-card__icon">
+            <!-- Chart Up Icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="4 16 8 12 12 14 20 6"/>
+              <polyline points="14 6 20 6 20 12"/>
+            </svg>
+          </div>
           <div class="kpi-card__content">
             <span class="kpi-card__value">{{ conversionRate }}%</span>
             <span class="kpi-card__label">Taxa Conversão</span>
@@ -268,7 +300,13 @@
         </div>
 
         <div class="kpi-card kpi-card--avg">
-          <div class="kpi-card__icon">⏱️</div>
+          <div class="kpi-card__icon">
+            <!-- Clock Icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
           <div class="kpi-card__content">
             <span class="kpi-card__value">{{ avgDaysInPipeline }}d</span>
             <span class="kpi-card__label">Tempo Médio</span>
@@ -276,7 +314,13 @@
         </div>
 
         <div class="kpi-card kpi-card--ticket">
-          <div class="kpi-card__icon">🎫</div>
+          <div class="kpi-card__icon">
+            <!-- Ticket Icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M4 6h16a2 2 0 012 2v2a2 2 0 00-2 2 2 2 0 002 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2a2 2 0 002-2 2 2 0 00-2-2V8a2 2 0 012-2z" fill="var(--yellow)"/>
+              <line x1="10" y1="6" x2="10" y2="18" stroke-dasharray="2 2"/>
+            </svg>
+          </div>
           <div class="kpi-card__content">
             <span class="kpi-card__value">{{ formatCurrency(avgTicket) }}</span>
             <span class="kpi-card__label">Ticket Médio</span>
@@ -284,6 +328,63 @@
         </div>
       </div>
     </header>
+
+    <!-- Search Bar with Autocomplete -->
+    <div class="search-bar-container" v-if="!loading">
+      <div class="search-bar" :class="{ 'search-bar--focused': showSearchSuggestions }">
+        <!-- Saturn Icon -->
+        <img class="search-bar__saturn" src="/images/saturn.png" alt="Saturn" />
+        <input
+          type="text"
+          class="search-bar__input"
+          placeholder="Buscar por nome, telefone ou email..."
+          v-model="searchQuery"
+          @focus="showSearchSuggestions = true"
+          @blur="handleSearchBlur"
+          @keydown.escape="showSearchSuggestions = false"
+          @keydown.enter="handleSearchEnter"
+          @keydown.down.prevent="navigateSuggestion(1)"
+          @keydown.up.prevent="navigateSuggestion(-1)"
+        />
+        <button v-if="searchQuery" class="search-bar__clear" @click="clearSearch">✕</button>
+      </div>
+
+      <!-- Search Suggestions Dropdown -->
+      <div v-if="showSearchSuggestions && searchQuery.length >= 2" class="search-suggestions">
+        <div v-if="searchSuggestions.length === 0" class="search-suggestions__empty">
+          Nenhum resultado encontrado
+        </div>
+        <div
+          v-for="(suggestion, index) in searchSuggestions"
+          :key="suggestion.id"
+          class="search-suggestion"
+          :class="{ 'search-suggestion--active': selectedSuggestionIndex === index }"
+          @mousedown.prevent="selectSuggestion(suggestion)"
+        >
+          <div class="search-suggestion__main">
+            <span class="search-suggestion__name">{{ suggestion.clientName || 'Sem nome' }}</span>
+            <span class="search-suggestion__stage" :class="`search-suggestion__stage--${getStageColorName(suggestion.status || '')}`">
+              <span class="search-suggestion__stage-icon" v-html="getStageIconSvg(suggestion.status || '')"></span>
+              {{ getStageName(suggestion.status || '') }}
+            </span>
+          </div>
+          <div class="search-suggestion__details">
+            <span v-if="suggestion.phone" class="search-suggestion__phone">
+              <svg class="search-suggestion__detail-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              {{ suggestion.phone }}
+            </span>
+            <span v-if="suggestion.personEmail" class="search-suggestion__email">
+              <svg class="search-suggestion__detail-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              {{ suggestion.personEmail }}
+            </span>
+          </div>
+          <div v-if="suggestion.cidadeExecucao" class="search-suggestion__location">
+            <svg class="search-suggestion__detail-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            {{ suggestion.cidadeExecucao }}
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Filters Bar -->
     <div v-if="showFilters && !loading" class="filters-bar">
@@ -348,7 +449,7 @@
       >
         <div class="pipeline-column__header">
           <div class="pipeline-column__title">
-            <span class="pipeline-column__emoji">{{ stage.emoji }}</span>
+            <span class="pipeline-column__icon" v-html="getStageIconSvg(stage.id)"></span>
             <span>{{ stage.name }}</span>
           </div>
           <div class="pipeline-column__meta">
@@ -382,10 +483,13 @@
               <!-- Tags: Tipo Cliente + Metragem -->
               <div class="deal-card__tags" v-if="deal.tipoCliente || deal.metragemEstimadaN1">
                 <span v-if="deal.tipoCliente" class="deal-card__tag deal-card__tag--tipo">
-                  {{ deal.tipoCliente === 'Consumidor Final' ? '🏠' : '👷' }} {{ deal.tipoCliente }}
+                  <svg v-if="deal.tipoCliente === 'Consumidor Final'" class="deal-card__tag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                  <svg v-else class="deal-card__tag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 18v3h20v-3"/><path d="M6 14v4"/><path d="M18 14v4"/><path d="M12 14v4"/><path d="M4 10h16"/><path d="M4 10 12 3l8 7"/></svg>
+                  {{ deal.tipoCliente }}
                 </span>
                 <span v-if="deal.metragemEstimadaN1" class="deal-card__tag deal-card__tag--m2">
-                  📐 {{ deal.metragemEstimadaN1 }}
+                  <svg class="deal-card__tag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 3v18h18"/><path d="M8 17V9"/><path d="M12 17V5"/><path d="M16 17v-4"/><path d="M20 17v-8"/></svg>
+                  {{ deal.metragemEstimadaN1 }}
                 </span>
               </div>
 
@@ -399,8 +503,12 @@
               </div>
 
               <div class="deal-card__footer">
-                <div class="deal-card__avatar" :title="deal.consultor">
-                  {{ getInitials(deal.consultor) }}
+                <div class="deal-card__specialist" :title="deal.consultor">
+                  <span
+                    class="deal-card__specialist-dot"
+                    :style="{ backgroundColor: getSpecialistColor(deal.consultor) }"
+                  ></span>
+                  <span class="deal-card__specialist-name">{{ getSpecialistFirstName(deal.consultor) }}</span>
                 </div>
                 <div class="deal-card__days" :class="getDaysClass(deal.daysInStage)">
                   {{ deal.daysInStage || 0 }}d
@@ -408,24 +516,47 @@
               </div>
 
               <div class="deal-card__actions">
-                <button class="deal-action" title="WhatsApp" @click.stop="sendWhatsApp(deal)">
-                  💬
+                <button class="deal-action deal-action--whatsapp" title="WhatsApp" @click.stop="sendWhatsApp(deal)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+                  </svg>
                 </button>
-                <button class="deal-action" title="Pipedrive" @click.stop="openPipedriveLink(deal.pipedriveUrl)">
-                  🔗
+                <button class="deal-action deal-action--link" title="Pipedrive" @click.stop="openPipedriveLink(deal.pipedriveUrl)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                  </svg>
                 </button>
-                <button class="deal-action" title="Mais" @click.stop="openMenu(deal, $event)">
-                  ⋯
+                <button class="deal-action deal-action--menu" title="Mais" @click.stop="openMenu(deal, $event)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+                    <circle cx="12" cy="5" r="1.5" fill="currentColor"/>
+                    <circle cx="12" cy="19" r="1.5" fill="currentColor"/>
+                  </svg>
                 </button>
               </div>
             </div>
           </TransitionGroup>
 
           <div v-if="getStageDeals(stage.id).length === 0" class="pipeline-column__empty">
-            <span class="pipeline-column__empty-icon">🎯</span>
+            <span class="pipeline-column__empty-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="6"/>
+                <circle cx="12" cy="12" r="2" fill="currentColor"/>
+              </svg>
+            </span>
             <span>Arraste deals aqui</span>
           </div>
         </div>
+      </div>
+
+      <!-- Settings Column -->
+      <div class="pipeline-settings-column" @click="showPipelineSettings = true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
       </div>
     </div>
 
@@ -447,11 +578,95 @@
             </div>
             <div class="modal__actions">
               <a v-if="selectedDeal.pipedriveUrl" :href="selectedDeal.pipedriveUrl" target="_blank" class="btn btn--ghost btn--icon" title="Abrir no Pipedrive">
-                🔗
+                <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
               </a>
-              <button class="modal__close" @click="closeDealDetail">✕</button>
+              <button class="modal__close" @click="closeDealDetail">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
           </div>
+
+          <!-- Pipeline Progress Bar -->
+          <div class="pipeline-progress">
+            <div class="pipeline-progress__track">
+              <template v-for="(stage, index) in stages.filter(s => s.id !== 'Ganho' && s.id !== 'Perdido')" :key="stage.id">
+                <!-- Connector line (before each stage except first) -->
+                <div
+                  v-if="index > 0"
+                  class="pipeline-progress__connector"
+                  :class="{
+                    'pipeline-progress__connector--completed': getStageIndex(selectedDeal.status) >= index,
+                    'pipeline-progress__connector--pending': getStageIndex(selectedDeal.status) < index
+                  }"
+                ></div>
+
+                <!-- Stage circle -->
+                <div
+                  class="pipeline-progress__stage"
+                  :class="{
+                    'pipeline-progress__stage--completed': getStageIndex(selectedDeal.status) > index,
+                    'pipeline-progress__stage--current': selectedDeal.status === stage.id,
+                    'pipeline-progress__stage--pending': getStageIndex(selectedDeal.status) < index
+                  }"
+                  @click="changeDealStage(stage.id)"
+                  :title="`${stage.name} - Clique para mover`"
+                >
+                  <!-- Train icon on current stage -->
+                  <div v-if="selectedDeal.status === stage.id" class="pipeline-progress__train">
+                    <svg viewBox="0 0 64 40" fill="none">
+                      <g transform="translate(64,0) scale(-1,1)">
+                        <!-- Chimney -->
+                        <rect x="18" y="12" width="6" height="8" fill="#1a1a1a"/>
+                        <!-- Boiler -->
+                        <rect x="12" y="18" width="24" height="14" rx="2" fill="#1a1a1a"/>
+                        <!-- Cabin -->
+                        <rect x="36" y="14" width="14" height="18" fill="#1a1a1a"/>
+                        <rect x="38" y="16" width="4" height="4" fill="#FFE566"/>
+                        <rect x="44" y="16" width="4" height="4" fill="#FFE566"/>
+                        <!-- Wheels -->
+                        <circle cx="18" cy="34" r="5" fill="#1a1a1a"/>
+                        <circle cx="18" cy="34" r="2" fill="#c9a962"/>
+                        <circle cx="30" cy="34" r="5" fill="#1a1a1a"/>
+                        <circle cx="30" cy="34" r="2" fill="#c9a962"/>
+                        <circle cx="44" cy="34" r="4" fill="#1a1a1a"/>
+                        <circle cx="44" cy="34" r="1.5" fill="#c9a962"/>
+                        <!-- Front light -->
+                        <rect x="8" y="22" width="4" height="6" rx="1" fill="#FFE566"/>
+                        <!-- Details -->
+                        <rect x="14" y="24" width="20" height="2" fill="#c9a962"/>
+                        <rect x="36" y="28" width="14" height="2" fill="#c9a962"/>
+                      </g>
+                    </svg>
+                  </div>
+                  <span class="pipeline-progress__days">
+                    {{ getStageDays(stage.id) }}d
+                  </span>
+                  <span class="pipeline-progress__stage-name">{{ stage.name }}</span>
+                </div>
+              </template>
+            </div>
+
+            <!-- Final stages: Ganho / Perdido -->
+            <div class="pipeline-progress__final">
+              <button
+                class="pipeline-progress__final-btn pipeline-progress__final-btn--ganho"
+                :class="{ 'pipeline-progress__final-btn--active': selectedDeal.status === 'Ganho' }"
+                @click="changeDealStage('Ganho')"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                Ganho
+              </button>
+              <button
+                class="pipeline-progress__final-btn pipeline-progress__final-btn--perdido"
+                :class="{ 'pipeline-progress__final-btn--active': selectedDeal.status === 'Perdido' }"
+                @click="changeDealStage('Perdido')"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                Perdido
+              </button>
+            </div>
+          </div>
+
           <div class="modal__body modal__body--scroll">
             <!-- Valor e Status -->
             <div class="detail-section">
@@ -792,7 +1007,10 @@
             <!-- Orçamentos Enviados -->
             <div class="detail-section">
               <div class="detail-section__header">
-                <h3 class="detail-section__title">📤 Orçamentos Enviados</h3>
+                <h3 class="detail-section__title">
+                  <svg class="detail-section__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  Orçamentos Enviados
+                </h3>
                 <button class="btn btn--sm btn--primary" @click="openOrcamentoModal">
                   + Registrar Envio
                 </button>
@@ -824,6 +1042,118 @@
                     🗑️
                   </button>
                 </div>
+              </div>
+            </div>
+
+            <!-- Analytics de Visualização da Proposta -->
+            <div class="detail-section" v-if="ultimaProposta && propostaAnalytics?.stats">
+              <div class="detail-section__header">
+                <h3 class="detail-section__title">
+                  <svg class="detail-section__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  Histórico de Visualizações
+                </h3>
+              </div>
+
+              <!-- Stats resumidos -->
+              <div class="analytics-stats">
+                <div class="analytics-stat">
+                  <span class="analytics-stat__value">{{ propostaAnalytics.stats.humanViews }}</span>
+                  <span class="analytics-stat__label">Visualizações</span>
+                </div>
+                <div class="analytics-stat">
+                  <span class="analytics-stat__value">{{ propostaAnalytics.stats.uniqueVisitors }}</span>
+                  <span class="analytics-stat__label">Visitantes Únicos</span>
+                </div>
+                <div class="analytics-stat">
+                  <span class="analytics-stat__value">{{ formatTime(propostaAnalytics.stats.avgTimeOnPage) }}</span>
+                  <span class="analytics-stat__label">Tempo Médio</span>
+                </div>
+                <div class="analytics-stat">
+                  <span class="analytics-stat__value">{{ propostaAnalytics.stats.maxScrollDepth }}%</span>
+                  <span class="analytics-stat__label">Max Scroll</span>
+                </div>
+              </div>
+
+              <!-- Dispositivos -->
+              <div class="analytics-devices">
+                <span class="analytics-device" title="Desktop">
+                  💻 {{ propostaAnalytics.stats.deviceBreakdown.desktop }}
+                </span>
+                <span class="analytics-device" title="Mobile">
+                  📱 {{ propostaAnalytics.stats.deviceBreakdown.mobile }}
+                </span>
+                <span class="analytics-device" title="Tablet">
+                  📟 {{ propostaAnalytics.stats.deviceBreakdown.tablet }}
+                </span>
+              </div>
+
+              <!-- Lista de visualizações recentes -->
+              <div class="analytics-views" v-if="propostaAnalytics.views.length > 0">
+                <div class="analytics-views__header">
+                  Últimas Visualizações
+                </div>
+                <div class="analytics-views__list">
+                  <div
+                    v-for="view in propostaAnalytics.views.slice(0, 5)"
+                    :key="view.id"
+                    class="analytics-view-item"
+                    :class="{
+                      'analytics-view-item--bot': view.isBot,
+                      'analytics-view-item--has-recording': getRecordingForView(view.sessionId)
+                    }"
+                    @click="playRecordingForView(view.sessionId)"
+                  >
+                    <span class="analytics-view-item__device">
+                      {{ view.deviceType === 'mobile' ? '📱' : view.deviceType === 'tablet' ? '📟' : '💻' }}
+                    </span>
+                    <span class="analytics-view-item__time">
+                      {{ formatViewDate(view.viewedAt) }}
+                    </span>
+                    <span class="analytics-view-item__duration">
+                      {{ formatTime(view.timeOnPage) }}
+                    </span>
+                    <span class="analytics-view-item__scroll">
+                      {{ view.scrollDepth }}%
+                    </span>
+                    <span
+                      v-if="getRecordingForView(view.sessionId)"
+                      class="analytics-view-item__play"
+                      title="Assistir gravação"
+                    >
+                      ▶️
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Primeira e última visualização -->
+              <div class="analytics-dates" v-if="propostaAnalytics.stats.firstView">
+                <span class="analytics-date">
+                  Primeira: {{ formatViewDate(propostaAnalytics.stats.firstView) }}
+                </span>
+                <span class="analytics-date" v-if="propostaAnalytics.stats.lastView">
+                  Última: {{ formatViewDate(propostaAnalytics.stats.lastView) }}
+                </span>
+              </div>
+
+            </div>
+
+            <!-- Sem analytics ainda -->
+            <div class="detail-section" v-else-if="ultimaProposta && !loadingPropostaAnalytics">
+              <div class="detail-section__header">
+                <h3 class="detail-section__title">
+                  <svg class="detail-section__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  Histórico de Visualizações
+                </h3>
+              </div>
+              <div class="detail-empty">
+                A proposta ainda não foi visualizada pelo cliente.
               </div>
             </div>
 
@@ -861,7 +1191,8 @@
                 class="btn btn--info"
                 @click="abrirProposta"
               >
-                📥 Ver Proposta v{{ ultimaProposta.versao }}
+                <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Ver Proposta v{{ ultimaProposta.versao }}
               </button>
               <!-- Botão Enviar Proposta (aparece se houver proposta gerada) -->
               <button
@@ -871,7 +1202,10 @@
                 :disabled="enviandoProposta"
               >
                 <span v-if="enviandoProposta">Enviando...</span>
-                <span v-else>📤 Enviar Proposta v{{ ultimaProposta.versao }}</span>
+                <span v-else>
+                  <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  Enviar Proposta v{{ ultimaProposta.versao }}
+                </span>
               </button>
               <!-- Botão Gerar HTML (aparece se houver proposta gerada) -->
               <button
@@ -881,7 +1215,10 @@
                 :disabled="gerandoHTML"
               >
                 <span v-if="gerandoHTML">Gerando HTML...</span>
-                <span v-else>🌐 Gerar Link HTML</span>
+                <span v-else>
+                  <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                  Gerar Link HTML
+                </span>
               </button>
               <!-- Botão Gerar Proposta -->
               <button
@@ -890,16 +1227,28 @@
                 :disabled="gerandoProposta"
               >
                 <span v-if="gerandoProposta">Gerando...</span>
-                <span v-else>📝 Gerar Proposta</span>
+                <span v-else>
+                  <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  Gerar Proposta
+                </span>
               </button>
               <!-- WhatsApp simples -->
-              <button class="btn btn--secondary" @click="sendWhatsApp(selectedDeal)">💬 WhatsApp</button>
+              <button class="btn btn--secondary" @click="sendWhatsApp(selectedDeal)">
+                <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                WhatsApp
+              </button>
             </div>
             <!-- Link HTML (se existir) -->
             <div v-if="htmlPropostaUrl" class="html-link-box">
               <div class="html-link-box__header">
-                <span>🔗 Link da proposta com tracking:</span>
-                <button class="btn btn--small btn--secondary" @click="copyHtmlLink">📋 Copiar</button>
+                <span>
+                  <svg class="html-link-box__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                  Link da proposta com tracking:
+                </span>
+                <button class="btn btn--small btn--secondary" @click="copyHtmlLink">
+                  <svg class="btn__icon--small" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  Copiar
+                </button>
               </div>
               <a :href="htmlPropostaUrl" target="_blank" class="html-link-box__url">{{ htmlPropostaUrl }}</a>
             </div>
@@ -1052,8 +1401,13 @@
       <div v-if="showOrcamentoModal" class="modal-overlay" @click.self="closeOrcamentoModal">
         <div class="modal">
           <div class="modal__header">
-            <h2 class="modal__title">📤 Registrar Orçamento Enviado</h2>
-            <button class="modal__close" @click="closeOrcamentoModal">✕</button>
+            <h2 class="modal__title">
+              <svg class="modal__title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              Registrar Orçamento Enviado
+            </h2>
+            <button class="modal__close" @click="closeOrcamentoModal">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
           </div>
           <div class="modal__body">
             <div class="form-row">
@@ -1097,6 +1451,119 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- Modal Replay de Sessão -->
+    <Teleport to="body">
+      <div v-if="showReplayModal" class="modal-overlay modal-overlay--dark" @click.self="closeReplayModal">
+        <div class="modal modal--replay">
+          <div class="modal__header">
+            <h2 class="modal__title">
+              <svg class="modal__title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <circle cx="12" cy="12" r="10"/>
+                <polygon points="10 8 16 12 10 16 10 8"/>
+              </svg>
+              Gravação de Sessão
+            </h2>
+            <div class="replay-info" v-if="selectedRecording">
+              <span class="replay-device">
+                {{ selectedRecording.deviceType === 'mobile' ? '📱' : selectedRecording.deviceType === 'tablet' ? '📟' : '💻' }}
+                {{ selectedRecording.screenWidth }}x{{ selectedRecording.screenHeight }}
+              </span>
+              <span class="replay-duration">
+                {{ formatTime(selectedRecording.duration || 0) }}
+              </span>
+            </div>
+            <button class="modal__close" @click="closeReplayModal">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="modal__body modal__body--replay">
+            <!-- Loading -->
+            <div v-if="loadingReplayEvents" class="replay-loading">
+              <div class="replay-loading__spinner"></div>
+              <span>Carregando gravação...</span>
+            </div>
+            <!-- Player Container -->
+            <div v-else-if="replayEvents.length > 0" class="replay-player-container" ref="replayContainer">
+              <div id="rrweb-player"></div>
+            </div>
+            <!-- No events -->
+            <div v-else class="replay-empty">
+              Nenhum evento encontrado nesta gravação.
+            </div>
+          </div>
+          <div class="modal__footer">
+            <button class="btn btn--outline" @click="closeReplayModal">Fechar</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ===== NOTIFICAÇÕES DE PROPOSTA EM TEMPO REAL ===== -->
+    <div class="proposal-notifications" v-if="filteredActiveProposals.length > 0 || filteredProposalNotifications.length > 0">
+      <!-- Propostas sendo visualizadas agora -->
+      <div class="proposal-notifications__live" v-if="filteredActiveProposals.length > 0">
+        <div class="proposal-notifications__header">
+          <span class="proposal-notifications__icon">👁️</span>
+          <span class="proposal-notifications__title">Visualizando Agora</span>
+          <span class="proposal-notifications__count">{{ filteredActiveProposals.length }}</span>
+        </div>
+        <div class="proposal-notifications__list">
+          <div
+            v-for="proposal in filteredActiveProposals"
+            :key="proposal.sessionId"
+            class="proposal-notification proposal-notification--live"
+            @click="openLeadFromNotification(proposal.leadId)"
+          >
+            <div class="proposal-notification__avatar">
+              {{ proposal.clientName?.charAt(0)?.toUpperCase() || '?' }}
+            </div>
+            <div class="proposal-notification__content">
+              <span class="proposal-notification__name">{{ proposal.clientName }}</span>
+              <span class="proposal-notification__meta">
+                <span class="proposal-notification__time-live">{{ formatTime(proposal.timeOnPage) }}</span>
+                <span class="proposal-notification__device">{{ proposal.deviceType === 'mobile' ? '📱' : '💻' }}</span>
+                <span class="proposal-notification__scroll">{{ proposal.scrollDepth }}%</span>
+              </span>
+            </div>
+            <div class="proposal-notification__pulse"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Histórico de notificações -->
+      <div class="proposal-notifications__history" v-if="filteredProposalNotifications.length > 0">
+        <div class="proposal-notifications__header">
+          <span class="proposal-notifications__icon">📋</span>
+          <span class="proposal-notifications__title">Histórico</span>
+        </div>
+        <div class="proposal-notifications__list proposal-notifications__list--compact">
+          <div
+            v-for="notif in filteredProposalNotifications.slice(0, 5)"
+            :key="notif.id"
+            class="proposal-notification proposal-notification--history"
+            :class="{ 'proposal-notification--closed': notif.type === 'closed' }"
+            @click="openLeadFromNotification(notif.leadId)"
+          >
+            <div class="proposal-notification__type">
+              {{ notif.type === 'opened' ? '🟢' : '🔴' }}
+            </div>
+            <div class="proposal-notification__content">
+              <span class="proposal-notification__name">{{ notif.clientName }}</span>
+              <span class="proposal-notification__meta">
+                {{ notif.type === 'opened' ? 'Abriu' : 'Fechou' }}
+                <template v-if="notif.timeOnPage"> • {{ formatTime(notif.timeOnPage) }}</template>
+              </span>
+            </div>
+            <button
+              class="proposal-notification__dismiss"
+              @click.stop="dismissNotification(notif.id)"
+              title="Dispensar"
+            >×</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Loading State - Pixel Train on Infinity Track -->
     <div v-if="loading" class="loading-overlay">
@@ -1173,11 +1640,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useToast } from '@/composables/useToast';
 import { useAuthStore } from '@/stores/auth';
 import { comercialApi } from '@/api';
 import PipelineSettings from '@/components/crm/PipelineSettings.vue';
+import {
+  connectSocket,
+  onProposalOpened,
+  onProposalViewing,
+  onProposalClosed,
+  ProposalOpenedEvent,
+  ProposalViewingEvent,
+  ProposalClosedEvent,
+} from '@/services/socket';
 
 const authStore = useAuthStore();
 
@@ -1250,6 +1726,55 @@ interface Proposta {
   };
 }
 
+// Analytics de visualização de proposta
+interface ProposalViewRecord {
+  id: string;
+  sessionId?: string;
+  viewedAt: string;
+  deviceType: string;
+  timeOnPage: number;
+  scrollDepth: number;
+  isBot: boolean;
+}
+
+interface ProposalAnalytics {
+  proposta: {
+    id: string;
+    htmlSlug: string;
+    publicUrl: string;
+    createdAt: string;
+  };
+  views: ProposalViewRecord[];
+  stats: {
+    totalViews: number;
+    humanViews: number;
+    botViews: number;
+    uniqueVisitors: number;
+    avgTimeOnPage: number;
+    maxScrollDepth: number;
+    deviceBreakdown: {
+      desktop: number;
+      mobile: number;
+      tablet: number;
+    };
+    firstView: string | null;
+    lastView: string | null;
+  } | null;
+}
+
+// Session Recordings (Gravações de Tela)
+interface SessionRecording {
+  id: string;
+  sessionId: string;
+  startedAt: string;
+  endedAt: string | null;
+  duration: number | null;
+  eventsCount: number;
+  deviceType: string | null;
+  screenWidth: number | null;
+  screenHeight: number | null;
+}
+
 const toast = useToast();
 
 // State
@@ -1262,12 +1787,17 @@ const selectedDeal = ref<Deal | null>(null);
 const draggingDeal = ref<Deal | null>(null);
 const dragOverStage = ref<string | null>(null);
 const pipelineRef = ref<HTMLElement | null>(null);
+const replayContainer = ref<HTMLElement | null>(null);
 
 // Filters
 const searchQuery = ref('');
 const selectedConsultor = ref('');
 const selectedPeriod = ref(''); // Todos por padrão
 const sortBy = ref('recent');
+
+// Search Autocomplete
+const showSearchSuggestions = ref(false);
+const selectedSuggestionIndex = ref(-1);
 
 // Specialist Selector
 const showSpecialistModal = ref(false);
@@ -1285,7 +1815,38 @@ const availableConsultores = ref<string[]>([
   'Isabela de Moraes',
   'Gabriel Accardo',
   'amanda vantini',
+  'Rodrigo',
+  'Maria Clara',
 ]);
+
+// Mapeamento de email para nome do vendedor (para pré-seleção no login)
+const EMAIL_TO_SPECIALIST: Record<string, string> = {
+  'gabriel': 'Gabriel Accardo',
+  'isabela': 'Isabela de Moraes',
+  'amanda': 'amanda vantini',
+  'joao': 'João Farah',
+  'renata': 'Renata Garcia Penna',
+  'rodrigo': 'Rodrigo',
+  'maria': 'Maria Clara',
+  'mariaclara': 'Maria Clara',
+};
+
+// Função para pré-selecionar vendedor baseado no email do usuário logado
+const preSelectSpecialistFromEmail = () => {
+  const userEmail = authStore.user?.email?.toLowerCase() || '';
+  if (!userEmail) return;
+
+  const emailPrefix = userEmail.split('@')[0] || ''; // pega só a parte antes do @
+
+  // Procurar match no mapeamento
+  for (const [key, specialistName] of Object.entries(EMAIL_TO_SPECIALIST)) {
+    if (emailPrefix.includes(key)) {
+      selectedSpecialist.value = specialistName;
+      console.log(`[Comercial] Pré-selecionado vendedor: ${specialistName} (email: ${userEmail})`);
+      return;
+    }
+  }
+};
 
 // Propostas
 const ultimaProposta = ref<Proposta | null>(null);
@@ -1294,6 +1855,18 @@ const gerandoProposta = ref(false);
 const enviandoProposta = ref(false);
 const gerandoHTML = ref(false);
 const htmlPropostaUrl = ref<string | null>(null);
+
+// Analytics de visualização de proposta
+const propostaAnalytics = ref<ProposalAnalytics | null>(null);
+const loadingPropostaAnalytics = ref(false);
+
+// Session Recordings (Gravações de Tela)
+const sessionRecordings = ref<SessionRecording[]>([]);
+const loadingRecordings = ref(false);
+const showReplayModal = ref(false);
+const selectedRecording = ref<SessionRecording | null>(null);
+const replayEvents = ref<any[]>([]);
+const loadingReplayEvents = ref(false);
 
 // Anexos do Lead
 interface Anexo {
@@ -1358,11 +1931,42 @@ const novoOrcamento = ref({
   propostaId: ''
 });
 
+// ===== PROPOSTAS EM VISUALIZAÇÃO (Real-time) =====
+interface ActiveProposalView {
+  sessionId: string;
+  propostaId: string;
+  leadId: string;
+  clientName: string;
+  ownerUserName: string;
+  deviceType: string;
+  timeOnPage: number;
+  scrollDepth: number;
+  startedAt: Date;
+  timestamp: Date;
+}
+
+interface ProposalNotification {
+  id: string;
+  type: 'opened' | 'closed';
+  clientName: string;
+  ownerUserName: string;
+  leadId: string;
+  timeOnPage?: number;
+  deviceType?: string;
+  timestamp: Date;
+}
+
+const activeProposalViews = ref<Map<string, ActiveProposalView>>(new Map());
+const proposalNotifications = ref<ProposalNotification[]>([]);
+const unsubscribeProposalOpened = ref<(() => void) | null>(null);
+const unsubscribeProposalViewing = ref<(() => void) | null>(null);
+const unsubscribeProposalClosed = ref<(() => void) | null>(null);
+
 // New Deal Form
 const newDeal = ref({
   clientName: '',
   value: 0,
-  status: 'FORM_ORCAMENTO',
+  status: 'Form Orçamento',
   phone: '',
   endereco: ''
 });
@@ -1388,32 +1992,38 @@ const colorMap: Record<string, string> = {
   'danger': '#ef4444'
 };
 
-// Default stages configuration
+// Default stages configuration - EXATAMENTE como no Pipedrive (Pipeline 1)
 const DEFAULT_STAGES: Stage[] = [
-  // Entrada
-  { id: 'FORM_ORCAMENTO', name: 'Form Orçamento', emoji: '📋', color: 'indigo', groupName: 'Entrada', probability: 10, sortOrder: 0 },
-  // Contato
-  { id: 'PRIMEIRO_CONTATO', name: '1º Contato', emoji: '📞', color: 'blue', groupName: 'Contato', probability: 15, sortOrder: 1 },
-  { id: 'CONTATO_ARQUITETO', name: 'Contato Arquiteto', emoji: '👷', color: 'sky', groupName: 'Contato', probability: 20, sortOrder: 2 },
-  { id: 'AGUARDANDO_ARQ', name: 'Aguardando Arq.', emoji: '⏳', color: 'cyan', groupName: 'Contato', probability: 20, sortOrder: 3 },
+  // Entrada (Form)
+  { id: 'Form Orçamento', name: 'Form Orçamento', emoji: '📋', color: 'indigo', groupName: 'Entrada', probability: 5, sortOrder: 0 },
+  // 1º Contato
+  { id: '1º Contato', name: '1º Contato', emoji: '📞', color: 'blue', groupName: 'Contato', probability: 10, sortOrder: 1 },
+  { id: '1º Contato Feito', name: '1º Contato Feito', emoji: '✅', color: 'blue', groupName: 'Contato', probability: 15, sortOrder: 2 },
+  { id: 'Follow 1º Contato', name: 'Follow 1º Contato', emoji: '🔄', color: 'sky', groupName: 'Contato', probability: 18, sortOrder: 3 },
+  { id: 'Follow 1º Contato Feito', name: 'Follow 1º Contato Feito', emoji: '✅', color: 'sky', groupName: 'Contato', probability: 20, sortOrder: 4 },
+  // Arquiteto
+  { id: 'Form Arquiteto', name: 'Form Arquiteto', emoji: '📝', color: 'cyan', groupName: 'Arquiteto', probability: 22, sortOrder: 5 },
+  { id: 'Contato Arquiteto', name: 'Contato Arquiteto', emoji: '👷', color: 'cyan', groupName: 'Arquiteto', probability: 25, sortOrder: 6 },
   // Levantamento
-  { id: 'LEVANTAMENTO', name: 'Levantamento', emoji: '📐', color: 'teal', groupName: 'Levantamento', probability: 30, sortOrder: 4 },
-  { id: 'VISITA_AGENDADA', name: 'Visita Agendada', emoji: '📅', color: 'emerald', groupName: 'Levantamento', probability: 35, sortOrder: 5 },
-  { id: 'VISITA_REALIZADA', name: 'Visita Realizada', emoji: '✅', color: 'green', groupName: 'Levantamento', probability: 40, sortOrder: 6 },
+  { id: 'Proposta Escopo Minimo', name: 'Proposta Escopo Mínimo', emoji: '📐', color: 'teal', groupName: 'Levantamento', probability: 28, sortOrder: 7 },
+  { id: 'Cálculo de Projeto', name: 'Cálculo de Projeto', emoji: '🔢', color: 'teal', groupName: 'Levantamento', probability: 30, sortOrder: 8 },
+  { id: 'Projeto levantado', name: 'Projeto Levantado', emoji: '📊', color: 'emerald', groupName: 'Levantamento', probability: 35, sortOrder: 9 },
+  { id: 'Cálculo Deslocamento', name: 'Cálculo Deslocamento', emoji: '🚗', color: 'emerald', groupName: 'Levantamento', probability: 38, sortOrder: 10 },
+  { id: 'Deslocamento Levantado', name: 'Deslocamento Levantado', emoji: '✅', color: 'green', groupName: 'Levantamento', probability: 40, sortOrder: 11 },
   // Proposta
-  { id: 'PROPOSTA_EM_ELABORACAO', name: 'Proposta em Elaboração', emoji: '📝', color: 'lime', groupName: 'Proposta', probability: 50, sortOrder: 7 },
-  { id: 'PROPOSTA_ENVIADA', name: 'Proposta Enviada', emoji: '📤', color: 'yellow', groupName: 'Proposta', probability: 55, sortOrder: 8 },
+  { id: 'Proposta enviada', name: 'Proposta Enviada', emoji: '📤', color: 'yellow', groupName: 'Proposta', probability: 45, sortOrder: 12 },
   // Follow-up
-  { id: 'FOLLOW_1', name: 'Follow 1', emoji: '1️⃣', color: 'amber', groupName: 'Follow-up', probability: 60, sortOrder: 9 },
-  { id: 'FOLLOW_2', name: 'Follow 2', emoji: '2️⃣', color: 'orange', groupName: 'Follow-up', probability: 65, sortOrder: 10 },
-  { id: 'FOLLOW_3', name: 'Follow 3', emoji: '3️⃣', color: 'orange-light', groupName: 'Follow-up', probability: 70, sortOrder: 11 },
-  { id: 'FOLLOW_4', name: 'Follow 4', emoji: '4️⃣', color: 'peach', groupName: 'Follow-up', probability: 75, sortOrder: 12 },
-  { id: 'FOLLOW_5', name: 'Follow 5', emoji: '5️⃣', color: 'sand', groupName: 'Follow-up', probability: 80, sortOrder: 13 },
+  { id: 'Fazer Follow 1', name: 'Fazer Follow 1', emoji: '1️⃣', color: 'amber', groupName: 'Follow-up', probability: 50, sortOrder: 13 },
+  { id: 'Follow 1 Feito', name: 'Follow 1 Feito', emoji: '✅', color: 'amber', groupName: 'Follow-up', probability: 55, sortOrder: 14 },
+  { id: 'Fazer Follow 2', name: 'Fazer Follow 2', emoji: '2️⃣', color: 'orange', groupName: 'Follow-up', probability: 60, sortOrder: 15 },
+  { id: 'Follow 2 Feito', name: 'Follow 2 Feito', emoji: '✅', color: 'orange', groupName: 'Follow-up', probability: 65, sortOrder: 16 },
+  { id: 'Fazer Follow 3', name: 'Fazer Follow 3', emoji: '3️⃣', color: 'peach', groupName: 'Follow-up', probability: 70, sortOrder: 17 },
+  { id: 'Follow 3 Feito', name: 'Follow 3 Feito', emoji: '✅', color: 'peach', groupName: 'Follow-up', probability: 75, sortOrder: 18 },
   // Negociação
-  { id: 'NEGOCIACAO', name: 'Negociação', emoji: '🤝', color: 'gold', groupName: 'Negociação', probability: 85, sortOrder: 14 },
+  { id: 'Negociações', name: 'Negociações', emoji: '🤝', color: 'gold', groupName: 'Negociação', probability: 80, sortOrder: 19 },
   // Fechamento
-  { id: 'GANHO', name: 'Ganho', emoji: '🏆', color: 'success', groupName: 'Fechamento', probability: 100, sortOrder: 15 },
-  { id: 'PERDIDO', name: 'Perdido', emoji: '❌', color: 'danger', groupName: 'Fechamento', probability: 0, sortOrder: 16 },
+  { id: 'Ganho', name: 'Ganho', emoji: '🏆', color: 'success', groupName: 'Fechamento', probability: 100, sortOrder: 20 },
+  { id: 'Perdido', name: 'Perdido', emoji: '❌', color: 'danger', groupName: 'Fechamento', probability: 0, sortOrder: 21 },
 ];
 
 // Pipeline Stages - 17 etapas do Pipedrive
@@ -1424,8 +2034,8 @@ const totalDeals = computed(() => deals.value.length);
 const totalValue = computed(() => deals.value.reduce((sum, d) => sum + (d.value || 0), 0));
 
 const conversionRate = computed(() => {
-  const won = getStageDeals('GANHO').length;
-  const lost = getStageDeals('PERDIDO').length;
+  const won = getStageDeals('Ganho').length;
+  const lost = getStageDeals('Perdido').length;
   const total = won + lost;
   return total > 0 ? Math.round((won / total) * 100) : 0;
 });
@@ -1550,6 +2160,125 @@ const stagesForSettings = computed<StageForSettings[]>(() => {
   }));
 });
 
+// Propostas ativas filtradas pelo vendedor selecionado
+const filteredActiveProposals = computed(() => {
+  const proposals = Array.from(activeProposalViews.value.values());
+  if (!selectedSpecialist.value) return proposals;
+
+  // Filtrar por vendedor (normalizado para lowercase)
+  const specialistLower = selectedSpecialist.value.toLowerCase();
+  return proposals.filter(p =>
+    p.ownerUserName?.toLowerCase() === specialistLower
+  );
+});
+
+// Notificações filtradas pelo vendedor selecionado
+const filteredProposalNotifications = computed(() => {
+  if (!selectedSpecialist.value) return proposalNotifications.value;
+
+  const specialistLower = selectedSpecialist.value.toLowerCase();
+  return proposalNotifications.value.filter(n =>
+    n.ownerUserName?.toLowerCase() === specialistLower
+  );
+});
+
+// Search suggestions computed
+const searchSuggestions = computed(() => {
+  if (!searchQuery.value || searchQuery.value.length < 2) return [];
+
+  const q = searchQuery.value.toLowerCase();
+  return deals.value
+    .filter(d =>
+      d.clientName?.toLowerCase().includes(q) ||
+      d.personEmail?.toLowerCase().includes(q) ||
+      d.phone?.includes(q) ||
+      d.cidadeExecucao?.toLowerCase().includes(q)
+    )
+    .slice(0, 8); // Limita a 8 sugestões
+});
+
+// Search helper functions
+const getStageEmoji = (stageId: string) => {
+  const stage = stages.value.find(s => s.id === stageId);
+  return stage?.emoji || '📋';
+};
+
+// Neobrutalist SVG icons for each pipeline stage
+// Keys match both old UPPER_CASE format and new Pipedrive names format
+const stageIcons: Record<string, string> = {
+  // Entrada
+  'Form Orçamento': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>',
+  'FORM_ORCAMENTO': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>',
+  // Contato
+  '1º Contato': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+  'PRIMEIRO_CONTATO': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+  'CONTATO_ARQUITETO': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18v3h20v-3"/><path d="M6 14v4"/><path d="M18 14v4"/><path d="M12 14v4"/><path d="M4 10h16"/><path d="M4 10 12 3l8 7"/></svg>',
+  'AGUARDANDO_ARQ': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>',
+  'LEVANTAMENTO': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M8 17V9"/><path d="M12 17V5"/><path d="M16 17v-4"/><path d="M20 17v-8"/></svg>',
+  'VISITA_AGENDADA': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/></svg>',
+  'VISITA_REALIZADA': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+  'PROPOSTA_EM_ELABORACAO': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+  'PROPOSTA_ENVIADA': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>',
+  'FOLLOW_1': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+  'FOLLOW_2': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+  'FOLLOW_3': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+  'FOLLOW_4': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+  'FOLLOW_5': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+  'NEGOCIACAO': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
+  'Ganho': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>',
+  'Perdido': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+};
+
+const getStageIconSvg = (stageId: string) => {
+  return stageIcons[stageId] || stageIcons['Form Orçamento'] || stageIcons['FORM_ORCAMENTO'];
+};
+
+const getStageName = (stageId: string) => {
+  const stage = stages.value.find(s => s.id === stageId);
+  return stage?.name || stageId;
+};
+
+const getStageColorName = (stageId: string) => {
+  const stage = stages.value.find(s => s.id === stageId);
+  return stage?.color || 'gray';
+};
+
+const handleSearchBlur = () => {
+  // Delay to allow click on suggestion
+  setTimeout(() => {
+    showSearchSuggestions.value = false;
+    selectedSuggestionIndex.value = -1;
+  }, 200);
+};
+
+const handleSearchEnter = () => {
+  const suggestion = searchSuggestions.value[selectedSuggestionIndex.value];
+  if (selectedSuggestionIndex.value >= 0 && suggestion) {
+    selectSuggestion(suggestion);
+  }
+};
+
+const navigateSuggestion = (direction: number) => {
+  if (!showSearchSuggestions.value || searchSuggestions.value.length === 0) return;
+
+  const newIndex = selectedSuggestionIndex.value + direction;
+  if (newIndex >= -1 && newIndex < searchSuggestions.value.length) {
+    selectedSuggestionIndex.value = newIndex;
+  }
+};
+
+const selectSuggestion = (deal: Deal) => {
+  showSearchSuggestions.value = false;
+  selectedSuggestionIndex.value = -1;
+  openDealDetail(deal);
+};
+
+const clearSearch = () => {
+  searchQuery.value = '';
+  showSearchSuggestions.value = false;
+  selectedSuggestionIndex.value = -1;
+};
+
 // Methods
 const getStageDeals = (stageId: string) => {
   return filteredDeals.value.filter(d => d.status === stageId);
@@ -1578,6 +2307,75 @@ const getInitials = (name?: string) => {
   return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 };
 
+// Mapeamento fixo de cores por vendedor (máximo contraste)
+const SPECIALIST_COLOR_MAP: Record<string, string> = {
+  'gabriel accardo': '#e63946',    // vermelho
+  'isabela de moraes': '#2563eb',  // azul
+  'amanda vantini': '#16a34a',     // verde
+  'joão farah': '#f59e0b',         // amarelo/laranja
+  'joao farah': '#f59e0b',         // amarelo/laranja (sem acento)
+  'renata garcia penna': '#7c3aed', // roxo
+  'rodrigo': '#06b6d4',            // cyan
+  'maria clara': '#ec4899',        // rosa
+};
+
+// Cores fallback para novos vendedores
+const SPECIALIST_COLORS_FALLBACK = [
+  '#e63946', // vermelho
+  '#2563eb', // azul
+  '#16a34a', // verde
+  '#f59e0b', // amarelo/laranja
+  '#7c3aed', // roxo
+  '#06b6d4', // cyan
+  '#ec4899', // rosa
+  '#84cc16', // lima
+  '#f97316', // laranja
+  '#0d9488', // teal
+];
+
+// Cache de cores por especialista para consistência
+const specialistColorCache = new Map<string, string>();
+
+const getSpecialistColor = (name: string | undefined | null): string => {
+  if (!name || name === 'N/A') return '#6b7280'; // gray
+
+  // Normalizar nome para lowercase
+  const nameNormalized = name.toLowerCase().trim();
+
+  // Verificar cache
+  const cached = specialistColorCache.get(nameNormalized);
+  if (cached) {
+    return cached;
+  }
+
+  // Primeiro tentar mapeamento fixo
+  const fixedColor = SPECIALIST_COLOR_MAP[nameNormalized];
+  if (fixedColor) {
+    specialistColorCache.set(nameNormalized, fixedColor);
+    return fixedColor;
+  }
+
+  // Fallback: hash para novos vendedores
+  let hash = 0;
+  for (let i = 0; i < nameNormalized.length; i++) {
+    hash = ((hash << 5) - hash) + nameNormalized.charCodeAt(i);
+    hash = hash & hash;
+  }
+
+  const colorIndex = Math.abs(hash) % SPECIALIST_COLORS_FALLBACK.length;
+  const color = SPECIALIST_COLORS_FALLBACK[colorIndex] ?? '#6b7280';
+  specialistColorCache.set(nameNormalized, color);
+
+  return color;
+};
+
+const getSpecialistFirstName = (name: string | undefined | null): string => {
+  if (!name || name === 'N/A') return '';
+  const firstName = name.split(' ')[0] || '';
+  // Capitalizar primeira letra (amanda → Amanda)
+  return firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+};
+
 const getDaysClass = (days?: number) => {
   if (!days) return '';
   if (days > 14) return 'deal-card__days--danger';
@@ -1591,6 +2389,71 @@ const getStageColor = (stageId?: string): string => {
   return colorMap[stage.color] || stage.color || '#6366f1';
 };
 
+// Pipeline Progress Bar helpers
+const getStageIndex = (stageId?: string): number => {
+  if (!stageId) return -1;
+  const filteredStages = stages.value.filter(s => s.id !== 'Ganho' && s.id !== 'Perdido');
+  return filteredStages.findIndex(s => s.id === stageId);
+};
+
+const getStageDays = (stageId: string): number => {
+  // For now, return the days in stage if it's the current stage, otherwise 0
+  // In the future, this could be tracked per-stage in the deal history
+  if (selectedDeal.value?.status === stageId) {
+    return selectedDeal.value?.daysInStage || 0;
+  }
+  // Could implement stage history tracking here
+  return 0;
+};
+
+const changeDealStage = async (newStageId: string) => {
+  if (!selectedDeal.value || selectedDeal.value.status === newStageId) return;
+
+  const deal = selectedDeal.value;
+  const oldStage = deal.status;
+  const dealId = deal.id;
+
+  // Optimistic update
+  deal.status = newStageId;
+  deal.daysInStage = 0;
+
+  // Update in deals array
+  const dealIndex = deals.value.findIndex(d => d.id === dealId);
+  if (dealIndex >= 0) {
+    const dealInList = deals.value[dealIndex];
+    if (dealInList) {
+      dealInList.status = newStageId;
+      dealInList.daysInStage = 0;
+    }
+  }
+
+  try {
+    // Call API to update deal (same endpoint as drag&drop)
+    const response = await fetch(`/api/admin/comercial/${dealId}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStageId })
+    });
+
+    if (!response.ok) {
+      throw new Error('Falha ao atualizar estágio');
+    }
+
+    toast.success(`Movido para ${stages.value.find(s => s.id === newStageId)?.name || newStageId}`);
+  } catch (error) {
+    // Revert on error
+    deal.status = oldStage;
+    if (dealIndex >= 0) {
+      const dealInList = deals.value[dealIndex];
+      if (dealInList) {
+        dealInList.status = oldStage;
+      }
+    }
+    toast.error('Erro ao atualizar estágio');
+    console.error('Error updating stage:', error);
+  }
+};
+
 const formatDate = (dateStr?: string | Date): string => {
   if (!dateStr) return 'N/A';
   const date = new Date(dateStr);
@@ -1599,6 +2462,39 @@ const formatDate = (dateStr?: string | Date): string => {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+// Format view date (mais compacto para a lista de visualizações)
+const formatViewDate = (dateStr?: string | null): string => {
+  if (!dateStr) return 'N/A';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return 'N/A';
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  // Se foi há menos de 1 hora, mostra minutos
+  if (diffMins < 60) {
+    return diffMins <= 1 ? 'agora' : `há ${diffMins}min`;
+  }
+  // Se foi há menos de 24 horas, mostra horas
+  if (diffHours < 24) {
+    return `há ${diffHours}h`;
+  }
+  // Se foi há menos de 7 dias, mostra dias
+  if (diffDays < 7) {
+    return `há ${diffDays}d`;
+  }
+  // Caso contrário, mostra data completa
+  return date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
     hour: '2-digit',
     minute: '2-digit'
   });
@@ -1691,7 +2587,7 @@ const openNewDeal = (stageId?: string) => {
   newDeal.value = {
     clientName: '',
     value: 0,
-    status: stageId || 'FORM_ORCAMENTO',
+    status: stageId || 'Form Orçamento',
     phone: '',
     endereco: ''
   };
@@ -1726,6 +2622,7 @@ const createDeal = async () => {
 const openDealDetail = async (deal: Deal) => {
   selectedDeal.value = deal;
   ultimaProposta.value = null;
+  propostaAnalytics.value = null;
   anexos.value = [];
   orcamentosEnviados.value = [];
 
@@ -1735,11 +2632,19 @@ const openDealDetail = async (deal: Deal) => {
     fetchAnexos(deal.id),
     fetchOrcamentosEnviados(deal.id)
   ]);
+
+  // Buscar analytics e recordings da proposta se existir
+  if (ultimaProposta.value?.id) {
+    fetchPropostaAnalytics(ultimaProposta.value.id);
+    fetchRecordings(ultimaProposta.value.id);
+  }
 };
 
 const closeDealDetail = () => {
   selectedDeal.value = null;
   ultimaProposta.value = null;
+  propostaAnalytics.value = null;
+  sessionRecordings.value = [];
   anexos.value = [];
   orcamentosEnviados.value = [];
 };
@@ -1761,6 +2666,127 @@ const fetchUltimaProposta = async (dealId: string) => {
     loadingProposta.value = false;
   }
 };
+
+// Buscar analytics de visualização da proposta
+const fetchPropostaAnalytics = async (propostaId: string) => {
+  loadingPropostaAnalytics.value = true;
+  try {
+    const response = await comercialApi.getPropostaAnalytics(propostaId);
+    if (response.data?.stats) {
+      propostaAnalytics.value = response.data;
+    }
+  } catch (error: any) {
+    // 404 significa que não há analytics ainda
+    if (error.response?.status !== 404) {
+      console.error('Erro ao buscar analytics:', error);
+    }
+  } finally {
+    loadingPropostaAnalytics.value = false;
+  }
+};
+
+// Buscar gravações de sessão (recordings)
+const fetchRecordings = async (propostaId: string) => {
+  loadingRecordings.value = true;
+  try {
+    const response = await comercialApi.getRecordings(propostaId);
+    if (response.data?.recordings) {
+      sessionRecordings.value = response.data.recordings;
+    }
+  } catch (error: any) {
+    // 404 significa que não há recordings ainda
+    if (error.response?.status !== 404) {
+      console.error('Erro ao buscar recordings:', error);
+    }
+    sessionRecordings.value = [];
+  } finally {
+    loadingRecordings.value = false;
+  }
+};
+
+// Abrir replay de uma sessão
+const openReplay = async (recording: SessionRecording) => {
+  selectedRecording.value = recording;
+  loadingReplayEvents.value = true;
+  showReplayModal.value = true;
+
+  try {
+    const response = await comercialApi.getRecording(recording.id);
+    if (response.data?.events) {
+      replayEvents.value = response.data.events;
+    }
+  } catch (error: any) {
+    console.error('Erro ao carregar eventos do recording:', error);
+    toast.error('Erro ao carregar gravação');
+    replayEvents.value = [];
+  } finally {
+    loadingReplayEvents.value = false;
+  }
+};
+
+// Fechar modal de replay
+const closeReplayModal = () => {
+  showReplayModal.value = false;
+  selectedRecording.value = null;
+  replayEvents.value = [];
+};
+
+// Encontrar gravação por sessionId
+const getRecordingForView = (sessionId: string | undefined): SessionRecording | undefined => {
+  if (!sessionId) return undefined;
+  return sessionRecordings.value.find(r => r.sessionId === sessionId);
+};
+
+// Abrir replay a partir do sessionId da view
+const playRecordingForView = (sessionId: string | undefined) => {
+  const recording = getRecordingForView(sessionId);
+  if (recording) {
+    openReplay(recording);
+  }
+};
+
+// Inicializar player rrweb quando eventos são carregados
+let rrwebPlayer: any = null;
+
+watch(replayEvents, async (events) => {
+  if (events.length > 0) {
+    await nextTick();
+
+    // Limpar player anterior se existir
+    const playerContainer = document.getElementById('rrweb-player');
+    if (playerContainer) {
+      playerContainer.innerHTML = '';
+    }
+
+    // Carregar rrweb-player dinamicamente
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/rrweb-player@latest/dist/index.js';
+    script.onload = () => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://cdn.jsdelivr.net/npm/rrweb-player@latest/dist/style.css';
+      document.head.appendChild(link);
+
+      // Aguardar CSS carregar
+      setTimeout(() => {
+        if (playerContainer && (window as any).rrwebPlayer) {
+          rrwebPlayer = new (window as any).rrwebPlayer({
+            target: playerContainer,
+            props: {
+              events: events,
+              width: 800,
+              height: 500,
+              autoPlay: false,
+              showController: true,
+              speedOption: [1, 2, 4, 8],
+            },
+          });
+        }
+      }, 100);
+    };
+    document.head.appendChild(script);
+  }
+});
 
 // =============================================
 // FUNÇÕES DE ANEXOS
@@ -2562,49 +3588,67 @@ const calculateDaysInStage = (dateStr?: string): number => {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
-// Map Pipedrive stage names to our stage IDs
+// Map Pipedrive stage names to our stage IDs (matching DEFAULT_STAGES)
 const mapStatus = (status?: string): string => {
-  if (!status) return 'FORM_ORCAMENTO';
+  if (!status) return 'Form Orçamento';
 
   const statusLower = status.toLowerCase().trim();
 
-  // Direct mapping by Pipedrive stage name
+  // Direct mapping by Pipedrive stage name → DEFAULT_STAGES id
+  // IMPORTANTE: Os valores devem corresponder EXATAMENTE aos IDs em DEFAULT_STAGES
   const mappings: Record<string, string> = {
     // Entrada
-    'form orçamento': 'FORM_ORCAMENTO',
-    'form orcamento': 'FORM_ORCAMENTO',
-    // Contato
-    '1º contato': 'PRIMEIRO_CONTATO',
-    '1o contato': 'PRIMEIRO_CONTATO',
-    'primeiro contato': 'PRIMEIRO_CONTATO',
-    'contato arquiteto': 'CONTATO_ARQUITETO',
-    'aguardando arq.': 'AGUARDANDO_ARQ',
-    'aguardando arq': 'AGUARDANDO_ARQ',
-    'aguardando arquiteto': 'AGUARDANDO_ARQ',
+    'form orçamento': 'Form Orçamento',
+    'form orcamento': 'Form Orçamento',
+    // 1º Contato
+    '1º contato': '1º Contato',
+    '1o contato': '1º Contato',
+    'primeiro contato': '1º Contato',
+    '1º contato feito': '1º Contato Feito',
+    '1o contato feito': '1º Contato Feito',
+    'follow 1º contato': 'Follow 1º Contato',
+    'follow 1o contato': 'Follow 1º Contato',
+    'follow 1º contato feito': 'Follow 1º Contato Feito',
+    'follow 1o contato feito': 'Follow 1º Contato Feito',
+    // Arquiteto
+    'form arquiteto': 'Form Arquiteto',
+    'contato arquiteto': 'Contato Arquiteto',
     // Levantamento
-    'levantamento': 'LEVANTAMENTO',
-    'visita agendada': 'VISITA_AGENDADA',
-    'visita realizada': 'VISITA_REALIZADA',
+    'proposta escopo minimo': 'Proposta Escopo Minimo',
+    'proposta escopo mínimo': 'Proposta Escopo Minimo',
+    'cálculo de projeto': 'Cálculo de Projeto',
+    'calculo de projeto': 'Cálculo de Projeto',
+    'projeto levantado': 'Projeto levantado',
+    'cálculo deslocamento': 'Cálculo Deslocamento',
+    'calculo deslocamento': 'Cálculo Deslocamento',
+    'deslocamento levantado': 'Deslocamento Levantado',
     // Proposta
-    'proposta em elaboração': 'PROPOSTA_EM_ELABORACAO',
-    'proposta em elaboracao': 'PROPOSTA_EM_ELABORACAO',
-    'proposta enviada': 'PROPOSTA_ENVIADA',
+    'proposta enviada': 'Proposta enviada',
     // Follow-up
-    'follow 1': 'FOLLOW_1',
-    'follow 2': 'FOLLOW_2',
-    'follow 3': 'FOLLOW_3',
-    'follow 4': 'FOLLOW_4',
-    'follow 5': 'FOLLOW_5',
-    'follow 5 (último)': 'FOLLOW_5',
-    'follow 5 (ultimo)': 'FOLLOW_5',
+    'fazer follow 1': 'Fazer Follow 1',
+    'follow 1 feito': 'Follow 1 Feito',
+    'fazer follow 2': 'Fazer Follow 2',
+    'follow 2 feito': 'Follow 2 Feito',
+    'fazer follow 3': 'Fazer Follow 3',
+    'follow 3 feito': 'Follow 3 Feito',
     // Negociação
-    'negociação': 'NEGOCIACAO',
-    'negociacao': 'NEGOCIACAO',
+    'negociações': 'Negociações',
+    'negociacoes': 'Negociações',
+    'negociação': 'Negociações',
+    'negociacao': 'Negociações',
     // Fechamento
-    'ganho': 'GANHO',
-    'won': 'GANHO',
-    'perdido': 'PERDIDO',
-    'lost': 'PERDIDO'
+    'ganho': 'Ganho',
+    'won': 'Ganho',
+    'perdido': 'Perdido',
+    'lost': 'Perdido',
+    // Também mapear status do banco (ComercialStatus enum - sem duplicar)
+    'lead': 'Form Orçamento',
+    'primeiro_contato': '1º Contato',
+    'contato_arquiteto': 'Contato Arquiteto',
+    'levantamento': 'Cálculo de Projeto',
+    'proposta_enviada': 'Proposta enviada',
+    'follow_up': 'Fazer Follow 1'
+    // 'negociacao' já mapeado acima
   };
 
   // Try exact match first
@@ -2619,27 +3663,163 @@ const mapStatus = (status?: string): string => {
     }
   }
 
-  // Fallback heuristics
-  if (statusLower.includes('ganho') || statusLower.includes('won')) return 'GANHO';
-  if (statusLower.includes('perdido') || statusLower.includes('lost')) return 'PERDIDO';
-  if (statusLower.includes('negoci')) return 'NEGOCIACAO';
-  if (statusLower.includes('follow')) return 'FOLLOW_1';
-  if (statusLower.includes('proposta') && statusLower.includes('enviada')) return 'PROPOSTA_ENVIADA';
-  if (statusLower.includes('proposta')) return 'PROPOSTA_EM_ELABORACAO';
-  if (statusLower.includes('visita') && statusLower.includes('realizada')) return 'VISITA_REALIZADA';
-  if (statusLower.includes('visita')) return 'VISITA_AGENDADA';
-  if (statusLower.includes('levantamento')) return 'LEVANTAMENTO';
-  if (statusLower.includes('aguardando')) return 'AGUARDANDO_ARQ';
-  if (statusLower.includes('arquiteto')) return 'CONTATO_ARQUITETO';
-  if (statusLower.includes('contato')) return 'PRIMEIRO_CONTATO';
-  if (statusLower.includes('form') || statusLower.includes('orçamento')) return 'FORM_ORCAMENTO';
+  // Fallback heuristics - usando nomes que correspondem a DEFAULT_STAGES
+  if (statusLower.includes('ganho') || statusLower.includes('won')) return 'Ganho';
+  if (statusLower.includes('perdido') || statusLower.includes('lost')) return 'Perdido';
+  if (statusLower.includes('negoci')) return 'Negociações';
+  if (statusLower.includes('follow') && statusLower.includes('3')) return 'Fazer Follow 3';
+  if (statusLower.includes('follow') && statusLower.includes('2')) return 'Fazer Follow 2';
+  if (statusLower.includes('follow') && statusLower.includes('1') && statusLower.includes('feito')) return 'Follow 1 Feito';
+  if (statusLower.includes('follow') && statusLower.includes('1')) return 'Fazer Follow 1';
+  if (statusLower.includes('follow')) return 'Fazer Follow 1';
+  if (statusLower.includes('proposta') && statusLower.includes('enviada')) return 'Proposta enviada';
+  if (statusLower.includes('proposta') && statusLower.includes('escopo')) return 'Proposta Escopo Minimo';
+  if (statusLower.includes('deslocamento') && statusLower.includes('levant')) return 'Deslocamento Levantado';
+  if (statusLower.includes('deslocamento')) return 'Cálculo Deslocamento';
+  if (statusLower.includes('projeto') && statusLower.includes('levant')) return 'Projeto levantado';
+  if (statusLower.includes('cálculo') || statusLower.includes('calculo')) return 'Cálculo de Projeto';
+  if (statusLower.includes('arquiteto') && statusLower.includes('form')) return 'Form Arquiteto';
+  if (statusLower.includes('arquiteto')) return 'Contato Arquiteto';
+  if (statusLower.includes('contato') && statusLower.includes('feito')) return '1º Contato Feito';
+  if (statusLower.includes('contato')) return '1º Contato';
+  if (statusLower.includes('form') || statusLower.includes('orçamento') || statusLower.includes('orcamento')) return 'Form Orçamento';
 
-  return 'FORM_ORCAMENTO';
+  // Se o status já é um dos nomes válidos, retornar como está
+  const validStages = [
+    'Form Orçamento', '1º Contato', '1º Contato Feito', 'Follow 1º Contato', 'Follow 1º Contato Feito',
+    'Form Arquiteto', 'Contato Arquiteto', 'Proposta Escopo Minimo', 'Cálculo de Projeto',
+    'Projeto levantado', 'Cálculo Deslocamento', 'Deslocamento Levantado', 'Proposta enviada',
+    'Fazer Follow 1', 'Follow 1 Feito', 'Fazer Follow 2', 'Follow 2 Feito',
+    'Fazer Follow 3', 'Follow 3 Feito', 'Negociações', 'Ganho', 'Perdido'
+  ];
+  if (validStages.includes(status)) return status;
+
+  return 'Form Orçamento';
+};
+
+// ===== HANDLERS DE PROPOSTA EM TEMPO REAL =====
+const formatTime = (seconds: number): string => {
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}m ${secs}s`;
+};
+
+const handleProposalOpened = (data: ProposalOpenedEvent) => {
+  console.log('[CRM] Proposta aberta:', data.clientName);
+
+  // Adicionar à lista de visualizações ativas
+  activeProposalViews.value.set(data.sessionId, {
+    sessionId: data.sessionId,
+    propostaId: data.propostaId,
+    leadId: data.leadId,
+    clientName: data.clientName,
+    ownerUserName: data.ownerUserName,
+    deviceType: data.deviceType,
+    timeOnPage: 0,
+    scrollDepth: 0,
+    startedAt: new Date(data.timestamp),
+    timestamp: new Date(data.timestamp),
+  });
+
+  // Adicionar notificação
+  proposalNotifications.value.unshift({
+    id: `opened-${data.sessionId}`,
+    type: 'opened',
+    clientName: data.clientName,
+    ownerUserName: data.ownerUserName,
+    leadId: data.leadId,
+    deviceType: data.deviceType,
+    timestamp: new Date(data.timestamp),
+  });
+
+  // Limitar a 20 notificações
+  if (proposalNotifications.value.length > 20) {
+    proposalNotifications.value = proposalNotifications.value.slice(0, 20);
+  }
+};
+
+const handleProposalViewing = (data: ProposalViewingEvent) => {
+  // Atualizar a visualização ativa
+  const existing = activeProposalViews.value.get(data.sessionId);
+  if (existing) {
+    existing.timeOnPage = data.timeOnPage;
+    existing.scrollDepth = data.scrollDepth;
+    existing.timestamp = new Date(data.timestamp);
+  }
+};
+
+const handleProposalClosed = (data: ProposalClosedEvent) => {
+  console.log('[CRM] Proposta fechada:', data.clientName, `(${data.totalTimeOnPage}s)`);
+
+  // Remover da lista de visualizações ativas
+  activeProposalViews.value.delete(data.sessionId);
+
+  // Adicionar notificação de fechamento
+  proposalNotifications.value.unshift({
+    id: `closed-${data.sessionId}`,
+    type: 'closed',
+    clientName: data.clientName,
+    ownerUserName: data.ownerUserName,
+    leadId: data.leadId,
+    timeOnPage: data.totalTimeOnPage,
+    timestamp: new Date(data.timestamp),
+  });
+
+  // Limitar a 20 notificações
+  if (proposalNotifications.value.length > 20) {
+    proposalNotifications.value = proposalNotifications.value.slice(0, 20);
+  }
+};
+
+const dismissNotification = (notificationId: string) => {
+  proposalNotifications.value = proposalNotifications.value.filter(n => n.id !== notificationId);
+};
+
+const openLeadFromNotification = (leadId: string) => {
+  const deal = deals.value.find(d => d.id === leadId);
+  if (deal) {
+    openDealModal(deal);
+  }
+};
+
+const setupProposalSocketListeners = () => {
+  // Conectar ao socket
+  connectSocket();
+
+  // Registrar listeners
+  unsubscribeProposalOpened.value = onProposalOpened(handleProposalOpened);
+  unsubscribeProposalViewing.value = onProposalViewing(handleProposalViewing);
+  unsubscribeProposalClosed.value = onProposalClosed(handleProposalClosed);
+
+  console.log('[CRM] Listeners de proposta configurados');
+};
+
+const cleanupProposalSocketListeners = () => {
+  if (unsubscribeProposalOpened.value) {
+    unsubscribeProposalOpened.value();
+    unsubscribeProposalOpened.value = null;
+  }
+  if (unsubscribeProposalViewing.value) {
+    unsubscribeProposalViewing.value();
+    unsubscribeProposalViewing.value = null;
+  }
+  if (unsubscribeProposalClosed.value) {
+    unsubscribeProposalClosed.value();
+    unsubscribeProposalClosed.value = null;
+  }
+  console.log('[CRM] Listeners de proposta limpos');
 };
 
 onMounted(() => {
   loadSavedStages();
+  preSelectSpecialistFromEmail(); // Pré-selecionar vendedor baseado no email do login
   fetchDeals();
+  setupProposalSocketListeners(); // Configurar listeners de proposta
+});
+
+onUnmounted(() => {
+  cleanupProposalSocketListeners(); // Limpar listeners ao sair
 });
 </script>
 
@@ -2719,6 +3899,7 @@ onMounted(() => {
   flex-direction: column;
   gap: 20px;
   margin-bottom: 24px;
+  overflow: visible;
 }
 
 .crm-header__top {
@@ -2727,19 +3908,26 @@ onMounted(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
+  overflow: visible;
 }
 
 .crm-header__title-row {
   display: flex;
   align-items: center;
   gap: 16px;
+  overflow: visible;
 }
 
 /* Pixel Train */
 .pixel-train {
   width: 80px;
   height: 50px;
+  overflow: visible;
   animation: trainBounce 0.5s ease-in-out infinite alternate;
+}
+
+.pixel-train svg {
+  overflow: visible;
 }
 
 @keyframes trainBounce {
@@ -2998,21 +4186,28 @@ onMounted(() => {
 }
 
 .kpi-card__icon {
-  font-size: 1.5rem;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
+  border: 2px solid #1a1a1a;
+  box-shadow: 2px 2px 0 #1a1a1a;
 }
 
-.kpi-card--deals .kpi-card__icon { background: #dbeafe; }
-.kpi-card--pipeline .kpi-card__icon { background: #dcfce7; }
-.kpi-card--won .kpi-card__icon { background: #fef9c3; }
-.kpi-card--conversion .kpi-card__icon { background: #f3e8ff; }
-.kpi-card--avg .kpi-card__icon { background: #ffedd5; }
-.kpi-card--ticket .kpi-card__icon { background: #fce7f3; }
+.kpi-card__icon svg {
+  width: 22px;
+  height: 22px;
+  color: #1a1a1a;
+}
+
+.kpi-card--deals .kpi-card__icon { background: #93c5fd; }
+.kpi-card--pipeline .kpi-card__icon { background: #86efac; }
+.kpi-card--won .kpi-card__icon { background: var(--yellow); }
+.kpi-card--conversion .kpi-card__icon { background: #c4b5fd; }
+.kpi-card--avg .kpi-card__icon { background: #fdba74; }
+.kpi-card--ticket .kpi-card__icon { background: #f9a8d4; }
 
 .kpi-card__content {
   display: flex;
@@ -3066,17 +4261,34 @@ onMounted(() => {
 .btn--primary {
   background: var(--yellow);
   color: var(--black);
+  border: 2px solid #1a1a1a;
+  border-radius: 8px;
+  box-shadow: 3px 3px 0 #1a1a1a;
+}
+
+.btn--primary:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 #1a1a1a;
 }
 
 .btn--outline {
-  background: transparent;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  color: white;
+  background: #FFFFFF;
+  border: 2px solid #1a1a1a;
+  border-radius: 8px;
+  color: #1a1a1a;
+  box-shadow: 3px 3px 0 #1a1a1a;
 }
 
 .btn--outline:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.5);
+  background: var(--yellow);
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 #1a1a1a;
+}
+
+.btn__icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .btn--ghost {
@@ -3110,6 +4322,236 @@ onMounted(() => {
 /* ============================================
    FILTERS BAR
    ============================================ */
+
+/* =============================================
+   SEARCH BAR WITH AUTOCOMPLETE
+   ============================================= */
+
+.search-bar-container {
+  position: relative;
+  margin-bottom: 20px;
+  width: 100%;
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #FFFFFF;
+  border: 2px solid #1a1a1a;
+  border-radius: 8px;
+  box-shadow: 3px 3px 0 #1a1a1a;
+  transition: all 0.15s ease;
+}
+
+.search-bar--focused {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 #1a1a1a;
+}
+
+.search-bar__saturn {
+  width: 32px;
+  height: auto;
+  flex-shrink: 0;
+  animation: saturnFloat 3s ease-in-out infinite;
+}
+
+@keyframes saturnFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.search-bar__input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 0.95rem;
+  font-family: var(--font-body);
+  color: var(--black);
+  outline: none;
+}
+
+.search-bar__input::placeholder {
+  color: var(--gray-400);
+}
+
+.search-bar__clear {
+  background: var(--gray-200);
+  border: 2px solid var(--black);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+
+.search-bar__clear:hover {
+  background: var(--coral);
+  color: var(--white);
+}
+
+/* Search Suggestions Dropdown */
+.search-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #FFFFFF;
+  border: 2px solid #1a1a1a;
+  border-radius: 8px;
+  box-shadow: 4px 4px 0 #1a1a1a;
+  max-height: 380px;
+  overflow-y: auto;
+  z-index: 1000;
+  animation: dropdownSlide 0.15s ease;
+}
+
+@keyframes dropdownSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.search-suggestions__empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--gray-400);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+}
+
+.search-suggestion {
+  padding: 12px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--gray-200);
+  transition: all 0.1s ease;
+  background: #FFFFFF;
+}
+
+.search-suggestion:last-child {
+  border-bottom: none;
+}
+
+.search-suggestion:hover,
+.search-suggestion--active {
+  background: var(--yellow);
+}
+
+.search-suggestion__main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.search-suggestion__name {
+  font-weight: 600;
+  font-family: var(--font-body);
+  color: var(--black);
+  font-size: 0.9rem;
+}
+
+.search-suggestion__stage {
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 2px solid var(--black);
+  background: var(--gray-100);
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 1px 1px 0 var(--black);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.search-suggestion__stage-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+}
+
+.search-suggestion__stage-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.search-suggestion__detail-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.search-suggestion__stage--success { background: #dcfce7; }
+.search-suggestion__stage--danger { background: #fee2e2; }
+.search-suggestion__stage--indigo { background: #e0e7ff; }
+.search-suggestion__stage--blue { background: #dbeafe; }
+.search-suggestion__stage--sky { background: #e0f2fe; }
+.search-suggestion__stage--cyan { background: #cffafe; }
+.search-suggestion__stage--teal { background: #ccfbf1; }
+.search-suggestion__stage--emerald { background: #d1fae5; }
+.search-suggestion__stage--green { background: #dcfce7; }
+.search-suggestion__stage--lime { background: #ecfccb; }
+.search-suggestion__stage--yellow { background: #fef9c3; }
+.search-suggestion__stage--amber { background: #fef3c7; }
+.search-suggestion__stage--orange { background: #ffedd5; }
+.search-suggestion__stage--orange-light { background: #fed7aa; }
+.search-suggestion__stage--peach { background: #fed7aa; }
+.search-suggestion__stage--sand { background: #fef08a; }
+.search-suggestion__stage--gold { background: #fef3c7; }
+
+.search-suggestion__details {
+  display: flex;
+  gap: 12px;
+  font-size: 0.8rem;
+  color: var(--gray-600);
+  flex-wrap: wrap;
+}
+
+.search-suggestion__phone,
+.search-suggestion__email {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.search-suggestion__location {
+  font-size: 0.75rem;
+  color: var(--gray-400);
+  margin-top: 4px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .search-bar-container {
+    max-width: 100%;
+  }
+
+  .search-suggestion__main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .search-suggestion__details {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
 
 .filters-bar {
   display: flex;
@@ -3171,6 +4613,36 @@ onMounted(() => {
 /* ============================================
    PIPELINE
    ============================================ */
+
+/* Pipeline Settings Column */
+.pipeline-settings-column {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 50px;
+  max-width: 50px;
+  padding: 16px 8px;
+  background: var(--gray-100);
+  border: 2px dashed var(--gray-400);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: var(--gray-400);
+  flex-shrink: 0;
+}
+
+.pipeline-settings-column:hover {
+  background: var(--yellow);
+  border-color: #1a1a1a;
+  border-style: solid;
+  color: #1a1a1a;
+  box-shadow: 2px 2px 0 #1a1a1a;
+}
+
+.pipeline-settings-column svg {
+  width: 24px;
+  height: 24px;
+}
 
 .pipeline {
   display: flex;
@@ -3278,8 +4750,18 @@ onMounted(() => {
   line-height: 1.2;
 }
 
-.pipeline-column__emoji {
-  font-size: 1rem;
+.pipeline-column__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+.pipeline-column__icon svg {
+  width: 16px;
+  height: 16px;
+  color: #1a1a1a;
 }
 
 .pipeline-column__meta {
@@ -3332,8 +4814,15 @@ onMounted(() => {
 }
 
 .pipeline-column__empty-icon {
-  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   opacity: 0.4;
+}
+
+.pipeline-column__empty-icon svg {
+  width: 24px;
+  height: 24px;
 }
 
 .pipeline-column__add {
@@ -3441,6 +4930,29 @@ onMounted(() => {
   color: white;
 }
 
+.deal-card__specialist {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.deal-card__specialist-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.deal-card__specialist-name {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--gray-600);
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .deal-card__days {
   font-size: 0.7rem;
   font-weight: 600;
@@ -3472,20 +4984,48 @@ onMounted(() => {
 .deal-action {
   width: 28px;
   height: 28px;
-  border: var(--border);
-  border-radius: var(--radius-sm);
+  border: 2px solid #1a1a1a;
+  border-radius: 6px;
   background: var(--white);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.9rem;
   transition: all 0.1s ease;
+  box-shadow: 2px 2px 0 #1a1a1a;
+}
+
+.deal-action svg {
+  width: 14px;
+  height: 14px;
+  color: #1a1a1a;
 }
 
 .deal-action:hover {
   background: var(--yellow);
-  transform: scale(1.1);
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 #1a1a1a;
+}
+
+.deal-action:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #1a1a1a;
+}
+
+.deal-action--whatsapp:hover {
+  background: #25D366;
+}
+
+.deal-action--whatsapp:hover svg {
+  color: white;
+}
+
+.deal-action--link:hover {
+  background: #3b82f6;
+}
+
+.deal-action--link:hover svg {
+  color: white;
 }
 
 /* Card Transitions */
@@ -3533,10 +5073,10 @@ onMounted(() => {
 }
 
 .modal {
-  background: rgba(26, 26, 26, 0.95);
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+  background: #FFFFFF;
+  border: 3px solid #1a1a1a;
+  border-radius: 12px;
+  box-shadow: 8px 8px 0 #1a1a1a;
   width: 100%;
   max-width: 500px;
   max-height: 90vh;
@@ -3544,7 +5084,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   animation: modalAppear 0.2s ease;
-  color: white;
+  color: #1a1a1a;
 }
 
 @keyframes modalAppear {
@@ -3562,47 +5102,289 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(201, 169, 98, 0.2);
+  padding: 16px 20px;
+  border-bottom: 3px solid #1a1a1a;
+  background: var(--yellow);
+}
+
+.modal__header-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .modal__title {
   font-family: var(--font-display);
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 700;
   margin: 0;
-  color: white;
+  color: #1a1a1a;
+}
+
+.modal__badges {
+  display: flex;
+  gap: 6px;
+}
+
+.modal__title-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin-right: 8px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.modal__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .modal__close {
   width: 32px;
   height: 32px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  border: 2px solid #1a1a1a;
+  border-radius: 6px;
+  background: #FFFFFF;
+  color: #1a1a1a;
   cursor: pointer;
-  font-size: 1rem;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.1s ease;
+  box-shadow: 2px 2px 0 #1a1a1a;
 }
 
 .modal__close:hover {
-  background: var(--coral);
-  border-color: var(--coral);
+  background: #ef4444;
   color: white;
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 #1a1a1a;
+}
+
+.modal__close:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #1a1a1a;
+}
+
+.modal__close svg {
+  width: 16px;
+  height: 16px;
 }
 
 .modal__body {
-  padding: 24px;
+  padding: 20px;
   overflow-y: auto;
-  color: white;
+  color: #1a1a1a;
+  background: #FFFFFF;
 }
 
 .modal__body--scroll {
-  max-height: calc(90vh - 120px);
+  max-height: calc(90vh - 280px);
   overflow-y: auto;
+}
+
+/* Pipeline Progress Bar - Neobrutalist */
+.pipeline-progress {
+  padding: 24px 20px 16px;
+  background: #f5f5f5;
+  border-bottom: 3px solid #1a1a1a;
+}
+
+.pipeline-progress__track {
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  padding: 32px 4px 8px;
+  gap: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #1a1a1a #e5e5e5;
+}
+
+.pipeline-progress__track::-webkit-scrollbar {
+  height: 6px;
+}
+
+.pipeline-progress__track::-webkit-scrollbar-track {
+  background: #e5e5e5;
+  border-radius: 3px;
+}
+
+.pipeline-progress__track::-webkit-scrollbar-thumb {
+  background: #1a1a1a;
+  border-radius: 3px;
+}
+
+.pipeline-progress__connector {
+  width: 20px;
+  height: 4px;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+  border-radius: 0;
+}
+
+.pipeline-progress__connector--completed {
+  background: #22c55e;
+}
+
+.pipeline-progress__connector--pending {
+  background: #d4d4d4;
+}
+
+.pipeline-progress__stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  padding: 0 2px;
+}
+
+.pipeline-progress__stage:hover {
+  transform: translateY(-2px);
+}
+
+.pipeline-progress__stage:hover .pipeline-progress__days {
+  box-shadow: 3px 3px 0 #1a1a1a;
+}
+
+.pipeline-progress__days {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: var(--font-display);
+  border: 2px solid #1a1a1a;
+  transition: all 0.15s ease;
+  background: #FFFFFF;
+  box-shadow: 2px 2px 0 #1a1a1a;
+}
+
+.pipeline-progress__stage--completed .pipeline-progress__days {
+  background: #22c55e;
+  color: #FFFFFF;
+}
+
+.pipeline-progress__stage--current .pipeline-progress__days {
+  background: var(--yellow);
+  color: #1a1a1a;
+  box-shadow: 3px 3px 0 #1a1a1a;
+}
+
+.pipeline-progress__stage--pending .pipeline-progress__days {
+  background: #FFFFFF;
+  color: #a3a3a3;
+  border-color: #d4d4d4;
+  box-shadow: 2px 2px 0 #d4d4d4;
+}
+
+.pipeline-progress__stage-name {
+  font-size: 0.5rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 6px;
+  color: #737373;
+  white-space: nowrap;
+  max-width: 50px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.pipeline-progress__stage--current .pipeline-progress__stage-name {
+  color: #1a1a1a;
+  font-weight: 700;
+}
+
+.pipeline-progress__stage--completed .pipeline-progress__stage-name {
+  color: #22c55e;
+}
+
+.pipeline-progress__train {
+  position: absolute;
+  top: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 28px;
+  z-index: 10;
+  animation: pipelineTrainBounce 0.6s ease-in-out infinite alternate;
+}
+
+.pipeline-progress__train svg {
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes pipelineTrainBounce {
+  from { transform: translateX(-50%) translateY(0); }
+  to { transform: translateX(-50%) translateY(-4px); }
+}
+
+.pipeline-progress__final {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  justify-content: center;
+}
+
+.pipeline-progress__final-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 2px solid #1a1a1a;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: #FFFFFF;
+  box-shadow: 2px 2px 0 #1a1a1a;
+}
+
+.pipeline-progress__final-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 #1a1a1a;
+}
+
+.pipeline-progress__final-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #1a1a1a;
+}
+
+.pipeline-progress__final-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.pipeline-progress__final-btn--ganho {
+  color: #22c55e;
+}
+
+.pipeline-progress__final-btn--ganho:hover,
+.pipeline-progress__final-btn--ganho.pipeline-progress__final-btn--active {
+  background: #22c55e;
+  color: #FFFFFF;
+}
+
+.pipeline-progress__final-btn--perdido {
+  color: #ef4444;
+}
+
+.pipeline-progress__final-btn--perdido:hover,
+.pipeline-progress__final-btn--perdido.pipeline-progress__final-btn--active {
+  background: #ef4444;
+  color: #FFFFFF;
 }
 
 /* Large Modal Variant */
@@ -3688,6 +5470,24 @@ onMounted(() => {
   margin-bottom: 8px;
   color: #3b82f6;
   font-weight: 600;
+}
+
+.html-link-box__header span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.html-link-box__icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.btn__icon--small {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
 }
 
 .html-link-box__url {
@@ -3778,14 +5578,15 @@ onMounted(() => {
 .detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 12px;
 }
 
 .detail-item {
   padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #FFFFFF;
+  border-radius: 8px;
+  border: 2px solid #1a1a1a;
+  box-shadow: 2px 2px 0 #1a1a1a;
 }
 
 .detail-item--full {
@@ -3794,34 +5595,34 @@ onMounted(() => {
 
 .detail-label {
   display: block;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.7rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgba(255, 255, 255, 0.5);
+  color: #737373;
   margin-bottom: 4px;
 }
 
 .detail-value {
   font-weight: 600;
-  color: white;
+  color: #1a1a1a;
 }
 
 .detail-value--large {
   font-family: var(--font-display);
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   font-weight: 800;
-  color: #4ade80;
+  color: #22c55e;
 }
 
 .detail-value--link {
   cursor: pointer;
-  color: #60a5fa;
+  color: #3b82f6;
   transition: color 0.15s ease;
 }
 
 .detail-value--link:hover {
-  color: #93c5fd;
+  color: #1d4ed8;
   text-decoration: underline;
 }
 
@@ -3830,28 +5631,30 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: rgba(var(--stage-color), 0.2);
-  border-radius: var(--radius-sm);
-  font-size: 0.9rem;
+  background: var(--yellow);
+  border-radius: 6px;
+  border: 2px solid #1a1a1a;
+  font-size: 0.85rem;
+  font-weight: 700;
 }
 
 .detail-value--metric {
   font-family: var(--font-display);
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
-  color: #c9a962;
+  color: #1a1a1a;
 }
 
 .detail-value--mono {
   font-family: monospace;
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+  color: #525252;
 }
 
 .detail-value--text {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   line-height: 1.5;
-  color: rgba(255, 255, 255, 0.8);
+  color: #404040;
 }
 
 /* Inline Editing */
@@ -3859,15 +5662,15 @@ onMounted(() => {
   cursor: pointer;
   padding: 4px 8px;
   margin: -4px -8px;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   transition: all 0.15s ease;
-  border: 1px solid transparent;
+  border: 2px solid transparent;
   position: relative;
 }
 
 .detail-value--editable:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(201, 169, 98, 0.3);
+  background: #fef9c3;
+  border-color: #1a1a1a;
 }
 
 .detail-value--editable:hover::after {
@@ -3885,28 +5688,29 @@ onMounted(() => {
 .inline-edit-textarea {
   width: 100%;
   padding: 8px 12px;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 600;
-  color: white;
-  background: rgba(0, 0, 0, 0.4);
-  border: 2px solid #c9a962;
-  border-radius: var(--radius-sm);
+  color: #1a1a1a;
+  background: #FFFFFF;
+  border: 2px solid #1a1a1a;
+  border-radius: 6px;
   outline: none;
-  box-shadow: 0 0 0 3px rgba(201, 169, 98, 0.2);
+  box-shadow: 2px 2px 0 #1a1a1a;
   transition: all 0.15s ease;
 }
 
 .inline-edit-input:focus,
 .inline-edit-select:focus,
 .inline-edit-textarea:focus {
-  border-color: #e0c080;
-  box-shadow: 0 0 0 4px rgba(201, 169, 98, 0.3);
+  border-color: var(--yellow);
+  box-shadow: 3px 3px 0 #1a1a1a;
+  background: #fef9c3;
 }
 
 .inline-edit-input--large {
-  font-size: 1.25rem;
+  font-size: 1.2rem;
   font-weight: 800;
-  color: #4ade80;
+  color: #22c55e;
 }
 
 .inline-edit-input--full {
@@ -3915,7 +5719,7 @@ onMounted(() => {
 
 .inline-edit-select {
   appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c9a962' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a1a1a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
   background-repeat: no-repeat;
   background-position: right 12px center;
   background-size: 16px;
@@ -3923,8 +5727,8 @@ onMounted(() => {
 }
 
 .inline-edit-select option {
-  background: #1a1a1a;
-  color: white;
+  background: #FFFFFF;
+  color: #1a1a1a;
   padding: 8px;
 }
 
@@ -3950,7 +5754,7 @@ onMounted(() => {
 
 /* Detail Sections */
 .detail-section {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .detail-section:last-child {
@@ -3959,14 +5763,23 @@ onMounted(() => {
 
 .detail-section__title {
   font-family: var(--font-display);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: #c9a962;
+  color: #1a1a1a;
   margin: 0 0 12px 0;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(201, 169, 98, 0.3);
+  border-bottom: 2px solid #1a1a1a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-section__icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .detail-section--meta {
@@ -3974,15 +5787,15 @@ onMounted(() => {
 }
 
 .detail-section--meta .detail-section__title {
-  color: rgba(255, 255, 255, 0.5);
-  border-bottom-color: rgba(255, 255, 255, 0.1);
+  color: #737373;
+  border-bottom-color: #d4d4d4;
 }
 
 .detail-grid--highlight {
-  background: rgba(201, 169, 98, 0.1);
-  border-radius: var(--radius-md);
+  background: #f5f5f5;
+  border-radius: 8px;
   padding: 16px;
-  border: 1px solid rgba(201, 169, 98, 0.2);
+  border: 2px solid #1a1a1a;
 }
 
 .detail-grid--small .detail-item {
@@ -3990,8 +5803,8 @@ onMounted(() => {
 }
 
 .detail-item--highlight {
-  background: rgba(74, 222, 128, 0.1);
-  border-color: rgba(74, 222, 128, 0.2);
+  background: #dcfce7;
+  border-color: #22c55e;
 }
 
 /* Modal Header Enhanced */
@@ -4025,15 +5838,17 @@ onMounted(() => {
 }
 
 .badge--tipo {
-  background: rgba(59, 130, 246, 0.2);
-  color: #93c5fd;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 2px solid #1a1a1a;
+  box-shadow: 1px 1px 0 #1a1a1a;
 }
 
 .badge--projeto {
-  background: rgba(168, 85, 247, 0.2);
-  color: #d8b4fe;
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  background: #f3e8ff;
+  color: #7c3aed;
+  border: 2px solid #1a1a1a;
+  box-shadow: 1px 1px 0 #1a1a1a;
 }
 
 .btn--icon {
@@ -4086,6 +5901,12 @@ onMounted(() => {
   background: rgba(201, 169, 98, 0.15);
   color: #c9a962;
   border: 1px solid rgba(201, 169, 98, 0.3);
+}
+
+.deal-card__tag-icon {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
 }
 
 .deal-card__location {
@@ -4464,5 +6285,523 @@ onMounted(() => {
 .btn--danger:hover {
   background: #fee2e2;
   color: #dc2626;
+}
+
+/* ===== PROPOSAL NOTIFICATIONS ===== */
+.proposal-notifications {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 320px;
+  font-family: var(--font-body);
+}
+
+.proposal-notifications__live,
+.proposal-notifications__history {
+  background: #fff;
+  border: 2px solid #1a1a1a;
+  border-radius: 12px;
+  box-shadow: 4px 4px 0 #1a1a1a;
+  overflow: hidden;
+}
+
+.proposal-notifications__live {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  animation: notificationPulse 2s ease-in-out infinite;
+}
+
+@keyframes notificationPulse {
+  0%, 100% { box-shadow: 4px 4px 0 #1a1a1a; }
+  50% { box-shadow: 6px 6px 0 #1a1a1a, 0 0 20px rgba(251, 146, 60, 0.3); }
+}
+
+.proposal-notifications__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.05);
+  border-bottom: 2px solid #1a1a1a;
+}
+
+.proposal-notifications__icon {
+  font-size: 16px;
+}
+
+.proposal-notifications__title {
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #1a1a1a;
+}
+
+.proposal-notifications__count {
+  margin-left: auto;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.proposal-notifications__list {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.proposal-notifications__list--compact {
+  max-height: 180px;
+}
+
+.proposal-notification {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 2px solid #1a1a1a;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.proposal-notification:hover {
+  transform: translateX(-2px);
+  box-shadow: 2px 2px 0 #1a1a1a;
+}
+
+.proposal-notification--live {
+  background: #fff;
+  border-color: #f97316;
+}
+
+.proposal-notification--closed {
+  opacity: 0.7;
+}
+
+.proposal-notification__avatar {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+  border: 2px solid #1a1a1a;
+}
+
+.proposal-notification__type {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.proposal-notification__content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.proposal-notification__name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #1a1a1a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.proposal-notification__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #666;
+}
+
+.proposal-notification__time-live {
+  font-weight: 700;
+  color: #f97316;
+  background: #ffedd5;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.proposal-notification__scroll {
+  background: #e0e7ff;
+  color: #4338ca;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.proposal-notification__pulse {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  background: #22c55e;
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.proposal-notification__dismiss {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: #e5e5e5;
+  color: #666;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.proposal-notification:hover .proposal-notification__dismiss {
+  opacity: 1;
+}
+
+.proposal-notification__dismiss:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+/* ===== ANALYTICS DE PROPOSTA ===== */
+.analytics-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.analytics-stat {
+  background: #f8fafc;
+  border: 2px solid #1a1a1a;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  box-shadow: 2px 2px 0 #1a1a1a;
+}
+
+.analytics-stat__value {
+  display: block;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #1a1a1a;
+  font-family: var(--font-display);
+}
+
+.analytics-stat__label {
+  display: block;
+  font-size: 10px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+.analytics-devices {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #f0f9ff;
+  border-radius: 6px;
+  border: 1px solid #bae6fd;
+}
+
+.analytics-device {
+  font-size: 13px;
+  color: #0369a1;
+}
+
+.analytics-views {
+  margin-bottom: 12px;
+}
+
+.analytics-views__header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.analytics-views__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.analytics-view-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.analytics-view-item--bot {
+  opacity: 0.5;
+  background: #fef2f2;
+}
+
+.analytics-view-item__device {
+  font-size: 14px;
+}
+
+.analytics-view-item__time {
+  flex: 1;
+  color: #666;
+}
+
+.analytics-view-item__duration {
+  font-weight: 600;
+  color: #f97316;
+  background: #ffedd5;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.analytics-view-item__scroll {
+  font-weight: 500;
+  color: #6366f1;
+  background: #eef2ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.analytics-view-item--has-recording {
+  cursor: pointer;
+  border: 1px solid rgba(201, 169, 98, 0.2);
+  transition: all 0.15s ease;
+}
+
+.analytics-view-item--has-recording:hover {
+  background: rgba(201, 169, 98, 0.1);
+  border-color: rgba(201, 169, 98, 0.4);
+}
+
+.analytics-view-item__play {
+  font-size: 14px;
+  opacity: 0.7;
+  transition: all 0.15s ease;
+  margin-left: auto;
+}
+
+.analytics-view-item--has-recording:hover .analytics-view-item__play {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.analytics-dates {
+  display: flex;
+  gap: 16px;
+  padding: 8px 12px;
+  background: #f5f5f5;
+  border-radius: 6px;
+}
+
+.analytics-date {
+  font-size: 11px;
+  color: #666;
+}
+
+/* ===== SESSION RECORDINGS ===== */
+.recordings-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(201, 169, 98, 0.1);
+}
+
+.recordings-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c9a962;
+  margin-bottom: 12px;
+}
+
+.recordings-icon {
+  width: 16px;
+  height: 16px;
+  stroke: #c9a962;
+}
+
+.recordings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recording-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(201, 169, 98, 0.05);
+  border: 1px solid rgba(201, 169, 98, 0.1);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.recording-item:hover {
+  background: rgba(201, 169, 98, 0.1);
+  border-color: rgba(201, 169, 98, 0.3);
+}
+
+.recording-device {
+  font-size: 16px;
+}
+
+.recording-date {
+  font-size: 12px;
+  color: #888;
+  flex: 1;
+}
+
+.recording-duration {
+  font-size: 12px;
+  font-weight: 600;
+  color: #c9a962;
+}
+
+.recording-events {
+  font-size: 11px;
+  color: #666;
+}
+
+.recording-play {
+  font-size: 12px;
+  color: #22c55e;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.recording-item:hover .recording-play {
+  opacity: 1;
+}
+
+/* ===== REPLAY MODAL ===== */
+.modal-overlay--dark {
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.modal--replay {
+  width: 90vw;
+  max-width: 900px;
+  max-height: 90vh;
+}
+
+.modal--replay .modal__header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.replay-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  margin-right: 24px;
+}
+
+.replay-device {
+  font-size: 13px;
+  color: #888;
+}
+
+.replay-duration {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c9a962;
+}
+
+.modal__body--replay {
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  background: #0a0a0a;
+}
+
+.replay-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #888;
+}
+
+.replay-loading__spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #333;
+  border-top-color: #c9a962;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.replay-player-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+#rrweb-player {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.replay-empty {
+  color: #666;
+  font-size: 14px;
 }
 </style>

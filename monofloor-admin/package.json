@@ -13,7 +13,8 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
-    "propostas": "node propostas-server.js"
+    "propostas": "node propostas-server.js",
+    "job:cleanup-recordings": "tsx src/jobs/cleanup-recordings.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

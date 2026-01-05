@@ -2,10 +2,54 @@ import express from 'express';
 import { generateProposal, compressPDF } from '../services/google-slides.service';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
+import zlib from 'zlib';
+import { promisify } from 'util';
 import { UAParser } from 'ua-parser-js';
+import {
+  emitProposalOpened,
+  emitProposalViewing,
+  emitProposalClosed
+} from '../services/socket.service';
+
+const gzip = promisify(zlib.gzip);
+const gunzip = promisify(zlib.gunzip);
 
 const router = express.Router();
 const prisma = new PrismaClient();
+
+// Cache para rastrear sessões ativas (para detectar quando fechar)
+const activeSessions = new Map<string, {
+  propostaId: string;
+  leadId: string;
+  clientName: string;
+  ownerUserName: string;
+  lastUpdate: number;
+  timeOnPage: number;
+  scrollDepth: number;
+}>();
+
+// Limpar sessões inativas a cada 2 minutos
+setInterval(() => {
+  const now = Date.now();
+  const timeout = 60000; // 60 segundos sem update = fechou
+
+  for (const [sessionId, session] of activeSessions.entries()) {
+    if (now - session.lastUpdate > timeout) {
+      // Emitir evento de fechamento
+      emitProposalClosed({
+        propostaId: session.propostaId,
+        leadId: session.leadId,
+        clientName: session.clientName,
+        ownerUserName: session.ownerUserName,
+        sessionId,
+        totalTimeOnPage: session.timeOnPage,
+        maxScrollDepth: session.scrollDepth,
+        timestamp: new Date()
+      });
+      activeSessions.delete(sessionId);
+    }
+  }
+}, 120000); // A cada 2 minutos
 
 // Gerar slug amigável para a proposta (ex: 2026/Proposta_Alicia)
 function generateFriendlySlug(clienteName: string): string {
@@ -250,7 +294,7 @@ router.post('/generate-html', async (req, res) => {
 
 /**
  * POST /api/proposals/track
- * Registra evento de visualização
+ * Registra evento de visualização e emite notificações em tempo real
  */
 router.post('/track', async (req, res) => {
   try {
@@ -260,9 +304,18 @@ router.post('/track', async (req, res) => {
       return res.status(400).json({ error: 'slug é obrigatório' });
     }
 
-    // Buscar proposta pelo slug
+    // Buscar proposta com dados do lead
     const proposta = await prisma.proposta.findUnique({
-      where: { htmlSlug: slug }
+      where: { htmlSlug: slug },
+      include: {
+        comercial: {
+          select: {
+            id: true,
+            personName: true,
+            ownerUserName: true
+          }
+        }
+      }
     });
 
     if (!proposta) {
@@ -273,9 +326,16 @@ router.post('/track', async (req, res) => {
     const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0] ||
                req.socket.remoteAddress ||
                'unknown';
+    const deviceType = getDeviceType(userAgent);
+    const clientName = proposta.comercial?.personName || 'Cliente';
+    const ownerUserName = proposta.comercial?.ownerUserName || '';
+    const leadId = proposta.comercial?.id || '';
 
-    // Se temos sessionId e timeOnPage, é atualização
+    // Se temos sessionId e timeOnPage, é atualização (viewing)
     if (sessionId && (timeOnPage !== undefined || scrollDepth !== undefined)) {
+      const time = timeOnPage !== undefined ? parseInt(timeOnPage) : 0;
+      const scroll = scrollDepth !== undefined ? parseInt(scrollDepth) : 0;
+
       // Atualizar registro existente
       const existingView = await prisma.propostaView.findFirst({
         where: { sessionId },
@@ -286,23 +346,71 @@ router.post('/track', async (req, res) => {
         await prisma.propostaView.update({
           where: { id: existingView.id },
           data: {
-            timeOnPage: timeOnPage !== undefined ? parseInt(timeOnPage) : existingView.timeOnPage,
-            scrollDepth: scrollDepth !== undefined ? parseInt(scrollDepth) : existingView.scrollDepth
+            timeOnPage: time,
+            scrollDepth: scroll
           }
         });
+
+        // Atualizar sessão ativa e emitir evento de viewing
+        if (activeSessions.has(sessionId)) {
+          const session = activeSessions.get(sessionId)!;
+          session.lastUpdate = Date.now();
+          session.timeOnPage = time;
+          session.scrollDepth = scroll;
+
+          // Emitir evento de viewing a cada 10 segundos
+          if (time % 10 === 0) {
+            emitProposalViewing({
+              propostaId: proposta.id,
+              leadId,
+              clientName,
+              ownerUserName,
+              sessionId,
+              timeOnPage: time,
+              scrollDepth: scroll,
+              timestamp: new Date()
+            });
+          }
+        }
+
         return res.json({ success: true, updated: true });
       }
     }
 
-    // Criar novo registro de visualização
+    // Criar novo registro de visualização (proposta foi aberta)
     const newSessionId = sessionId || crypto.randomBytes(16).toString('hex');
+
+    // Ignorar bots para notificações
+    if (!isBot(userAgent)) {
+      // Adicionar à lista de sessões ativas
+      activeSessions.set(newSessionId, {
+        propostaId: proposta.id,
+        leadId,
+        clientName,
+        ownerUserName,
+        lastUpdate: Date.now(),
+        timeOnPage: 0,
+        scrollDepth: 0
+      });
+
+      // Emitir evento de proposta aberta
+      emitProposalOpened({
+        propostaId: proposta.id,
+        leadId,
+        clientName,
+        ownerUserName,
+        sessionId: newSessionId,
+        deviceType,
+        timestamp: new Date()
+      });
+    }
 
     await prisma.propostaView.create({
       data: {
         propostaId: proposta.id,
         ip,
         userAgent,
-        deviceType: getDeviceType(userAgent),
+        deviceType,
         isBot: isBot(userAgent),
         sessionId: newSessionId,
         timeOnPage: timeOnPage !== undefined ? parseInt(timeOnPage) : 0,
@@ -399,6 +507,200 @@ router.get('/:id/analytics', async (req, res) => {
   } catch (error: any) {
     console.error('❌ Erro ao buscar analytics:', error);
     res.status(500).json({ error: 'Erro ao buscar analytics' });
+  }
+});
+
+/**
+ * POST /api/proposals/recording
+ * Salva gravação de sessão (rrweb events) - comprimido
+ */
+router.post('/recording', async (req, res) => {
+  try {
+    const {
+      slug,
+      sessionId,
+      events, // Array de eventos rrweb
+      deviceType,
+      screenWidth,
+      screenHeight,
+      duration
+    } = req.body;
+
+    if (!slug || !sessionId || !events || !Array.isArray(events)) {
+      return res.status(400).json({ error: 'Dados incompletos' });
+    }
+
+    // Buscar proposta pelo slug
+    const proposta = await prisma.proposta.findUnique({
+      where: { htmlSlug: slug }
+    });
+
+    if (!proposta) {
+      return res.status(404).json({ error: 'Proposta não encontrada' });
+    }
+
+    // Comprimir eventos com gzip
+    const eventsJson = JSON.stringify(events);
+    const compressedBuffer = await gzip(eventsJson);
+    const compressedBase64 = compressedBuffer.toString('base64');
+
+    // Data de expiração: 1 semana
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    // Verificar se já existe recording para esta sessão
+    const existingRecording = await prisma.sessionRecording.findFirst({
+      where: { sessionId }
+    });
+
+    if (existingRecording) {
+      // Atualizar recording existente (append events)
+      // Descomprimir eventos existentes
+      const existingBuffer = Buffer.from(existingRecording.eventsData, 'base64');
+      const existingJson = (await gunzip(existingBuffer)).toString('utf-8');
+      const existingEvents = JSON.parse(existingJson);
+
+      // Combinar eventos
+      const allEvents = [...existingEvents, ...events];
+
+      // Recomprimir
+      const newCompressedBuffer = await gzip(JSON.stringify(allEvents));
+      const newCompressedBase64 = newCompressedBuffer.toString('base64');
+
+      await prisma.sessionRecording.update({
+        where: { id: existingRecording.id },
+        data: {
+          eventsData: newCompressedBase64,
+          eventsCount: allEvents.length,
+          endedAt: new Date(),
+          duration: duration || Math.round((Date.now() - existingRecording.startedAt.getTime()) / 1000)
+        }
+      });
+
+      res.json({ success: true, updated: true, eventsCount: allEvents.length });
+    } else {
+      // Criar novo recording
+      await prisma.sessionRecording.create({
+        data: {
+          propostaId: proposta.id,
+          sessionId,
+          eventsData: compressedBase64,
+          eventsCount: events.length,
+          deviceType,
+          screenWidth: screenWidth ? parseInt(screenWidth) : null,
+          screenHeight: screenHeight ? parseInt(screenHeight) : null,
+          duration: duration || 0,
+          expiresAt
+        }
+      });
+
+      res.json({ success: true, created: true, eventsCount: events.length });
+    }
+
+  } catch (error: any) {
+    console.error('❌ Erro ao salvar recording:', error);
+    res.status(500).json({ error: 'Erro ao salvar recording' });
+  }
+});
+
+/**
+ * GET /api/proposals/:id/recordings
+ * Retorna lista de gravações de sessão da proposta
+ */
+router.get('/:id/recordings', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const recordings = await prisma.sessionRecording.findMany({
+      where: {
+        propostaId: id,
+        expiresAt: { gt: new Date() } // Apenas não expirados
+      },
+      select: {
+        id: true,
+        sessionId: true,
+        startedAt: true,
+        endedAt: true,
+        duration: true,
+        eventsCount: true,
+        deviceType: true,
+        screenWidth: true,
+        screenHeight: true
+      },
+      orderBy: { startedAt: 'desc' }
+    });
+
+    res.json({ recordings });
+
+  } catch (error: any) {
+    console.error('❌ Erro ao buscar recordings:', error);
+    res.status(500).json({ error: 'Erro ao buscar recordings' });
+  }
+});
+
+/**
+ * GET /api/proposals/recording/:recordingId
+ * Retorna uma gravação específica com eventos descomprimidos
+ */
+router.get('/recording/:recordingId', async (req, res) => {
+  try {
+    const { recordingId } = req.params;
+
+    const recording = await prisma.sessionRecording.findUnique({
+      where: { id: recordingId }
+    });
+
+    if (!recording) {
+      return res.status(404).json({ error: 'Gravação não encontrada' });
+    }
+
+    // Verificar se expirou
+    if (recording.expiresAt < new Date()) {
+      return res.status(410).json({ error: 'Gravação expirada' });
+    }
+
+    // Descomprimir eventos
+    const compressedBuffer = Buffer.from(recording.eventsData, 'base64');
+    const eventsJson = (await gunzip(compressedBuffer)).toString('utf-8');
+    const events = JSON.parse(eventsJson);
+
+    res.json({
+      id: recording.id,
+      sessionId: recording.sessionId,
+      startedAt: recording.startedAt,
+      endedAt: recording.endedAt,
+      duration: recording.duration,
+      eventsCount: recording.eventsCount,
+      deviceType: recording.deviceType,
+      screenWidth: recording.screenWidth,
+      screenHeight: recording.screenHeight,
+      events
+    });
+
+  } catch (error: any) {
+    console.error('❌ Erro ao buscar recording:', error);
+    res.status(500).json({ error: 'Erro ao buscar recording' });
+  }
+});
+
+/**
+ * DELETE /api/proposals/recordings/cleanup
+ * Remove gravações expiradas (chamado por cron job)
+ */
+router.delete('/recordings/cleanup', async (req, res) => {
+  try {
+    const result = await prisma.sessionRecording.deleteMany({
+      where: {
+        expiresAt: { lt: new Date() }
+      }
+    });
+
+    console.log(`🧹 Limpeza: ${result.count} gravações expiradas removidas`);
+    res.json({ success: true, deleted: result.count });
+
+  } catch (error: any) {
+    console.error('❌ Erro ao limpar recordings:', error);
+    res.status(500).json({ error: 'Erro ao limpar recordings' });
   }
 });
 
@@ -748,6 +1050,86 @@ function generateProposalHTML(data: any): string {
           body: JSON.stringify({ slug, sessionId, timeOnPage, scrollDepth: maxScroll })
         }).catch(console.error);
       }, 30000);
+
+      // ===== GRAVAÇÃO DE SESSÃO (rrweb) =====
+      // Carregar rrweb dinamicamente
+      var rrwebScript = document.createElement('script');
+      rrwebScript.src = 'https://cdn.jsdelivr.net/npm/rrweb@2.0.0-alpha.11/dist/rrweb.min.js';
+      rrwebScript.onload = function() {
+        if (typeof rrweb === 'undefined') return;
+
+        var recordedEvents = [];
+        var lastSentIndex = 0;
+        var deviceType = /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+
+        // Iniciar gravação
+        rrweb.record({
+          emit: function(event) {
+            recordedEvents.push(event);
+          },
+          // Configurações de otimização para reduzir tamanho
+          sampling: {
+            mousemove: 50, // Amostragem de mouse a cada 50ms
+            mouseInteraction: true,
+            scroll: 150, // Amostragem de scroll a cada 150ms
+            input: 'last' // Apenas último valor de input
+          },
+          // Mascarar inputs sensíveis
+          maskAllInputs: true,
+          // Não gravar iframes externos
+          recordCrossOriginIframes: false
+        });
+
+        // Enviar eventos a cada 10 segundos (batch)
+        setInterval(function() {
+          if (!sessionId || recordedEvents.length <= lastSentIndex) return;
+
+          var newEvents = recordedEvents.slice(lastSentIndex);
+          if (newEvents.length === 0) return;
+
+          var timeOnPage = Math.round((Date.now() - startTime) / 1000);
+
+          fetch(apiBase + '/api/proposals/recording', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              slug: slug,
+              sessionId: sessionId,
+              events: newEvents,
+              deviceType: deviceType,
+              screenWidth: window.innerWidth,
+              screenHeight: window.innerHeight,
+              duration: timeOnPage
+            })
+          })
+          .then(function() {
+            lastSentIndex = recordedEvents.length;
+          })
+          .catch(console.error);
+        }, 10000);
+
+        // Enviar eventos restantes ao sair
+        function sendRemainingEvents() {
+          if (!sessionId || recordedEvents.length <= lastSentIndex) return;
+          var newEvents = recordedEvents.slice(lastSentIndex);
+          if (newEvents.length === 0) return;
+
+          var timeOnPage = Math.round((Date.now() - startTime) / 1000);
+          navigator.sendBeacon(apiBase + '/api/proposals/recording', JSON.stringify({
+            slug: slug,
+            sessionId: sessionId,
+            events: newEvents,
+            deviceType: deviceType,
+            screenWidth: window.innerWidth,
+            screenHeight: window.innerHeight,
+            duration: timeOnPage
+          }));
+        }
+
+        window.addEventListener('beforeunload', sendRemainingEvents);
+        window.addEventListener('pagehide', sendRemainingEvents);
+      };
+      document.head.appendChild(rrwebScript);
     })();
   </script>
 </body>
