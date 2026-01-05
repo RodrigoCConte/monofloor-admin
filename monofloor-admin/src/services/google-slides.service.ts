@@ -764,7 +764,7 @@ function createSurfacesTableHTML(data: ProposalData): string {
 
 /**
  * Aplica bloco de informações do cliente na página 24 (índice 23)
- * Design: imagem de fundo limpa + campos CLIENTE, LOCAL, DETALHES, ÁREA TOTAL
+ * Design: imagem de fundo limpa + campos Cliente, Local, Detalhes, Área total
  * Separados por linhas brancas de 1px
  */
 async function applyClientInfoOverlays(
@@ -865,11 +865,17 @@ async function applyClientInfoOverlays(
   const labelWidth = 180; // Largura reservada para os labels
 
   // Campos a exibir
+  // Remover área do campo detalhes (já aparece em Área total)
+  let detalhes = data.clienteDetalhes || '-';
+  // Remove padrões como "123m²", "123 m²", "123,45m²", "área: 123m²", etc.
+  detalhes = detalhes.replace(/\s*-?\s*(\d+[.,]?\d*)\s*m²/gi, '').replace(/área\s*:?\s*/gi, '').trim();
+  if (!detalhes) detalhes = '-';
+
   const fields = [
-    { label: 'CLIENTE', value: data.clienteNome || '-' },
-    { label: 'LOCAL', value: data.clienteLocal || '-' },
-    { label: 'DETALHES', value: data.clienteDetalhes || '-' },
-    { label: 'ÁREA TOTAL', value: data.areaTotalInterna ? `${data.areaTotalInterna.toFixed(2)} m² (10% de perda)` : '-' },
+    { label: 'Cliente', value: data.clienteNome || '-' },
+    { label: 'Local', value: data.clienteLocal || '-' },
+    { label: 'Detalhes', value: detalhes },
+    { label: 'Área total', value: data.areaTotalInterna ? `${data.areaTotalInterna.toFixed(2)} m² (10% de perda)` : '-' },
   ];
 
   const rowHeight = blockHeight / fields.length;
@@ -878,7 +884,7 @@ async function applyClientInfoOverlays(
     const field = fields[i];
     const rowY = blockY + blockHeight - ((i + 1) * rowHeight) + (rowHeight / 2) - (valueFontSize / 3);
 
-    // Desenhar label em CAPS (bold)
+    // Desenhar label (bold)
     page.drawText(field.label, {
       x: blockMarginX + paddingX,
       y: rowY,
