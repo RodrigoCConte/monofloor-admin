@@ -859,8 +859,8 @@ async function applyClientInfoOverlays(
   });
 
   // Configurações de texto
-  const labelFontSize = 32;
-  const valueFontSize = 20;
+  const labelFontSize = 30;
+  const valueFontSize = 24; // Aumentado 20% (era 20)
   const paddingX = 30;
   const labelWidth = 250; // Largura reservada para os labels (espaço até os valores)
 
