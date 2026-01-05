@@ -862,7 +862,7 @@ async function applyClientInfoOverlays(
   const labelFontSize = 32;
   const valueFontSize = 20;
   const paddingX = 30;
-  const labelWidth = 180; // Largura reservada para os labels
+  const labelWidth = 250; // Largura reservada para os labels (espaço até os valores)
 
   // Campos a exibir
   // Remover área do campo detalhes (já aparece em Área total)
