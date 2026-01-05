@@ -1,6 +1,7 @@
 // @ts-nocheck
 import puppeteer from 'puppeteer';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import fs from 'fs';
 import path from 'path';
 
@@ -34,6 +35,12 @@ interface ProposalData {
   paredeStelion?: number;
   pisoLilit?: number;
   paredeLilit?: number;
+
+  // DADOS DO CLIENTE (para overlay na página de info)
+  clienteNome?: string;
+  clienteLocal?: string;
+  clienteDetalhes?: string;
+  areaTotalInterna?: number;
 }
 
 function formatarMoeda(valor: number): string {
@@ -59,10 +66,16 @@ function loadLogoBase64(): string {
   }
 }
 
-// Helper para retornar caminho absoluto da fonte NITECLUB
-function getNiteclubFontPath(): string {
+// Helper para carregar fonte NITECLUB como base64
+function getNiteclubFontBase64(): string {
   const fontPath = path.join(__dirname, '../../public/NITECLUB.TTF');
-  return `file://${path.resolve(fontPath)}`;
+  try {
+    const fontBuffer = fs.readFileSync(fontPath);
+    return `data:font/truetype;base64,${fontBuffer.toString('base64')}`;
+  } catch (error) {
+    console.warn('⚠️ Não foi possível carregar a fonte NITECLUB:', error);
+    return '';
+  }
 }
 
 // CSS compartilhado para fontes (usando Google Fonts para produção)
@@ -92,7 +105,7 @@ function createProposalHTML(data: ProposalData): string {
     : formatarMoeda(data.valorTotalLilit / data.metragemTotalLilit);
 
   const logoBase64 = loadLogoBase64();
-  const niteclubFontPath = getNiteclubFontPath();
+  const niteclubFontBase64 = getNiteclubFontBase64();
 
   return `
 <!DOCTYPE html>
@@ -104,7 +117,7 @@ function createProposalHTML(data: ProposalData): string {
 
     @font-face {
       font-family: 'NITECLUB';
-      src: url('${niteclubFontPath}') format('truetype');
+      src: url('${niteclubFontBase64}') format('truetype');
       font-weight: normal;
       font-style: normal;
       font-display: block;
@@ -123,12 +136,12 @@ function createProposalHTML(data: ProposalData): string {
     }
 
     .product-name {
-      font-family: 'NITECLUB', 'Inter', sans-serif;
+      font-family: 'Inter', sans-serif;
       letter-spacing: 3px;
       font-size: 44px;
       font-weight: normal;
       text-transform: uppercase;
-      color: #ffffff;
+      color: transparent; /* Invisível - será adicionado via pdf-lib */
       display: inline-block;
     }
 
@@ -444,7 +457,7 @@ function createProposalHTML(data: ProposalData): string {
 // HTML template - Slide 27 - Detalhamento por Produto
 function createSurfacesTableHTML(data: ProposalData): string {
   const logoBase64 = loadLogoBase64();
-  const niteclubFontPath = getNiteclubFontPath();
+  const niteclubFontBase64 = getNiteclubFontBase64();
 
   const valorM2Stelion = data.metragemTotalStelion > 0
     ? data.valorTotalStelion / data.metragemTotalStelion
@@ -474,7 +487,7 @@ function createSurfacesTableHTML(data: ProposalData): string {
 
     @font-face {
       font-family: 'NITECLUB';
-      src: url('${niteclubFontPath}') format('truetype');
+      src: url('${niteclubFontBase64}') format('truetype');
       font-weight: normal;
       font-style: normal;
       font-display: block;
@@ -576,12 +589,12 @@ function createSurfacesTableHTML(data: ProposalData): string {
     }
 
     .product-name {
-      font-family: 'NITECLUB', 'Inter', sans-serif;
+      font-family: 'Inter', sans-serif;
       letter-spacing: 2px;
       font-size: 24px;
       font-weight: normal;
       text-transform: uppercase;
-      color: #ffffff;
+      color: transparent; /* Invisível - será adicionado via pdf-lib */
     }
 
     .surface-desc {
@@ -749,6 +762,254 @@ function createSurfacesTableHTML(data: ProposalData): string {
   `;
 }
 
+/**
+ * Aplica bloco de informações do cliente na página 24 (índice 23)
+ * Design: imagem de fundo limpa + campos CLIENTE, LOCAL, DETALHES, ÁREA TOTAL
+ * Separados por linhas brancas de 1px
+ */
+async function applyClientInfoOverlays(
+  pdf: typeof PDFDocument.prototype,
+  data: ProposalData
+): Promise<void> {
+  // Página 24 (índice 23) contém os dados do cliente
+  const infoPageIndex = 23;
+
+  if (pdf.getPageCount() <= infoPageIndex) {
+    console.log('⚠️ Template não tem página 23, pulando overlays');
+    return;
+  }
+
+  const page = pdf.getPage(infoPageIndex);
+  const { width, height } = page.getSize();
+
+  // Carregar e aplicar imagem de fundo
+  const bgImagePath = path.join(__dirname, '../../public/slides/slide23-bg.jpg');
+  if (fs.existsSync(bgImagePath)) {
+    console.log('🖼️ Carregando imagem de fundo do slide 23...');
+    const bgImageBytes = fs.readFileSync(bgImagePath);
+    const bgImage = await pdf.embedJpg(bgImageBytes);
+
+    // Desenhar imagem cobrindo toda a página (sem bordas)
+    page.drawImage(bgImage, {
+      x: 0,
+      y: 0,
+      width: width,
+      height: height,
+    });
+    console.log('✅ Imagem de fundo aplicada');
+  } else {
+    console.log('⚠️ Imagem de fundo não encontrada:', bgImagePath);
+  }
+
+  // Registrar fontkit para carregar fontes customizadas
+  pdf.registerFontkit(fontkit);
+
+  // Carregar fontes Widescreen
+  const fontExBoldPath = path.join(__dirname, '../../public/fonts/Widescreen Ex Bold.otf');
+  const fontRegularPath = path.join(__dirname, '../../public/fonts/Widescreen Regular.otf');
+
+  console.log('🔍 Verificando fontes:');
+  console.log('  - Ex Bold path:', fontExBoldPath);
+  console.log('  - Ex Bold exists:', fs.existsSync(fontExBoldPath));
+  console.log('  - Regular path:', fontRegularPath);
+  console.log('  - Regular exists:', fs.existsSync(fontRegularPath));
+
+  let fontBold: any;
+  let fontRegular: any;
+
+  if (fs.existsSync(fontExBoldPath) && fs.existsSync(fontRegularPath)) {
+    try {
+      console.log('🔤 Carregando fontes Widescreen...');
+      const fontExBoldBytes = fs.readFileSync(fontExBoldPath);
+      const fontRegularBytes = fs.readFileSync(fontRegularPath);
+      console.log('📦 Bytes lidos - ExBold:', fontExBoldBytes.length, 'Regular:', fontRegularBytes.length);
+      fontBold = await pdf.embedFont(fontExBoldBytes);
+      fontRegular = await pdf.embedFont(fontRegularBytes);
+      console.log('✅ Fontes Widescreen carregadas (Ex Bold + Regular)');
+    } catch (fontError) {
+      console.error('❌ Erro ao carregar fontes Widescreen:', fontError);
+      fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+      fontRegular = await pdf.embedFont(StandardFonts.Helvetica);
+    }
+  } else {
+    console.log('⚠️ Fontes Widescreen não encontradas, usando Helvetica');
+    fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    fontRegular = await pdf.embedFont(StandardFonts.Helvetica);
+  }
+
+  // Cores
+  const black = rgb(0, 0, 0);
+  const white = rgb(1, 1, 1);
+
+  console.log(`📐 Página 23: ${width}x${height} pontos`);
+
+  // Dimensões do bloco preto central (35% da altura, no meio)
+  const blockMarginX = 40;
+  const blockWidth = width - (blockMarginX * 2);
+  const blockHeight = height * 0.35;
+  const blockY = (height - blockHeight) / 2; // Centralizado verticalmente
+
+  // Desenhar retângulo preto de fundo para os textos
+  page.drawRectangle({
+    x: blockMarginX,
+    y: blockY,
+    width: blockWidth,
+    height: blockHeight,
+    color: black,
+  });
+
+  // Configurações de texto
+  const labelFontSize = 18;
+  const valueFontSize = 20;
+  const paddingX = 30;
+  const labelWidth = 180; // Largura reservada para os labels
+
+  // Campos a exibir
+  const fields = [
+    { label: 'CLIENTE', value: data.clienteNome || '-' },
+    { label: 'LOCAL', value: data.clienteLocal || '-' },
+    { label: 'DETALHES', value: data.clienteDetalhes || '-' },
+    { label: 'ÁREA TOTAL', value: data.areaTotalInterna ? `${data.areaTotalInterna.toFixed(2)} m² (10% de perda)` : '-' },
+  ];
+
+  const rowHeight = blockHeight / fields.length;
+
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    const rowY = blockY + blockHeight - ((i + 1) * rowHeight) + (rowHeight / 2) - (valueFontSize / 3);
+
+    // Desenhar label em CAPS (bold)
+    page.drawText(field.label, {
+      x: blockMarginX + paddingX,
+      y: rowY,
+      size: labelFontSize,
+      font: fontBold,
+      color: white,
+    });
+
+    // Desenhar valor ao lado
+    page.drawText(field.value, {
+      x: blockMarginX + paddingX + labelWidth,
+      y: rowY,
+      size: valueFontSize,
+      font: fontRegular,
+      color: white,
+    });
+
+    // Desenhar linha divisória branca (exceto após o último)
+    if (i < fields.length - 1) {
+      const lineY = blockY + blockHeight - ((i + 1) * rowHeight);
+      page.drawLine({
+        start: { x: blockMarginX + paddingX, y: lineY },
+        end: { x: blockMarginX + blockWidth - paddingX, y: lineY },
+        thickness: 1,
+        color: white,
+      });
+    }
+
+    console.log(`✅ Campo: ${field.label} = "${field.value}"`);
+  }
+
+  console.log('✅ Bloco de informações aplicado na página 23');
+}
+
+/**
+ * Aplica os nomes dos produtos (STELION, LILIT) com a fonte NITECLUB
+ * nos slides 26 e 27 usando pdf-lib (porque Puppeteer não carrega fontes customizadas bem)
+ */
+async function applyProductNamesWithNiteclub(
+  pdf: typeof PDFDocument.prototype,
+  data: ProposalData,
+  slide26PageIndex: number,
+  slide27PageIndex: number | null
+): Promise<void> {
+  // Registrar fontkit
+  pdf.registerFontkit(fontkit);
+
+  // Carregar fonte NITECLUB
+  const niteclubPath = path.join(__dirname, '../../public/NITECLUB.TTF');
+  if (!fs.existsSync(niteclubPath)) {
+    console.log('⚠️ Fonte NITECLUB não encontrada, pulando');
+    return;
+  }
+
+  console.log('🔤 Carregando fonte NITECLUB para nomes dos produtos...');
+  const niteclubBytes = fs.readFileSync(niteclubPath);
+  const niteclubFont = await pdf.embedFont(niteclubBytes);
+
+  const white = rgb(1, 1, 1);
+
+  // Slide 26 - STELION e LILIT (cards de produto)
+  if (pdf.getPageCount() > slide26PageIndex) {
+    const page26 = pdf.getPage(slide26PageIndex);
+    const { height } = page26.getSize();
+
+    // Posições calculadas baseadas no HTML (escala 1:1 com o PDF)
+    // body padding: 80px top, 53px left
+    // header: ~200px (logo + subtitle + margin)
+    // product-card: padding 32px, product-header margin-bottom 27px
+
+    // STELION - primeiro card
+    const stelionY = height - 80 - 200 - 32 - 27; // ~1581 de baixo para cima
+    page26.drawText('STELION', {
+      x: 53 + 32, // padding body + padding card
+      y: stelionY,
+      size: 44,
+      font: niteclubFont,
+      color: white,
+    });
+
+    // LILIT - segundo card (após o primeiro que tem ~400px de altura)
+    const lilitY = stelionY - 400 - 40 - 32 - 27; // gap 40px entre cards
+    page26.drawText('LILIT', {
+      x: 53 + 32,
+      y: lilitY,
+      size: 44,
+      font: niteclubFont,
+      color: white,
+    });
+
+    console.log('✅ STELION e LILIT adicionados no slide 26');
+  }
+
+  // Slide 27 - STELION e LILIT na tabela (se existir)
+  if (slide27PageIndex !== null && pdf.getPageCount() > slide27PageIndex) {
+    const page27 = pdf.getPage(slide27PageIndex);
+    const { height } = page27.getSize();
+
+    // Tabela começa após header (~253px) + section-title (~56px)
+    // thead: ~60px, primeira row começa depois
+    const tableStartY = height - 80 - 253 - 56 - 60;
+
+    // STELION na primeira linha da tabela
+    if (data.metragemTotalStelion > 0) {
+      page27.drawText('STELION', {
+        x: 53 + 16, // padding body + padding td
+        y: tableStartY - 24, // ajuste para centro da célula
+        size: 24,
+        font: niteclubFont,
+        color: white,
+      });
+    }
+
+    // LILIT na segunda linha (se houver STELION, senão na primeira)
+    if (data.metragemTotalLilit > 0) {
+      const lilitRowY = data.metragemTotalStelion > 0
+        ? tableStartY - 24 - 73 // altura da row ~73px
+        : tableStartY - 24;
+      page27.drawText('LILIT', {
+        x: 53 + 16,
+        y: lilitRowY,
+        size: 24,
+        font: niteclubFont,
+        color: white,
+      });
+    }
+
+    console.log('✅ Nomes dos produtos adicionados no slide 27');
+  }
+}
+
 export async function generateProposal(data: ProposalData): Promise<Buffer> {
   try {
     console.log('📄 Gerando slides 26 e 27 com Puppeteer...');
@@ -854,15 +1115,28 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
     const slide26Pdf = await PDFDocument.load(slide26Buffer);
     const finalPdf = await PDFDocument.create();
 
-    // Copiar apenas as primeiras 24 páginas do template
+    // Copiar as primeiras 24 páginas do template, trocando ordem de 23 e 24
+    // Ordem original: 0-21, 22, 23 → Nova ordem: 0-21, 23, 22
     const totalPages = templatePdf.getPageCount();
     const pagesToCopy = Math.min(24, totalPages);
-    const pageIndices = Array.from({ length: pagesToCopy }, (_, i) => i);
+
+    // Criar array de índices com páginas 22 e 23 trocadas
+    const pageIndices = Array.from({ length: pagesToCopy }, (_, i) => {
+      if (i === 22) return 23; // Página 23 vai para posição 23 (índice 22)
+      if (i === 23) return 22; // Página 24 (antiga 23 com placeholders) vai para posição 24 (índice 23)
+      return i;
+    });
 
     const templatePages = await finalPdf.copyPages(templatePdf, pageIndices);
     templatePages.forEach(page => finalPdf.addPage(page));
 
     console.log(`✅ Copiadas ${templatePages.length} páginas do template (de ${totalPages} totais)`);
+
+    // Aplicar overlays de informações do cliente na página 24
+    if (data.clienteNome || data.clienteLocal || data.clienteDetalhes || data.areaTotalInterna) {
+      console.log('📝 Aplicando overlays de informações do cliente...');
+      await applyClientInfoOverlays(finalPdf, data);
+    }
 
     // Copiar slide 26
     const slide26Pages = await finalPdf.copyPages(slide26Pdf, [0]);
@@ -876,6 +1150,13 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
       slide27Pages.forEach(page => finalPdf.addPage(page));
       console.log('✅ Slide 27 adicionado');
     }
+
+    // Aplicar nomes dos produtos com fonte NITECLUB
+    // slide26 está no índice 24 (após 24 páginas do template: 0-23)
+    const slide26PageIndex = 24;
+    const slide27PageIndex = slide27Buffer ? 25 : null;
+    console.log('🔤 Aplicando fonte NITECLUB aos nomes dos produtos...');
+    await applyProductNamesWithNiteclub(finalPdf, data, slide26PageIndex, slide27PageIndex);
 
     const finalPdfBytes = await finalPdf.save();
     const finalBuffer = Buffer.from(finalPdfBytes);
