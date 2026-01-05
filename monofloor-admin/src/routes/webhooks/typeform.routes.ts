@@ -112,6 +112,30 @@ function getContactInfo(answer: any): { nome?: string; telefone?: string; email?
   };
 }
 
+// Verificação de Ending B (leads fora do escopo mínimo)
+// Se respondeu "Não" a qualquer pergunta de metragem mínima → Ending B → Não criar lead
+function isEndingB(answers: any[]): boolean {
+  // Verificar campo de metragem 80m²
+  const metragem80Answer = getAnswer(answers, WAITLIST_FIELD_REFS.ATENDE_METRAGEM_80);
+  if (metragem80Answer && metragem80Answer.boolean === false) {
+    return true;
+  }
+
+  // Verificar campo de metragem 150m²
+  const metragem150Answer = getAnswer(answers, WAITLIST_FIELD_REFS.ATENDE_METRAGEM_150);
+  if (metragem150Answer && metragem150Answer.boolean === false) {
+    return true;
+  }
+
+  // Verificar campo de metragem 300m²
+  const metragem300Answer = getAnswer(answers, WAITLIST_FIELD_REFS.ATENDE_METRAGEM_300);
+  if (metragem300Answer && metragem300Answer.boolean === false) {
+    return true;
+  }
+
+  return false;
+}
+
 /**
  * POST /webhooks/typeform/lead
  * Receives "waitlist | novo" form submissions
@@ -148,6 +172,14 @@ router.post('/lead', async (req: Request, res: Response) => {
     if (existing) {
       console.log(`[Typeform] Response ${responseId} already processed`);
       return res.status(200).json({ message: 'Already processed' });
+    }
+
+    // Filtro Ending B - Leads fora do escopo mínimo
+    if (isEndingB(answers)) {
+      const nomeAnswer = getAnswer(answers, WAITLIST_FIELD_REFS.NOME);
+      const nome = getTextValue(nomeAnswer) || 'Lead sem nome';
+      console.log(`🚫 [Typeform] Ending B ignorado: ${nome} (abaixo do escopo mínimo)`);
+      return res.status(200).json({ message: 'Ending B - lead outside minimum scope' });
     }
 
     // Extract data from answers

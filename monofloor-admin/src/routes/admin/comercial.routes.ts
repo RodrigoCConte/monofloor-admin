@@ -27,6 +27,54 @@ export const invalidateComercialCache = () => {
 };
 
 // =============================================
+// STAGE NAME → COMERCIAL STATUS MAPPING
+// =============================================
+// Mapeia nomes de stage do Pipedrive para o enum ComercialStatus
+const stageNameToStatus: Record<string, ComercialStatus> = {
+  // Entrada
+  'Form Orçamento': 'LEAD',
+  // 1º Contato
+  '1º Contato': 'PRIMEIRO_CONTATO',
+  '1º Contato Feito': 'PRIMEIRO_CONTATO',
+  'Follow 1º Contato': 'FOLLOW_UP',
+  'Follow 1º Contato Feito': 'FOLLOW_UP',
+  // Arquiteto
+  'Form Arquiteto': 'CONTATO_ARQUITETO',
+  'Contato Arquiteto': 'CONTATO_ARQUITETO',
+  // Levantamento
+  'Proposta Escopo Minimo': 'LEVANTAMENTO',
+  'Cálculo de Projeto': 'LEVANTAMENTO',
+  'Projeto levantado': 'LEVANTAMENTO',
+  'Cálculo Deslocamento': 'LEVANTAMENTO',
+  'Deslocamento Levantado': 'LEVANTAMENTO',
+  // Proposta
+  'Proposta enviada': 'PROPOSTA_ENVIADA',
+  // Follow-up
+  'Fazer Follow 1': 'FOLLOW_UP',
+  'Follow 1 Feito': 'FOLLOW_UP',
+  'Fazer Follow 2': 'FOLLOW_UP',
+  'Follow 2 Feito': 'FOLLOW_UP',
+  'Fazer Follow 3': 'FOLLOW_UP',
+  'Follow 3 Feito': 'FOLLOW_UP',
+  // Negociação
+  'Negociações': 'NEGOCIACAO',
+  // Fechamento
+  'Ganho': 'GANHO',
+  'Perdido': 'PERDIDO',
+};
+
+// Função para obter o status do enum a partir do nome do stage
+const getStatusFromStageName = (stageName: string): ComercialStatus => {
+  // Se já é um valor válido do enum (backward compatibility)
+  const enumValues = Object.values(ComercialStatus);
+  if (enumValues.includes(stageName as ComercialStatus)) {
+    return stageName as ComercialStatus;
+  }
+  // Mapear do nome do stage
+  return stageNameToStatus[stageName] || 'LEAD';
+};
+
+// =============================================
 // COMERCIAL MODULE ROUTES
 // =============================================
 
@@ -59,7 +107,10 @@ router.get('/', async (req: Request, res: Response) => {
       }
     }
 
-    const where: any = {};
+    const where: any = {
+      // Mostrar apenas deals "open"
+      dealStatus: 'open',
+    };
 
     // Excluir deals fechados (PERDIDO e GANHO) para melhor performance
     if (excludeClosed === 'true') {
@@ -405,7 +456,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.put('/:id/status', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { status, motivoPerda } = req.body;
+    const { status: inputStatus, motivoPerda } = req.body;
 
     const oldData = await prisma.comercialData.findUnique({
       where: { id },
@@ -416,13 +467,26 @@ router.put('/:id/status', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'Not found' });
     }
 
-    const updateData: any = { status };
+    // Mapear o status recebido (pode ser nome do Pipedrive ou enum)
+    const enumStatus = getStatusFromStageName(inputStatus);
+    // O stageName é o inputStatus se for um nome do Pipedrive válido
+    const stageName = stageNameToStatus[inputStatus] ? inputStatus : oldData.stageName;
 
-    if (status === 'GANHO') {
+    const updateData: any = {
+      status: enumStatus,
+      stageName: stageName,
+      stageChangeTime: new Date(),
+    };
+
+    if (enumStatus === 'GANHO') {
       updateData.dataGanho = new Date();
-    } else if (status === 'PERDIDO') {
+      updateData.dealStatus = 'won';
+    } else if (enumStatus === 'PERDIDO') {
       updateData.dataPerda = new Date();
       updateData.motivoPerda = motivoPerda;
+      updateData.dealStatus = 'lost';
+    } else {
+      updateData.dealStatus = 'open';
     }
 
     const comercial = await prisma.comercialData.update({
@@ -430,21 +494,23 @@ router.put('/:id/status', async (req: Request, res: Response) => {
       data: updateData,
     });
 
-    // Create timeline event
-    await prisma.timelineEvent.create({
-      data: {
-        projectId: oldData.projectId,
-        modulo: 'COMERCIAL',
-        tipo: 'STATUS_CHANGE',
-        titulo: `Status alterado para ${status}`,
-        descricao: status === 'PERDIDO' ? motivoPerda : undefined,
-        dadosAnteriores: { status: oldData.status },
-        dadosNovos: { status },
-      },
-    });
+    // Create timeline event only if there's a project associated
+    if (oldData.projectId) {
+      await prisma.timelineEvent.create({
+        data: {
+          projectId: oldData.projectId,
+          modulo: 'COMERCIAL',
+          tipo: 'STATUS_CHANGE',
+          titulo: `Status alterado para ${stageName} (${enumStatus})`,
+          descricao: enumStatus === 'PERDIDO' ? motivoPerda : undefined,
+          dadosAnteriores: { status: oldData.status, stageName: oldData.stageName },
+          dadosNovos: { status: enumStatus, stageName },
+        },
+      });
+    }
 
     // If GANHO, update project module and create contract with proposal data
-    if (status === 'GANHO') {
+    if (enumStatus === 'GANHO') {
       // Get the approved proposal (or latest)
       const proposta = await prisma.proposta.findFirst({
         where: { comercialId: id },
@@ -495,6 +561,9 @@ router.put('/:id/status', async (req: Request, res: Response) => {
         },
       });
     }
+
+    // Invalidar cache após mudança de status
+    invalidateComercialCache();
 
     res.json({ success: true, data: comercial });
   } catch (error: any) {

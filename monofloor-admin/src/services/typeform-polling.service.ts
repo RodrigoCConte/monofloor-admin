@@ -8,7 +8,7 @@
 import { config } from '../config';
 import prisma from '../lib/prisma';
 import { ComercialStatus, Prisma } from '@prisma/client';
-import { gptService } from './ai/gpt.service';
+import { gptService, AreaDetails } from './ai/gpt.service';
 import { leadDistributionService } from './lead-distribution.service';
 
 /**
@@ -95,6 +95,11 @@ const WAITLIST_FIELD_REFS = {
   CONTATO_NOME: '002ba554-51ec-49b1-b1fe-3595e9dac660',
   CONTATO_TELEFONE: 'd0b8f242-79cb-4e4d-abdf-6e23166a112b',
   CONTATO_EMAIL: 'a541a982-f772-4ec4-a234-364345632d39',
+  // Campos de qualificação (perguntas de metragem mínima)
+  // Se responder "Não" a qualquer um destes, é Ending B (não criar lead)
+  ATENDE_METRAGEM_80: '0dfa0e82-8fa6-4cd0-a799-db8eb20421cb',
+  ATENDE_METRAGEM_150: 'ea772a05-1343-4752-b183-5264e39e21b9',
+  ATENDE_METRAGEM_300: '2bc90f3d-7d43-41d5-bdce-a880c537669f',
 };
 
 // =============================================
@@ -214,6 +219,42 @@ function extractContactName(answers: any[]): string | null {
 }
 
 // =============================================
+// VERIFICAÇÃO DE ENDING B (leads fora do escopo)
+// =============================================
+// Se o lead respondeu "Não" a qualquer pergunta de metragem mínima,
+// ele vai para o Ending B e NÃO deve ser criado no CRM.
+function isEndingB(answers: any[]): boolean {
+  // Verificar campo de metragem 80m²
+  const metragem80Answer = getAnswer(answers, WAITLIST_FIELD_REFS.ATENDE_METRAGEM_80);
+  if (metragem80Answer) {
+    const value = metragem80Answer.boolean;
+    if (value === false) {
+      return true; // Respondeu "Não" para 80m² → Ending B
+    }
+  }
+
+  // Verificar campo de metragem 150m²
+  const metragem150Answer = getAnswer(answers, WAITLIST_FIELD_REFS.ATENDE_METRAGEM_150);
+  if (metragem150Answer) {
+    const value = metragem150Answer.boolean;
+    if (value === false) {
+      return true; // Respondeu "Não" para 150m² → Ending B
+    }
+  }
+
+  // Verificar campo de metragem 300m²
+  const metragem300Answer = getAnswer(answers, WAITLIST_FIELD_REFS.ATENDE_METRAGEM_300);
+  if (metragem300Answer) {
+    const value = metragem300Answer.boolean;
+    if (value === false) {
+      return true; // Respondeu "Não" para 300m² → Ending B
+    }
+  }
+
+  return false; // Não é Ending B (ou respondeu "Sim")
+}
+
+// =============================================
 // API TYPEFORM
 // =============================================
 
@@ -256,18 +297,29 @@ async function fetchTypeformResponses(formId: string, since?: Date): Promise<any
 // PROCESSAMENTO DE RESPOSTA
 // =============================================
 
-async function processResponse(formResponse: any): Promise<boolean> {
+async function processResponse(formResponse: any): Promise<'created' | 'skipped' | 'ending_b' | 'updated'> {
   const responseId = formResponse.token || formResponse.response_id;
   const submittedAt = formResponse.submitted_at;
   const answers = formResponse.answers || [];
 
-  // Check if already processed
-  const existing = await prisma.comercialData.findFirst({
+  // Check if already processed by typeformResponseId
+  const existingByResponseId = await prisma.comercialData.findFirst({
     where: { typeformResponseId: responseId },
   });
 
-  if (existing) {
-    return false; // Already processed
+  if (existingByResponseId) {
+    return 'skipped'; // Already processed
+  }
+
+  // =============================================
+  // FILTRO ENDING B - Leads fora do escopo mínimo
+  // =============================================
+  if (isEndingB(answers)) {
+    // Extrair nome para log
+    const nomeAnswer = getAnswer(answers, WAITLIST_FIELD_REFS.NOME);
+    const nome = getTextValue(nomeAnswer) || 'Lead sem nome';
+    console.log(`🚫 [Typeform Polling] Ending B ignorado: ${nome} (abaixo do escopo mínimo)`);
+    return 'ending_b';
   }
 
   // =============================================
@@ -302,6 +354,23 @@ async function processResponse(formResponse: any): Promise<boolean> {
   const telefone = extractPhone(answers);
   const email = extractEmail(answers);
 
+  // =============================================
+  // VERIFICAR DUPLICATA POR EMAIL/TELEFONE
+  // =============================================
+  let existingLead = null;
+
+  if (email) {
+    existingLead = await prisma.comercialData.findFirst({
+      where: { personEmail: email }
+    });
+  }
+
+  if (!existingLead && telefone) {
+    existingLead = await prisma.comercialData.findFirst({
+      where: { personPhone: telefone }
+    });
+  }
+
   // Tipo de cliente (compatível com Pipedrive)
   const tipoClienteRaw = getTextValue(tipoClienteAnswer);
   const tipoCliente = tipoClienteRaw?.toLowerCase().includes('arquiteto')
@@ -331,18 +400,26 @@ async function processResponse(formResponse: any): Promise<boolean> {
   const metragemEstimadaN1 = faixaMetragem?.faixaPipedrive || faixaMetragemRaw || null;
   const descritivoArea = getTextValue(detalhesMetragemAnswer) || null;
 
-  // Usar IA para extrair metragem da descrição
-  // Fallback: faixa estimativa > 150m²
+  // Usar IA para extrair metragem ESTRUTURADA da descrição
+  // Retorna objeto com piso, parede, bancadas, etc. e valor estimado calculado
+  let areaDetails: AreaDetails | null = null;
   let metragemFinal = faixaMetragem?.estimativa || 150;
+  let valorCalculadoPorIA: number | null = null;
 
   if (descritivoArea && descritivoArea.trim().length > 0) {
     console.log(`[Typeform Polling] Processando descrição com IA: "${descritivoArea}"`);
     try {
-      metragemFinal = await gptService.extractMetragemFromDescription(
+      areaDetails = await gptService.extractAreaDetails(
         descritivoArea,
         faixaMetragem?.estimativa
       );
-      console.log(`[Typeform Polling] ✅ Metragem extraída por IA: ${metragemFinal}m²`);
+      metragemFinal = areaDetails.metragemTotal;
+      valorCalculadoPorIA = areaDetails.valorEstimado;
+      console.log(`[Typeform Polling] ✅ Áreas extraídas por IA:`);
+      console.log(`   Piso: ${areaDetails.piso}m², Parede: ${areaDetails.parede}m²`);
+      console.log(`   Bancadas: ${areaDetails.bancadas}m², Escadas: ${areaDetails.escadas}m²`);
+      console.log(`   Total: ${metragemFinal}m², Valor: R$ ${valorCalculadoPorIA?.toLocaleString('pt-BR')}`);
+      console.log(`   Confiança: ${areaDetails.confianca}`);
     } catch (error) {
       console.error(`[Typeform Polling] ❌ Erro ao processar com IA:`, error);
       console.log(`[Typeform Polling] Usando fallback: ${metragemFinal}m²`);
@@ -364,13 +441,18 @@ async function processResponse(formResponse: any): Promise<boolean> {
   const primeiroNomeZapi = formatPrimeiroNome(nome);
 
   // =============================================
-  // CALCULAR VALOR DO DEAL (automação de preço)
+  // CALCULAR VALOR DO DEAL (usando precificação real)
   // =============================================
 
-  // Usar metragem processada pela IA
+  // PRIORIDADE: Valor calculado pela IA (usa tabela de preços real)
+  // FALLBACK: Cálculo simples baseado apenas na metragem
   let dealValue: number | null = null;
-  if (metragemFinal && metragemFinal > 0) {
+  if (valorCalculadoPorIA && valorCalculadoPorIA > 0) {
+    dealValue = valorCalculadoPorIA;
+    console.log(`[Typeform Polling] Usando valor calculado por IA: R$ ${dealValue.toLocaleString('pt-BR')}`);
+  } else if (metragemFinal && metragemFinal > 0) {
     dealValue = metragemFinal * PRECO_BASE_M2;
+    console.log(`[Typeform Polling] Usando cálculo simples: ${metragemFinal}m² × R$ ${PRECO_BASE_M2} = R$ ${dealValue.toLocaleString('pt-BR')}`);
   } else {
     dealValue = calculateDealValue(metragemEstimadaN1);
   }
@@ -400,6 +482,55 @@ async function processResponse(formResponse: any): Promise<boolean> {
   console.log(`[Typeform Polling]   Região: ${cidadeExecucaoDesc || cidadeExecucao || 'N/A'}`);
   console.log(`[Typeform Polling]   Metragem: ${metragemFinal}m², Valor: R$ ${dealValue?.toLocaleString('pt-BR') || 'N/A'}`);
   console.log(`[Typeform Polling]   Consultor: ${consultorNome || 'Não atribuído'} (${isArquiteto ? 'via DDD' : 'via cidade'})`);
+
+  // =============================================
+  // SE LEAD EXISTENTE, APENAS ATUALIZAR CAMPOS VAZIOS
+  // =============================================
+  if (existingLead) {
+    console.log(`[Typeform Polling] Lead existente encontrado: ${existingLead.personName} (${existingLead.id})`);
+
+    // Atualizar apenas campos que estão vazios no lead existente
+    const updateData: any = {};
+
+    if (!existingLead.tipoCliente && tipoCliente) updateData.tipoCliente = tipoCliente;
+    if (!existingLead.nomeEscritorio && nomeEscritorio) updateData.nomeEscritorio = nomeEscritorio;
+    if (!existingLead.cidadeExecucao && cidadeExecucao) updateData.cidadeExecucao = cidadeExecucao;
+    if (!existingLead.cidadeExecucaoDesc && cidadeExecucaoDesc) updateData.cidadeExecucaoDesc = cidadeExecucaoDesc;
+    if (!existingLead.metragemEstimadaN1 && metragemEstimadaN1) updateData.metragemEstimadaN1 = metragemEstimadaN1;
+    if (!existingLead.metragemEstimada && metragemEstimada) updateData.metragemEstimada = metragemEstimada;
+    if (!existingLead.descritivoArea && descritivoArea) updateData.descritivoArea = descritivoArea;
+    if (!existingLead.budgetEstimado && budgetEstimado) updateData.budgetEstimado = budgetEstimado;
+    if (!existingLead.dataPrevistaExec && dataPrevistaExec) updateData.dataPrevistaExec = dataPrevistaExec;
+    if (!existingLead.primeiroNomeZapi && primeiroNomeZapi) updateData.primeiroNomeZapi = primeiroNomeZapi;
+    if (!existingLead.telefoneZapi && telefoneZapi) updateData.telefoneZapi = telefoneZapi;
+    if (!existingLead.dealValue && dealValue) updateData.dealValue = dealValue;
+
+    // Sempre registrar o typeformResponseId para não processar novamente
+    updateData.typeformResponseId = responseId;
+    updateData.typeformSubmittedAt = new Date(submittedAt);
+
+    if (Object.keys(updateData).length > 2) { // Mais que só os campos de typeform
+      await prisma.comercialData.update({
+        where: { id: existingLead.id },
+        data: updateData
+      });
+      console.log(`✅ [Typeform Polling] Lead atualizado: ${existingLead.personName}`);
+      console.log(`   Campos atualizados: ${Object.keys(updateData).filter(k => !k.startsWith('typeform')).join(', ')}`);
+    } else {
+      // Apenas registrar que foi processado
+      await prisma.comercialData.update({
+        where: { id: existingLead.id },
+        data: { typeformResponseId: responseId, typeformSubmittedAt: new Date(submittedAt) }
+      });
+      console.log(`✅ [Typeform Polling] Lead já completo, apenas marcado como processado: ${existingLead.personName}`);
+    }
+
+    return 'updated';
+  }
+
+  // =============================================
+  // CRIAR NOVO LEAD (não existe duplicata)
+  // =============================================
 
   // Criar projeto
   const project = await prisma.project.create({
@@ -470,7 +601,13 @@ async function processResponse(formResponse: any): Promise<boolean> {
       // Typeform metadata
       typeformResponseId: responseId,
       typeformSubmittedAt: new Date(submittedAt),
-      typeformRawData: formResponse as any,
+      typeformRawData: {
+        ...formResponse,
+        // Dados estruturados extraídos pela IA
+        areaDetails: areaDetails || null,
+        processadoPorIA: !!areaDetails,
+        valorCalculadoPorIA: valorCalculadoPorIA || null,
+      } as any,
     },
   });
 
@@ -487,9 +624,19 @@ async function processResponse(formResponse: any): Promise<boolean> {
         tipoCliente,
         regiao: cidadeExecucao,
         metragem: metragemEstimadaN1,
+        metragemTotal: metragemFinal,
         valorCalculado: dealValue,
         consultor: consultorNome,
         distribuicao: isArquiteto ? 'via DDD' : 'via cidade',
+        // Dados estruturados da IA
+        areaDetails: areaDetails ? {
+          piso: areaDetails.piso,
+          parede: areaDetails.parede,
+          bancadas: areaDetails.bancadas,
+          escadas: areaDetails.escadas,
+          confianca: areaDetails.confianca,
+        } : null,
+        processadoPorIA: !!areaDetails,
       } as any,
     },
   });
@@ -558,28 +705,34 @@ async function processResponse(formResponse: any): Promise<boolean> {
     }
   }
 
-  return true;
+  return 'created';
 }
 
 // =============================================
 // POLLING SCHEDULER
 // =============================================
 
-export async function pollTypeformResponses(): Promise<{ processed: number; skipped: number }> {
+export async function pollTypeformResponses(): Promise<{ created: number; updated: number; skipped: number; endingB: number }> {
   const formId = config.typeform.formIds.waitlist;
 
   console.log(`📋 [Typeform Polling] Checking for new responses...`);
 
   const responses = await fetchTypeformResponses(formId, lastCheckTime || undefined);
 
-  let processed = 0;
+  let created = 0;
+  let updated = 0;
   let skipped = 0;
+  let endingB = 0;
 
   for (const response of responses) {
     try {
-      const wasProcessed = await processResponse(response);
-      if (wasProcessed) {
-        processed++;
+      const result = await processResponse(response);
+      if (result === 'created') {
+        created++;
+      } else if (result === 'updated') {
+        updated++;
+      } else if (result === 'ending_b') {
+        endingB++;
       } else {
         skipped++;
       }
@@ -590,11 +743,11 @@ export async function pollTypeformResponses(): Promise<{ processed: number; skip
 
   lastCheckTime = new Date();
 
-  if (processed > 0) {
-    console.log(`📋 [Typeform Polling] Done: ${processed} new leads, ${skipped} already processed`);
+  if (created > 0 || updated > 0 || endingB > 0) {
+    console.log(`📋 [Typeform Polling] Done: ${created} criados, ${updated} atualizados, ${endingB} Ending B ignorados, ${skipped} já processados`);
   }
 
-  return { processed, skipped };
+  return { created, updated, skipped, endingB };
 }
 
 let pollingInterval: NodeJS.Timeout | null = null;

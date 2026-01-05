@@ -372,36 +372,64 @@ function generateProposalImageHTML(slug: string, sessionId: string, clienteName:
 
       // Carregar rrweb
       var rrwebScript = document.createElement('script');
-      rrwebScript.src = 'https://cdn.jsdelivr.net/npm/rrweb@2.0.0-alpha.11/dist/rrweb.min.js';
+      rrwebScript.src = 'https://cdn.jsdelivr.net/npm/rrweb@1.1.3/dist/rrweb.min.js';
       rrwebScript.onload = function() {
         isRecording = true;
-        rrweb.record({
-          emit: function(event) {
-            recordedEvents.push(event);
-          },
-          sampling: {
-            mousemove: 50,
-            mouseInteraction: true,
-            scroll: 150,
-            input: 'last'
-          },
-          maskAllInputs: true,
-          recordCrossOriginIframes: false
-        });
+        var hasSentFirstBatch = false;
 
-        // Enviar eventos a cada 10 segundos
-        setInterval(function() {
-          if (recordedEvents.length > 0) {
+        try {
+          console.log('[rrweb] Initializing recording...');
+          rrweb.record({
+            emit: function(event, isCheckout) {
+              recordedEvents.push(event);
+              // Log para debug dos primeiros eventos
+              if (recordedEvents.length <= 10) {
+                console.log('[rrweb] Event #' + recordedEvents.length + ' type:', event.type, '(' + (event.type === 2 ? 'FullSnapshot' : event.type === 3 ? 'Incremental' : event.type === 4 ? 'Meta' : 'Other') + ')', isCheckout ? '(checkout)' : '');
+              }
+            },
+            checkoutEveryNms: 10000, // Forçar FullSnapshot a cada 10 segundos
+            sampling: {
+              mousemove: 50,
+              mouseInteraction: true,
+              scroll: 150,
+              input: 'last'
+            },
+            maskAllInputs: true,
+            recordCrossOriginIframes: false
+          });
+          console.log('[rrweb] Recording started, events so far:', recordedEvents.length);
+        } catch (err) {
+          console.error('[rrweb] Error starting recording:', err);
+        }
+
+        // Enviar primeiro batch após 5 segundos (garante FullSnapshot)
+        setTimeout(function() {
+          if (recordedEvents.length > 0 && !hasSentFirstBatch) {
+            var types = recordedEvents.map(function(e) { return e.type; });
+            var hasFS = types.indexOf(2) !== -1;
+            console.log('[rrweb] Sending FIRST batch with', recordedEvents.length, 'events. Types:', types.join(','), 'HasFullSnapshot:', hasFS);
+            hasSentFirstBatch = true;
             sendRecordingBatch();
           }
-        }, 10000);
+        }, 5000);
 
-        // Enviar ao sair da página
+        // Enviar ao sair da página (backup)
         window.addEventListener('beforeunload', function() {
           if (recordedEvents.length > 0) {
             sendRecordingBatch(true);
           }
         });
+
+        // Enviar a cada 10 segundos para capturar mais eventos
+        setInterval(function() {
+          if (recordedEvents.length > 0 && hasSentFirstBatch) {
+            console.log('[rrweb] Sending batch with', recordedEvents.length, 'events');
+            sendRecordingBatch();
+          }
+        }, 10000);
+      };
+      rrwebScript.onerror = function() {
+        console.error('[rrweb] Failed to load recording library');
       };
       document.head.appendChild(rrwebScript);
 

@@ -130,6 +130,12 @@ router.post('/generate', async (req, res) => {
       paredeStelion,
       pisoLilit,
       paredeLilit,
+
+      // DADOS DO CLIENTE (para overlay na página de info)
+      clienteNome,
+      clienteLocal,
+      clienteDetalhes,
+      areaTotalInterna,
     } = req.body;
 
     // Validações básicas
@@ -167,6 +173,12 @@ router.post('/generate', async (req, res) => {
       paredeStelion: parseFloat(paredeStelion) || 0,
       pisoLilit: parseFloat(pisoLilit) || 0,
       paredeLilit: parseFloat(paredeLilit) || 0,
+
+      // DADOS DO CLIENTE (para overlay na página de info)
+      clienteNome: clienteNome || '',
+      clienteLocal: clienteLocal || '',
+      clienteDetalhes: clienteDetalhes || '',
+      areaTotalInterna: parseFloat(areaTotalInterna) || 0,
     });
 
     // Comprimir PDF
@@ -526,6 +538,11 @@ router.post('/recording', async (req, res) => {
       duration
     } = req.body;
 
+    // Log para debug
+    const eventTypes = events?.map((e: any) => e.type) || [];
+    const hasFullSnapshot = eventTypes.includes(2);
+    console.log(`[Recording] Session: ${sessionId?.substring(0, 8)}... | Events: ${events?.length || 0} | Types: ${eventTypes.slice(0, 10).join(',')} | HasFullSnapshot: ${hasFullSnapshot}`);
+
     if (!slug || !sessionId || !events || !Array.isArray(events)) {
       return res.status(400).json({ error: 'Dados incompletos' });
     }
@@ -553,33 +570,51 @@ router.post('/recording', async (req, res) => {
       where: { sessionId }
     });
 
+    console.log(`[Recording] Session ${sessionId?.substring(0, 8)}... | Existing: ${!!existingRecording} | New events: ${events?.length}`);
+
     if (existingRecording) {
       // Atualizar recording existente (append events)
+      console.log(`[Recording] UPDATING existing recording with ${existingRecording.eventsCount} events`);
       // Descomprimir eventos existentes
       const existingBuffer = Buffer.from(existingRecording.eventsData, 'base64');
       const existingJson = (await gunzip(existingBuffer)).toString('utf-8');
       const existingEvents = JSON.parse(existingJson);
 
-      // Combinar eventos
-      const allEvents = [...existingEvents, ...events];
+      // Combinar todos os eventos e ordenar por timestamp
+      // O rrweb precisa dos eventos em ordem cronológica
+      // Meta e FullSnapshot também têm timestamps e devem estar na ordem correta
+      const allEvents = [...existingEvents, ...events].sort((a: any, b: any) =>
+        (a.timestamp || 0) - (b.timestamp || 0)
+      );
+
+      // Remover duplicatas baseado em timestamp (pode acontecer se o mesmo batch for enviado 2x)
+      const seen = new Set<number>();
+      const uniqueEvents = allEvents.filter((e: any) => {
+        const key = e.timestamp;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
 
       // Recomprimir
-      const newCompressedBuffer = await gzip(JSON.stringify(allEvents));
+      const newCompressedBuffer = await gzip(JSON.stringify(uniqueEvents));
       const newCompressedBase64 = newCompressedBuffer.toString('base64');
 
       await prisma.sessionRecording.update({
         where: { id: existingRecording.id },
         data: {
           eventsData: newCompressedBase64,
-          eventsCount: allEvents.length,
+          eventsCount: uniqueEvents.length,
           endedAt: new Date(),
           duration: duration || Math.round((Date.now() - existingRecording.startedAt.getTime()) / 1000)
         }
       });
 
-      res.json({ success: true, updated: true, eventsCount: allEvents.length });
+      console.log(`[Recording] UPDATED successfully! Total events now: ${uniqueEvents.length}`);
+      res.json({ success: true, updated: true, eventsCount: uniqueEvents.length });
     } else {
       // Criar novo recording
+      console.log(`[Recording] CREATING new recording with ${events.length} events`);
       await prisma.sessionRecording.create({
         data: {
           propostaId: proposta.id,

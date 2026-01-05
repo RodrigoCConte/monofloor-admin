@@ -7,6 +7,39 @@ interface ReportSummary {
   nextSteps: string[];
 }
 
+// Interface para detalhamento de áreas extraídas
+export interface AreaDetails {
+  piso: number;
+  parede: number;
+  teto: number;
+  bancadas: number;
+  escadas: number;
+  especiaisPequenos: number;
+  especiaisGrandes: number;
+  piscina: number;
+  metragemTotal: number;
+  valorEstimado: number;
+  detalhamento: string;
+  confianca: 'alta' | 'media' | 'baixa';
+}
+
+// Constantes de precificação (espelho do gerador de propostas)
+const PRICING = {
+  STELION_BASE: 910,
+  LILIT_BASE: 590,
+  PERDA: 0.9, // Fator de perda (divide por 0.9 = +11%)
+  MULTIPLICADORES: {
+    piso: { produto: 'STELION', mult: 1.0 },
+    parede: { produto: 'LILIT', mult: 0.8 },
+    teto: { produto: 'LILIT', mult: 0.8 },
+    bancadas: { produto: 'STELION', mult: 1.5 },
+    escadas: { produto: 'STELION', mult: 1.5 },
+    especiaisPequenos: { produto: 'STELION', mult: 0.5 },
+    especiaisGrandes: { produto: 'STELION', mult: 1.5 },
+    piscina: { produto: 'STELION', mult: 1.5 },
+  }
+};
+
 interface DailyReportData {
   projectName: string;
   projectClient: string;
@@ -317,6 +350,173 @@ Extraia a metragem total em m².`;
       console.error('[GPT] Erro ao chamar API:', error);
       return faixaEstimativa || METRAGEM_MINIMA;
     }
+  }
+
+  /**
+   * Extrai detalhes estruturados das áreas de um projeto a partir da descrição textual.
+   * Classifica por tipo (piso, parede, bancada, etc.) e calcula valor estimado
+   * usando a tabela de precificação real do gerador de propostas.
+   *
+   * @param descricao - Texto descritivo da área do projeto
+   * @param faixaEstimativa - Valor estimado da faixa selecionada (fallback)
+   * @returns Objeto com metragem por tipo e valor estimado
+   */
+  async extractAreaDetails(
+    descricao: string | null,
+    faixaEstimativa?: number
+  ): Promise<AreaDetails> {
+    const defaultResult: AreaDetails = {
+      piso: faixaEstimativa || 150,
+      parede: 0,
+      teto: 0,
+      bancadas: 0,
+      escadas: 0,
+      especiaisPequenos: 0,
+      especiaisGrandes: 0,
+      piscina: 0,
+      metragemTotal: faixaEstimativa || 150,
+      valorEstimado: 0,
+      detalhamento: 'Sem descrição - usando estimativa padrão',
+      confianca: 'baixa'
+    };
+
+    // Calcula valor default
+    defaultResult.valorEstimado = this.calcularValorEstimado(defaultResult);
+
+    if (!descricao || descricao.trim().length === 0) {
+      console.log('[GPT] Sem descrição, usando fallback');
+      return defaultResult;
+    }
+
+    try {
+      const systemPrompt = `Você é um especialista em orçamentos de aplicação de revestimento STELION/LILIT (piso monolítico).
+Sua tarefa é extrair METROS QUADRADOS por tipo de área a partir da descrição do cliente.
+
+TIPOS DE ÁREA (classifique cada área mencionada):
+- piso: áreas de piso/chão (sala, quarto, cozinha, área externa, garagem, etc.)
+- parede: paredes, muros, revestimentos verticais
+- teto: forros, tetos, lajes
+- bancadas: bancadas de cozinha, banheiro, churrasqueira, ilhas
+- escadas: escadas, degraus
+- especiaisPequenos: rodapés, soleiras, pingadeiras (áreas menores que 5m²)
+- especiaisGrandes: nichos grandes, detalhes arquitetônicos (áreas maiores que 5m²)
+- piscina: bordas de piscina, áreas molhadas de piscina
+
+REGRAS:
+1. EXTRAIA a metragem de CADA tipo separadamente
+2. Dimensões: "8m x 24m" ou "5 x 10 metros" → MULTIPLIQUE (8 × 24 = 192m²)
+3. Rodapé em metros lineares: considere ~0.15m² por metro linear
+4. Borda de piscina: considere ~0.3m² por metro linear
+5. Se não especificar o tipo, assuma que é PISO
+6. Se só mencionar cômodos sem números, retorne todos como 0
+
+RESPONDA APENAS com um objeto JSON:
+{
+  "piso": número,
+  "parede": número,
+  "teto": número,
+  "bancadas": número,
+  "escadas": número,
+  "especiaisPequenos": número,
+  "especiaisGrandes": número,
+  "piscina": número,
+  "detalhamento": "explicação breve do que foi interpretado",
+  "confianca": "alta" | "media" | "baixa"
+}`;
+
+      const userPrompt = `Descrição do projeto:
+"${descricao}"
+
+Extraia a metragem por tipo de área em m².`;
+
+      const result = await this.callGPT(systemPrompt, userPrompt, 0.2);
+
+      try {
+        // Remover markdown se o GPT retornar com ```json
+        let jsonStr = result.trim();
+        if (jsonStr.startsWith('```')) {
+          jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+        }
+
+        const parsed = JSON.parse(jsonStr);
+
+        const areaDetails: AreaDetails = {
+          piso: parsed.piso || 0,
+          parede: parsed.parede || 0,
+          teto: parsed.teto || 0,
+          bancadas: parsed.bancadas || 0,
+          escadas: parsed.escadas || 0,
+          especiaisPequenos: parsed.especiaisPequenos || 0,
+          especiaisGrandes: parsed.especiaisGrandes || 0,
+          piscina: parsed.piscina || 0,
+          metragemTotal: 0,
+          valorEstimado: 0,
+          detalhamento: parsed.detalhamento || '',
+          confianca: parsed.confianca || 'media'
+        };
+
+        // Calcular metragem total
+        areaDetails.metragemTotal =
+          areaDetails.piso + areaDetails.parede + areaDetails.teto +
+          areaDetails.bancadas + areaDetails.escadas +
+          areaDetails.especiaisPequenos + areaDetails.especiaisGrandes +
+          areaDetails.piscina;
+
+        // Se não extraiu nada, usar fallback (midpoint da faixa selecionada)
+        if (areaDetails.metragemTotal <= 0) {
+          console.log(`[GPT] Nenhuma metragem extraída da descrição, usando fallback: ${faixaEstimativa || 150}m²`);
+          return defaultResult;
+        }
+
+        // Calcular valor estimado usando tabela de preços
+        areaDetails.valorEstimado = this.calcularValorEstimado(areaDetails);
+
+        console.log(`[GPT] Áreas extraídas:`, {
+          piso: areaDetails.piso,
+          parede: areaDetails.parede,
+          teto: areaDetails.teto,
+          bancadas: areaDetails.bancadas,
+          escadas: areaDetails.escadas,
+          total: areaDetails.metragemTotal,
+          valor: areaDetails.valorEstimado,
+          confianca: areaDetails.confianca
+        });
+
+        return areaDetails;
+
+      } catch (parseError) {
+        console.error('[GPT] Erro ao parsear resposta:', parseError);
+        console.log('[GPT] Resposta raw:', result);
+        return defaultResult;
+      }
+
+    } catch (error) {
+      console.error('[GPT] Erro ao chamar API:', error);
+      return defaultResult;
+    }
+  }
+
+  /**
+   * Calcula o valor estimado do projeto usando a tabela de precificação
+   * do gerador de propostas.
+   */
+  private calcularValorEstimado(areas: Partial<AreaDetails>): number {
+    let valorTotal = 0;
+
+    const tiposArea = ['piso', 'parede', 'teto', 'bancadas', 'escadas', 'especiaisPequenos', 'especiaisGrandes', 'piscina'] as const;
+
+    for (const tipo of tiposArea) {
+      const metros = areas[tipo] || 0;
+      if (metros <= 0) continue;
+
+      const config = PRICING.MULTIPLICADORES[tipo];
+      const metrosComPerda = metros / PRICING.PERDA;
+      const precoBase = config.produto === 'STELION' ? PRICING.STELION_BASE : PRICING.LILIT_BASE;
+
+      valorTotal += metrosComPerda * precoBase * config.mult;
+    }
+
+    return Math.round(valorTotal);
   }
 }
 

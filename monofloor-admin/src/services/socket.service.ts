@@ -476,3 +476,66 @@ export function emitGPSAutoCheckout(data: {
   // Also send push notification
   sendGPSAutoCheckoutPush(data.userId, data.projectName).catch(console.error);
 }
+
+/**
+ * Emit proposal opened event
+ * Triggered when a client opens a proposal HTML
+ */
+export function emitProposalOpened(data: {
+  propostaId: string;
+  leadId: string;
+  clientName: string;
+  ownerUserName: string;
+  sessionId: string;
+  deviceType: string;
+  timestamp: Date;
+}): void {
+  if (io) {
+    // Notify admin room (all admins will receive)
+    io.to('admin').emit('proposal:opened', data);
+    console.log(`[Socket] Emitted proposal:opened - Cliente "${data.clientName}" abriu proposta (${data.deviceType})`);
+  }
+}
+
+/**
+ * Emit proposal viewing update (time spent)
+ * Triggered periodically while client is viewing the proposal
+ */
+export function emitProposalViewing(data: {
+  propostaId: string;
+  leadId: string;
+  clientName: string;
+  ownerUserName: string;
+  sessionId: string;
+  timeOnPage: number;
+  scrollDepth: number;
+  timestamp: Date;
+}): void {
+  if (io) {
+    io.to('admin').emit('proposal:viewing', data);
+    // Log only every 60 seconds to reduce noise
+    if (data.timeOnPage % 60 === 0) {
+      console.log(`[Socket] Emitted proposal:viewing - "${data.clientName}" ${data.timeOnPage}s na proposta`);
+    }
+  }
+}
+
+/**
+ * Emit proposal closed event
+ * Triggered when client closes the proposal (or stops viewing)
+ */
+export function emitProposalClosed(data: {
+  propostaId: string;
+  leadId: string;
+  clientName: string;
+  ownerUserName: string;
+  sessionId: string;
+  totalTimeOnPage: number;
+  maxScrollDepth: number;
+  timestamp: Date;
+}): void {
+  if (io) {
+    io.to('admin').emit('proposal:closed', data);
+    console.log(`[Socket] Emitted proposal:closed - "${data.clientName}" fechou proposta após ${data.totalTimeOnPage}s`);
+  }
+}

@@ -85,6 +85,39 @@ export interface TaskUpdatedEvent {
   timestamp: Date;
 }
 
+// Proposal tracking events
+export interface ProposalOpenedEvent {
+  propostaId: string;
+  leadId: string;
+  clientName: string;
+  ownerUserName: string;
+  sessionId: string;
+  deviceType: string;
+  timestamp: Date;
+}
+
+export interface ProposalViewingEvent {
+  propostaId: string;
+  leadId: string;
+  clientName: string;
+  ownerUserName: string;
+  sessionId: string;
+  timeOnPage: number;
+  scrollDepth: number;
+  timestamp: Date;
+}
+
+export interface ProposalClosedEvent {
+  propostaId: string;
+  leadId: string;
+  clientName: string;
+  ownerUserName: string;
+  sessionId: string;
+  totalTimeOnPage: number;
+  maxScrollDepth: number;
+  timestamp: Date;
+}
+
 // Event listeners storage
 type EventCallback<T> = (data: T) => void;
 const listeners: { [key: string]: EventCallback<any>[] } = {};
@@ -153,6 +186,21 @@ export function connectSocket(): Socket {
     notifyListeners('task:updated', data);
   });
 
+  // Proposal tracking events
+  socket.on('proposal:opened', (data: ProposalOpenedEvent) => {
+    console.log('📄 Proposal opened:', data.clientName);
+    notifyListeners('proposal:opened', data);
+  });
+
+  socket.on('proposal:viewing', (data: ProposalViewingEvent) => {
+    notifyListeners('proposal:viewing', data);
+  });
+
+  socket.on('proposal:closed', (data: ProposalClosedEvent) => {
+    console.log('📄 Proposal closed:', data.clientName, `(${data.totalTimeOnPage}s)`);
+    notifyListeners('proposal:closed', data);
+  });
+
   return socket;
 }
 
@@ -207,6 +255,18 @@ export function onBatteryCritical(callback: EventCallback<BatteryCriticalEvent>)
 
 export function onTaskUpdated(callback: EventCallback<TaskUpdatedEvent>): () => void {
   return addListener('task:updated', callback);
+}
+
+export function onProposalOpened(callback: EventCallback<ProposalOpenedEvent>): () => void {
+  return addListener('proposal:opened', callback);
+}
+
+export function onProposalViewing(callback: EventCallback<ProposalViewingEvent>): () => void {
+  return addListener('proposal:viewing', callback);
+}
+
+export function onProposalClosed(callback: EventCallback<ProposalClosedEvent>): () => void {
+  return addListener('proposal:closed', callback);
 }
 
 /**

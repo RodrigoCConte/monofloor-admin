@@ -1492,7 +1492,36 @@
               Nenhum evento encontrado nesta gravação.
             </div>
           </div>
-          <div class="modal__footer">
+          <div class="modal__footer modal__footer--replay">
+            <div class="replay-footer-controls">
+              <button class="replay-footer-btn replay-footer-btn--play" @click="toggleReplayPlay" :title="isReplayPlaying ? 'Pausar' : 'Reproduzir'">
+                {{ isReplayPlaying ? '⏸' : '▶' }}
+              </button>
+              <input
+                type="range"
+                class="replay-footer-progress"
+                min="0"
+                max="100"
+                :value="replayProgress"
+                @input="seekReplay($event)"
+              >
+              <span class="replay-footer-time">{{ replayCurrentTime }} / {{ replayTotalTime }}</span>
+              <button
+                class="replay-footer-btn replay-footer-btn--skip"
+                :class="{ active: replaySkipInactive }"
+                @click="toggleSkipInactive"
+                title="Pular períodos inativos"
+              >⏩</button>
+              <div class="replay-footer-speeds">
+                <button
+                  v-for="speed in [1, 2, 4]"
+                  :key="speed"
+                  class="replay-footer-btn replay-footer-btn--speed"
+                  :class="{ active: replaySpeed === speed }"
+                  @click="setReplaySpeed(speed)"
+                >{{ speed }}x</button>
+              </div>
+            </div>
             <button class="btn btn--outline" @click="closeReplayModal">Fechar</button>
           </div>
         </div>
@@ -1650,6 +1679,8 @@ import {
   onProposalOpened,
   onProposalViewing,
   onProposalClosed,
+} from '@/services/socket';
+import type {
   ProposalOpenedEvent,
   ProposalViewingEvent,
   ProposalClosedEvent,
@@ -1867,6 +1898,17 @@ const showReplayModal = ref(false);
 const selectedRecording = ref<SessionRecording | null>(null);
 const replayEvents = ref<any[]>([]);
 const loadingReplayEvents = ref(false);
+
+// Replay player state
+const isReplayPlaying = ref(false);
+const replayProgress = ref(0);
+const replayCurrentTime = ref('00:00');
+const replayTotalTime = ref('00:00');
+const replaySpeed = ref(1);
+const replaySkipInactive = ref(false);
+let rrwebPlayer: any = null;
+let replayAnimationId: number | null = null;
+let replayTotalDurationMs = 0;
 
 // Anexos do Lead
 interface Anexo {
@@ -2634,9 +2676,10 @@ const openDealDetail = async (deal: Deal) => {
   ]);
 
   // Buscar analytics e recordings da proposta se existir
-  if (ultimaProposta.value?.id) {
-    fetchPropostaAnalytics(ultimaProposta.value.id);
-    fetchRecordings(ultimaProposta.value.id);
+  const proposta = ultimaProposta.value as Proposta | null;
+  if (proposta?.id) {
+    fetchPropostaAnalytics(proposta.id);
+    fetchRecordings(proposta.id);
   }
 };
 
@@ -2745,12 +2788,85 @@ const playRecordingForView = (sessionId: string | undefined) => {
   }
 };
 
-// Inicializar player rrweb quando eventos são carregados
-let rrwebPlayer: any = null;
+// Formatar tempo para MM:SS
+const formatReplayTime = (seconds: number) => {
+  const mins = Math.floor(Math.max(0, seconds) / 60).toString().padStart(2, '0');
+  const secs = Math.floor(Math.max(0, seconds) % 60).toString().padStart(2, '0');
+  return `${mins}:${secs}`;
+};
 
+// Atualizar tempo do player
+const updateReplayTime = () => {
+  if (!rrwebPlayer) return;
+  const currentMs = Math.max(0, rrwebPlayer.getCurrentTime());
+  const currentSec = currentMs / 1000;
+  replayCurrentTime.value = formatReplayTime(currentSec);
+  if (replayTotalDurationMs > 0) {
+    replayProgress.value = (currentMs / replayTotalDurationMs) * 100;
+  }
+  if (isReplayPlaying.value) {
+    replayAnimationId = requestAnimationFrame(updateReplayTime);
+  }
+};
+
+// Toggle play/pause
+const toggleReplayPlay = () => {
+  if (!rrwebPlayer) return;
+  if (isReplayPlaying.value) {
+    rrwebPlayer.pause();
+    if (replayAnimationId) cancelAnimationFrame(replayAnimationId);
+    isReplayPlaying.value = false;
+  } else {
+    rrwebPlayer.play();
+    isReplayPlaying.value = true;
+    updateReplayTime();
+  }
+};
+
+// Seek no replay
+const seekReplay = (e: Event) => {
+  if (!rrwebPlayer) return;
+  const value = parseInt((e.target as HTMLInputElement).value);
+  const seekTime = (value / 100) * replayTotalDurationMs;
+  rrwebPlayer.pause();
+  rrwebPlayer.play(seekTime);
+  isReplayPlaying.value = true;
+  updateReplayTime();
+};
+
+// Mudar velocidade
+const setReplaySpeed = (speed: number) => {
+  if (!rrwebPlayer) return;
+  replaySpeed.value = speed;
+  rrwebPlayer.setConfig({ speed });
+};
+
+// Toggle skip inactive
+const toggleSkipInactive = () => {
+  if (!rrwebPlayer) return;
+  replaySkipInactive.value = !replaySkipInactive.value;
+  rrwebPlayer.setConfig({ skipInactive: replaySkipInactive.value });
+};
+
+// Inicializar player rrweb quando eventos são carregados
 watch(replayEvents, async (events) => {
   if (events.length > 0) {
     await nextTick();
+
+    // Reset state
+    isReplayPlaying.value = false;
+    replayProgress.value = 0;
+    replayCurrentTime.value = '00:00';
+    replaySpeed.value = 1;
+    replaySkipInactive.value = false;
+
+    // Verificar se tem FullSnapshot
+    const hasFullSnapshot = events.some((e: any) => e.type === 2);
+    if (!hasFullSnapshot) {
+      console.warn('[Replay] Gravação sem FullSnapshot - não é possível reproduzir');
+      toast.error('Esta gravação está incompleta (sem snapshot inicial)');
+      return;
+    }
 
     // Limpar player anterior se existir
     const playerContainer = document.getElementById('rrweb-player');
@@ -2758,31 +2874,70 @@ watch(replayEvents, async (events) => {
       playerContainer.innerHTML = '';
     }
 
-    // Carregar rrweb-player dinamicamente
+    // Usar rrweb Replayer diretamente
     const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/rrweb-player@latest/dist/index.js';
+    script.src = 'https://cdn.jsdelivr.net/npm/rrweb@1.1.3/dist/rrweb.min.js';
     script.onload = () => {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'https://cdn.jsdelivr.net/npm/rrweb-player@latest/dist/style.css';
-      document.head.appendChild(link);
+      // Carregar CSS do rrweb
+      if (!document.getElementById('rrweb-css')) {
+        const link = document.createElement('link');
+        link.id = 'rrweb-css';
+        link.rel = 'stylesheet';
+        link.href = 'https://cdn.jsdelivr.net/npm/rrweb@1.1.3/dist/rrweb.min.css';
+        document.head.appendChild(link);
+      }
 
-      // Aguardar CSS carregar
       setTimeout(() => {
-        if (playerContainer && (window as any).rrwebPlayer) {
-          rrwebPlayer = new (window as any).rrwebPlayer({
-            target: playerContainer,
-            props: {
-              events: events,
-              width: 800,
-              height: 500,
-              autoPlay: false,
-              showController: true,
-              speedOption: [1, 2, 4, 8],
-            },
-          });
+        const rrwebLib = (window as any).rrweb;
+
+        if (playerContainer && rrwebLib?.Replayer) {
+          try {
+            // Log Meta event dimensions
+            const metaEvent = events.find((e: any) => e.type === 4);
+            console.log('[Replay] Meta event:', metaEvent);
+            if (metaEvent?.data) {
+              console.log('[Replay] Recorded viewport:', metaEvent.data.width, 'x', metaEvent.data.height);
+            }
+
+            // O rrweb Replayer cria sua própria estrutura dentro do container
+            rrwebPlayer = new rrwebLib.Replayer(events, {
+              root: playerContainer,
+              skipInactive: false, // Tempo real - não pular períodos inativos
+              showWarning: false,
+              showDebug: false,
+              blockClass: 'rr-block',
+              speed: 1,
+            });
+
+            // Log estrutura criada
+            setTimeout(() => {
+              const wrapper = playerContainer.querySelector('.replayer-wrapper') as HTMLElement | null;
+              const iframe = playerContainer.querySelector('iframe') as HTMLIFrameElement | null;
+              console.log('[Replay] Wrapper element:', wrapper);
+              console.log('[Replay] Wrapper dimensions:', wrapper?.offsetWidth, 'x', wrapper?.offsetHeight);
+              console.log('[Replay] Iframe element:', iframe);
+              console.log('[Replay] Iframe dimensions:', iframe?.offsetWidth, 'x', iframe?.offsetHeight);
+              if (iframe) {
+                console.log('[Replay] Iframe style.width:', iframe.style.width);
+                console.log('[Replay] Iframe style.height:', iframe.style.height);
+              }
+            }, 500);
+
+            // Calcular duração total
+            const firstEvent = events[0];
+            const lastEvent = events[events.length - 1];
+            replayTotalDurationMs = Math.max(0, lastEvent.timestamp - firstEvent.timestamp);
+            replayTotalTime.value = formatReplayTime(replayTotalDurationMs / 1000);
+
+          } catch (err) {
+            console.error('[Replay] Error initializing player:', err);
+            toast.error('Erro ao inicializar o player');
+          }
         }
-      }, 100);
+      }, 200);
+    };
+    script.onerror = () => {
+      toast.error('Erro ao carregar biblioteca de replay');
     };
     document.head.appendChild(script);
   }
@@ -3055,10 +3210,11 @@ const gerarProposta = async () => {
   }
 
   // Abrir gerador de propostas em nova aba
-  // Em dev local, o backend roda na porta 3000; em prod, usa a mesma origem
-  const apiUrl = import.meta.env.VITE_API_URL;
-  const baseUrl = apiUrl || 'http://localhost:3000';
-  const propostasUrl = `${baseUrl}/propostas.html?${params.toString()}`;
+  // Em produção usa /geradordepropostas/, em dev local usa localhost:3000
+  const isDev = window.location.hostname === 'localhost';
+  const propostasUrl = isDev
+    ? `http://localhost:3000/propostas.html?${params.toString()}`
+    : `/geradordepropostas/?${params.toString()}`;
 
   window.open(propostasUrl, '_blank');
 
@@ -3779,7 +3935,7 @@ const dismissNotification = (notificationId: string) => {
 const openLeadFromNotification = (leadId: string) => {
   const deal = deals.value.find(d => d.id === leadId);
   if (deal) {
-    openDealModal(deal);
+    openDealDetail(deal);
   }
 };
 
@@ -6757,11 +6913,11 @@ onUnmounted(() => {
 }
 
 .modal__body--replay {
-  padding: 0;
-  display: flex;
+  padding: 0 !important;
+  display: flex !important;
   align-items: center;
   justify-content: center;
-  min-height: 400px;
+  min-height: 450px;
   background: #0a0a0a;
 }
 
@@ -6769,8 +6925,10 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   color: #888;
+  min-height: 400px;
 }
 
 .replay-loading__spinner {
@@ -6788,20 +6946,144 @@ onUnmounted(() => {
 
 .replay-player-container {
   width: 100%;
-  height: 100%;
+  height: 450px;
   display: flex;
-  align-items: center;
   justify-content: center;
-  padding: 20px;
+  align-items: center;
+  background: #0a0a0a;
+  overflow: hidden;
 }
 
+/* Player escalado para caber no container */
 #rrweb-player {
-  border-radius: 8px;
-  overflow: hidden;
+  border: 3px solid #c9a962;
+  background: #0a0a0a;
+  box-shadow: 6px 6px 0 rgba(201, 169, 98, 0.5);
+  transform: scale(0.4);
+  transform-origin: center center;
 }
 
 .replay-empty {
   color: #666;
   font-size: 14px;
+  text-align: center;
+  padding: 60px 20px;
+}
+
+/* ===== FOOTER COM CONTROLES DO REPLAY ===== */
+.modal__footer--replay {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 24px !important;
+  background: #1a1a1a !important;
+  border-top: 3px solid #c9a962 !important;
+}
+
+.replay-footer-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+}
+
+.replay-footer-btn {
+  padding: 10px 14px;
+  cursor: pointer;
+  background: #333;
+  border: 2px solid #555;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.replay-footer-btn:hover {
+  background: #444;
+  border-color: #c9a962;
+  transform: translate(-2px, -2px);
+  box-shadow: 2px 2px 0 #c9a962;
+}
+
+.replay-footer-btn--play {
+  background: #c9a962 !important;
+  border-color: #c9a962 !important;
+  color: #1a1a1a !important;
+  font-size: 16px;
+  min-width: 44px;
+}
+
+.replay-footer-btn--play:hover {
+  background: #d4b872 !important;
+  border-color: #fff !important;
+  box-shadow: 2px 2px 0 #fff;
+}
+
+.replay-footer-btn--speed {
+  padding: 8px 12px;
+  font-size: 12px;
+  min-width: 40px;
+}
+
+.replay-footer-btn--speed.active {
+  background: #c9a962 !important;
+  border-color: #c9a962 !important;
+  color: #1a1a1a !important;
+}
+
+.replay-footer-btn--skip {
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+.replay-footer-btn--skip.active {
+  background: #c9a962 !important;
+  border-color: #c9a962 !important;
+  color: #1a1a1a !important;
+}
+
+.replay-footer-progress {
+  flex: 1;
+  height: 10px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #333;
+  border: 2px solid #555;
+  cursor: pointer;
+  min-width: 150px;
+}
+
+.replay-footer-progress::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #c9a962;
+  border: 2px solid #1a1a1a;
+  cursor: pointer;
+}
+
+.replay-footer-progress::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: #c9a962;
+  border: 2px solid #1a1a1a;
+  cursor: pointer;
+}
+
+.replay-footer-time {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  color: #c9a962;
+  white-space: nowrap;
+  min-width: 90px;
+}
+
+.replay-footer-speeds {
+  display: flex;
+  gap: 6px;
 }
 </style>
