@@ -49,6 +49,13 @@ interface ProposalData {
   clienteLocal?: string;
   clienteDetalhes?: string;
   areaTotalInterna?: number;
+
+  // PAGAMENTO
+  percentualEntrada?: number;
+  numeroParcelas?: number;
+  descontoVista?: number;
+  taxaJurosCartao?: number;
+  numeroParcelasCartao?: number;
 }
 
 function formatarMoeda(valor: number): string {
@@ -455,6 +462,20 @@ function createSurfacesTableHTML(data: ProposalData): string {
   const precoStelion = data.precoBaseStelion || 910;
   const precoLilit = data.precoBaseLilit || 590;
 
+  // DEBUG: Log das superfícies recebidas
+  console.log('🔍 createSurfacesTableHTML - SUPERFÍCIES NO DATA:', {
+    teto: data.teto,
+    bancadas: data.bancadas,
+    escadas: data.escadas,
+    especiaisPequenos: data.especiaisPequenos,
+    especiaisGrandes: data.especiaisGrandes,
+    piscina: data.piscina,
+    pisoStelion: data.pisoStelion,
+    pisoLilit: data.pisoLilit,
+    paredeStelion: data.paredeStelion,
+    paredeLilit: data.paredeLilit,
+  });
+
   // Lista de superfícies com seus dados
   // Piso usa STELION, demais usam LILIT
   const superficies = [
@@ -608,10 +629,11 @@ function createSurfacesTableHTML(data: ProposalData): string {
 
     .trademark {
       font-family: 'Inter', sans-serif;
-      font-size: 16px;
-      font-weight: 500;
+      font-size: 12px;
+      font-weight: 400;
       color: #ffffff;
-      vertical-align: top;
+      vertical-align: super;
+      margin-left: 2px;
     }
 
     .row-stelion {
@@ -620,6 +642,27 @@ function createSurfacesTableHTML(data: ProposalData): string {
 
     .row-lilit {
       background: rgba(100, 150, 200, 0.08);
+    }
+
+    .row-total {
+      background: #1a1a1a;
+      border-top: 2px solid #333333;
+    }
+
+    .row-total td {
+      color: #ffffff;
+      font-weight: 500;
+      padding: 28px 16px;
+    }
+
+    .row-total .product-name {
+      color: #ffffff;
+    }
+
+    .row-total .total-value {
+      font-weight: 600;
+      font-size: 20px;
+      color: #ffffff;
     }
 
     .totals-section {
@@ -690,8 +733,6 @@ function createSurfacesTableHTML(data: ProposalData): string {
 
   <!-- Tabela por Superfície -->
   <div class="table-container">
-    <div class="section-title">Investimento por Superfície</div>
-
     <table class="data-table">
       <thead>
         <tr>
@@ -706,8 +747,8 @@ function createSurfacesTableHTML(data: ProposalData): string {
         <tr class="${s.produto === 'STELION' ? 'row-stelion' : 'row-lilit'}">
           <td>
             <div class="product-cell">
-              <span class="product-name">${s.nome.toUpperCase()}</span>
-              <span class="surface-desc">${s.produto}™</span>
+              <span class="product-name">${s.produto}<span class="trademark">™</span></span>
+              <span class="surface-desc">${s.nome}</span>
             </div>
           </td>
           <td>${formatarMetragem(s.area)} m²</td>
@@ -715,20 +756,312 @@ function createSurfacesTableHTML(data: ProposalData): string {
           <td>R$ ${formatarMoeda(s.area * s.preco)}</td>
         </tr>
         `).join('')}
+        <!-- Linha de Total -->
+        <tr class="row-total">
+          <td>
+            <div class="product-cell">
+              <span class="product-name total-label">TOTAL</span>
+            </div>
+          </td>
+          <td class="total-value">${formatarMetragem(areaTotal)} m²</td>
+          <td></td>
+          <td class="total-value">R$ ${formatarMoeda(totalGeral)}</td>
+        </tr>
       </tbody>
     </table>
+  </div>
+</body>
+</html>
+  `;
+}
 
-    <!-- Resumo Total -->
-    <div class="totals-section">
-      <div class="totals-title">Resumo Total</div>
-      <div class="totals-grid">
-        <div class="total-card">
-          <div class="total-card-label">ÁREA TOTAL</div>
-          <div class="total-card-area">${formatarMetragem(areaTotal)} m²</div>
+// HTML template - Slide de Pagamento (entre Investimento e Detalhamento)
+function createPaymentHTML(data: ProposalData): string {
+  const logoBase64 = loadLogoBase64();
+  const niteclubFontBase64 = getNiteclubFontBase64();
+
+  // Valores de pagamento
+  const valorTotal = data.valorTotal || 0;
+  const percentualEntrada = data.percentualEntrada || 50;
+  const descontoVista = data.descontoVista || 5;
+  const taxaJurosCartao = data.taxaJurosCartao || 2.5;
+  const numeroParcelasCartao = data.numeroParcelasCartao || 12;
+
+  // Cálculos
+  const valorEntrada = valorTotal * (percentualEntrada / 100);
+  const valorRestante = valorTotal - valorEntrada;
+  const parcela1 = valorRestante / 2; // 25% do total
+  const parcela2 = valorRestante / 2; // 25% do total
+
+  // À vista com desconto
+  const valorVista = valorTotal * (1 - descontoVista / 100);
+
+  // Cartão de crédito com juros (juros simples para simplificar)
+  const valorComJuros = valorTotal * (1 + (taxaJurosCartao * numeroParcelasCartao) / 100);
+  const parcelaCartao = valorComJuros / numeroParcelasCartao;
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    ${sharedFontStyles}
+
+    @font-face {
+      font-family: 'NITECLUB';
+      src: url('${niteclubFontBase64}') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: block;
+    }
+
+    body {
+      width: 1080px;
+      height: 1920px;
+      background: #000000;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overflow: hidden;
+      color: #ffffff;
+      padding: 80px 53px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 53px;
+    }
+
+    .logo-img {
+      width: 562px;
+      height: auto;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      font-family: 'Inter', sans-serif;
+      font-size: 21px;
+      color: #999999;
+      font-weight: 400;
+      text-transform: uppercase;
+      letter-spacing: 0.3em;
+    }
+
+    .payment-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    .payment-card {
+      background: #0a0a0a;
+      border: 1px solid #1a1a1a;
+      border-radius: 11px;
+      padding: 32px;
+    }
+
+    .payment-card.highlight {
+      background: #ffffff;
+      color: #000000;
+    }
+
+    .card-title {
+      font-family: 'NITECLUB', 'Inter', sans-serif;
+      letter-spacing: 2px;
+      font-size: 28px;
+      font-weight: normal;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #222222;
+    }
+
+    .payment-card.highlight .card-title {
+      border-bottom-color: #cccccc;
+    }
+
+    .payment-details {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .payment-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .payment-label {
+      font-size: 22px;
+      color: #999999;
+      font-weight: 400;
+    }
+
+    .payment-card.highlight .payment-label {
+      color: #666666;
+    }
+
+    .payment-value {
+      font-family: 'Inter', sans-serif;
+      font-size: 26px;
+      color: #ffffff;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .payment-card.highlight .payment-value {
+      color: #000000;
+    }
+
+    .payment-desc {
+      font-size: 18px;
+      color: #666666;
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    .payment-card.highlight .payment-desc {
+      color: #888888;
+    }
+
+    .divider {
+      height: 1px;
+      background: #222222;
+      margin: 8px 0;
+    }
+
+    .payment-card.highlight .divider {
+      background: #dddddd;
+    }
+
+    .total-highlight {
+      background: #1a1a1a;
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 8px;
+    }
+
+    .total-highlight .payment-label {
+      color: #ffffff;
+      font-weight: 500;
+    }
+
+    .total-highlight .payment-value {
+      font-size: 32px;
+      font-weight: 600;
+    }
+
+    .payment-card.highlight .total-highlight {
+      background: #f0f0f0;
+    }
+
+    .payment-card.highlight .total-highlight .payment-label {
+      color: #000000;
+    }
+
+    .installment-info {
+      font-size: 16px;
+      color: #777777;
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    .payment-card.highlight .installment-info {
+      color: #888888;
+    }
+
+    .discount-badge {
+      display: inline-block;
+      background: #22c55e;
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 4px;
+      margin-left: 12px;
+      text-transform: uppercase;
+    }
+
+    .interest-badge {
+      display: inline-block;
+      background: #f97316;
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 4px;
+      margin-left: 12px;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    ${logoBase64 ? `<img src="${logoBase64}" alt="Monofloor" class="logo-img">` : '<div class="logo">MONOFLOOR</div>'}
+    <div class="subtitle">FORMAS DE PAGAMENTO</div>
+  </div>
+
+  <div class="payment-section">
+    <!-- Parcelado -->
+    <div class="payment-card">
+      <div class="card-title">PARCELADO</div>
+      <div class="payment-desc">
+        50% de entrada para produção de materiais<br>
+        25% em 30 dias<br>
+        25% em 60 dias
+      </div>
+      <div class="payment-details">
+        <div class="payment-row">
+          <span class="payment-label">Entrada (50%)</span>
+          <span class="payment-value">R$ ${formatarMoeda(valorEntrada)}</span>
         </div>
-        <div class="total-card">
-          <div class="total-card-label">INVESTIMENTO</div>
-          <div class="total-card-area">R$ ${formatarMoeda(totalGeral)}</div>
+        <div class="divider"></div>
+        <div class="payment-row">
+          <span class="payment-label">Parcela 1 - 30 dias (25%)</span>
+          <span class="payment-value">R$ ${formatarMoeda(parcela1)}</span>
+        </div>
+        <div class="divider"></div>
+        <div class="payment-row">
+          <span class="payment-label">Parcela 2 - 60 dias (25%)</span>
+          <span class="payment-value">R$ ${formatarMoeda(parcela2)}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- À Vista -->
+    <div class="payment-card highlight">
+      <div class="card-title">À VISTA <span class="discount-badge">${descontoVista}% OFF</span></div>
+      <div class="payment-desc">
+        100% antes da execução
+      </div>
+      <div class="payment-details">
+        <div class="total-highlight">
+          <div class="payment-row">
+            <span class="payment-label">Valor único</span>
+            <span class="payment-value">R$ ${formatarMoeda(valorVista)}</span>
+          </div>
+          <div class="installment-info">Economia de R$ ${formatarMoeda(valorTotal - valorVista)}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cartão de Crédito -->
+    <div class="payment-card">
+      <div class="card-title">CARTÃO DE CRÉDITO <span class="interest-badge">SUJEITO A JUROS</span></div>
+      <div class="payment-desc">
+        Parcelamento em até ${numeroParcelasCartao}x
+      </div>
+      <div class="payment-details">
+        <div class="total-highlight">
+          <div class="payment-row">
+            <span class="payment-label">${numeroParcelasCartao}x de</span>
+            <span class="payment-value">R$ ${formatarMoeda(parcelaCartao)}</span>
+          </div>
+          <div class="installment-info">Valor total: R$ ${formatarMoeda(valorComJuros)}</div>
         </div>
       </div>
     </div>
@@ -1112,7 +1445,7 @@ async function applyProductNamesWithNiteclub(
 
 export async function generateProposal(data: ProposalData): Promise<Buffer> {
   try {
-    console.log('📄 Gerando slides 26 e 27 com Puppeteer...');
+    console.log('📄 Gerando slides com Puppeteer...');
 
     const browser = await puppeteer.launch({
       headless: true,
@@ -1134,17 +1467,17 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
       deviceScaleFactor: 2
     });
 
-    // Gerar slide 26 (Investimento)
-    const html26 = createProposalHTML(data);
-    await page.setContent(html26, { waitUntil: 'networkidle0', timeout: 60000 });
+    // Gerar slide de Investimento
+    const htmlInvestimento = createProposalHTML(data);
+    await page.setContent(htmlInvestimento, { waitUntil: 'networkidle0', timeout: 60000 });
 
     // Esperar fontes carregarem (incluindo NITECLUB)
     await page.evaluate(() => document.fonts.ready);
     // Pequeno delay adicional para garantir renderização da fonte
     await new Promise(resolve => setTimeout(resolve, 500));
-    console.log('✅ Fontes carregadas para slide 26');
+    console.log('✅ Fontes carregadas para slide Investimento');
 
-    const slide26Buffer = await page.pdf({
+    const slideInvestimentoBuffer = await page.pdf({
       width: '1080px',
       height: '1920px',
       printBackground: true,
@@ -1152,10 +1485,29 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
       preferCSSPageSize: true
     });
 
-    console.log('✅ Slide 26 gerado:', slide26Buffer.length, 'bytes');
+    console.log('✅ Slide Investimento gerado:', slideInvestimentoBuffer.length, 'bytes');
 
-    // Gerar slide 27 (Detalhamento por Produto)
-    let slide27Buffer: Uint8Array | null = null;
+    // Gerar slide de Pagamento
+    console.log('📄 Gerando slide de Pagamento...');
+    const htmlPagamento = createPaymentHTML(data);
+    await page.setContent(htmlPagamento, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+    await page.evaluate(() => document.fonts.ready);
+    await new Promise(resolve => setTimeout(resolve, 500));
+    console.log('✅ Fontes carregadas para slide Pagamento');
+
+    const slidePagamentoBuffer = await page.pdf({
+      width: '1080px',
+      height: '1920px',
+      printBackground: true,
+      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      preferCSSPageSize: true
+    });
+
+    console.log('✅ Slide Pagamento gerado:', slidePagamentoBuffer.length, 'bytes');
+
+    // Gerar slide de Detalhamento por Superfície
+    let slideSuperficiesBuffer: Uint8Array | null = null;
 
     console.log('🔍 Verificando dados por produto:', {
       metragemStelion: data.metragemTotalStelion,
@@ -1169,17 +1521,17 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
     console.log('🔍 hasProductData:', hasProductData);
 
     if (hasProductData) {
-      console.log('📄 Gerando slide 27 (Detalhamento por Produto)...');
-      const html27 = createSurfacesTableHTML(data);
-      await page.setContent(html27, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      console.log('📄 Gerando slide Detalhamento por Superfície...');
+      const htmlSuperficies = createSurfacesTableHTML(data);
+      await page.setContent(htmlSuperficies, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
       // Esperar fontes carregarem
       await page.evaluate(() => document.fonts.ready);
       // Pequeno delay adicional para garantir renderização
       await new Promise(resolve => setTimeout(resolve, 500));
-      console.log('✅ Fontes carregadas para slide 27');
+      console.log('✅ Fontes carregadas para slide Detalhamento');
 
-      slide27Buffer = await page.pdf({
+      slideSuperficiesBuffer = await page.pdf({
         width: '1080px',
         height: '1920px',
         printBackground: true,
@@ -1187,9 +1539,9 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
         preferCSSPageSize: true
       });
 
-      console.log('✅ Slide 27 gerado:', slide27Buffer.length, 'bytes');
+      console.log('✅ Slide Detalhamento gerado:', slideSuperficiesBuffer.length, 'bytes');
     } else {
-      console.log('⚠️ Slide 27 ignorado (sem dados de superfície)');
+      console.log('⚠️ Slide Detalhamento ignorado (sem dados de superfície)');
     }
 
     await browser.close();
@@ -1199,7 +1551,7 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
 
     if (!fs.existsSync(templatePath)) {
       console.log('⚠️ Template não encontrado, retornando apenas slides gerados');
-      return slide26Buffer;
+      return slideInvestimentoBuffer;
     }
 
     console.log('📚 Carregando template...');
@@ -1212,7 +1564,6 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
     const { width: templateWidth, height: templateHeight } = firstPage.getSize();
     console.log(`📐 Dimensões do template: ${templateWidth}x${templateHeight} pontos`);
 
-    const slide26Pdf = await PDFDocument.load(slide26Buffer);
     const finalPdf = await PDFDocument.create();
 
     // Copiar as primeiras 24 páginas do template, trocando ordem de 23 e 24
@@ -1238,17 +1589,24 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
       await applyClientInfoOverlays(finalPdf, data);
     }
 
-    // Copiar slide 26
-    const slide26Pages = await finalPdf.copyPages(slide26Pdf, [0]);
-    slide26Pages.forEach(page => finalPdf.addPage(page));
-    console.log('✅ Slide 26 adicionado');
+    // Copiar slide de Investimento
+    const slideInvestimentoPdf = await PDFDocument.load(slideInvestimentoBuffer);
+    const slideInvestimentoPages = await finalPdf.copyPages(slideInvestimentoPdf, [0]);
+    slideInvestimentoPages.forEach(page => finalPdf.addPage(page));
+    console.log('✅ Slide Investimento adicionado');
 
-    // Copiar slide 27 (se existir)
-    if (slide27Buffer) {
-      const slide27Pdf = await PDFDocument.load(slide27Buffer);
-      const slide27Pages = await finalPdf.copyPages(slide27Pdf, [0]);
-      slide27Pages.forEach(page => finalPdf.addPage(page));
-      console.log('✅ Slide 27 adicionado');
+    // Copiar slide de Pagamento
+    const slidePagamentoPdf = await PDFDocument.load(slidePagamentoBuffer);
+    const slidePagamentoPages = await finalPdf.copyPages(slidePagamentoPdf, [0]);
+    slidePagamentoPages.forEach(page => finalPdf.addPage(page));
+    console.log('✅ Slide Pagamento adicionado');
+
+    // Copiar slide de Detalhamento por Superfície (se existir)
+    if (slideSuperficiesBuffer) {
+      const slideSuperficiesPdf = await PDFDocument.load(slideSuperficiesBuffer);
+      const slideSuperficiesPages = await finalPdf.copyPages(slideSuperficiesPdf, [0]);
+      slideSuperficiesPages.forEach(page => finalPdf.addPage(page));
+      console.log('✅ Slide Detalhamento adicionado');
     }
 
     const finalPdfBytes = await finalPdf.save();
