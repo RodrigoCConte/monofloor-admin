@@ -98,7 +98,15 @@ function isBot(userAgent: string): boolean {
  */
 router.post('/generate', async (req, res) => {
   try {
-    console.log('📊 Gerando proposta...', req.body);
+    console.log('📊 Gerando proposta...');
+    console.log('📊 SUPERFÍCIES RECEBIDAS:', {
+      teto: req.body.teto,
+      bancadas: req.body.bancadas,
+      escadas: req.body.escadas,
+      especiaisPequenos: req.body.especiaisPequenos,
+      especiaisGrandes: req.body.especiaisGrandes,
+      piscina: req.body.piscina,
+    });
 
     const {
       // STELION
@@ -130,6 +138,14 @@ router.post('/generate', async (req, res) => {
       paredeStelion,
       pisoLilit,
       paredeLilit,
+
+      // SUPERFÍCIES DETALHADAS
+      teto,
+      bancadas,
+      escadas,
+      especiaisPequenos,
+      especiaisGrandes,
+      piscina,
 
       // DADOS DO CLIENTE (para overlay na página de info)
       clienteNome,
@@ -173,6 +189,14 @@ router.post('/generate', async (req, res) => {
       paredeStelion: parseFloat(paredeStelion) || 0,
       pisoLilit: parseFloat(pisoLilit) || 0,
       paredeLilit: parseFloat(paredeLilit) || 0,
+
+      // SUPERFÍCIES DETALHADAS
+      teto: parseFloat(teto) || 0,
+      bancadas: parseFloat(bancadas) || 0,
+      escadas: parseFloat(escadas) || 0,
+      especiaisPequenos: parseFloat(especiaisPequenos) || 0,
+      especiaisGrandes: parseFloat(especiaisGrandes) || 0,
+      piscina: parseFloat(piscina) || 0,
 
       // DADOS DO CLIENTE (para overlay na página de info)
       clienteNome: clienteNome || '',
