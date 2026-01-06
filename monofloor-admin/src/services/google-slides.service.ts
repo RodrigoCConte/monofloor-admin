@@ -218,14 +218,14 @@ function createProposalHTML(data: ProposalData): string {
     }
 
     .value-label {
-      font-size: 19px;
+      font-size: 23px;
       color: #999999;
       font-weight: 500;
     }
 
     .value-amount {
       font-family: 'Inter', sans-serif;
-      font-size: 21px;
+      font-size: 25px;
       color: #ffffff;
       font-weight: 300;
       font-variant-numeric: tabular-nums;
@@ -243,7 +243,7 @@ function createProposalHTML(data: ProposalData): string {
     }
 
     .value-row.highlight .value-amount {
-      font-size: 24px;
+      font-size: 29px;
       font-weight: 700;
     }
 
@@ -291,7 +291,7 @@ function createProposalHTML(data: ProposalData): string {
     }
 
     .total-item-label {
-      font-size: 15px;
+      font-size: 18px;
       color: #666666;
       text-transform: uppercase;
       font-weight: 600;
@@ -301,7 +301,7 @@ function createProposalHTML(data: ProposalData): string {
 
     .total-item-value {
       font-family: 'Inter', sans-serif;
-      font-size: 24px;
+      font-size: 29px;
       color: #000000;
       font-weight: 300;
       font-variant-numeric: tabular-nums;
@@ -314,7 +314,7 @@ function createProposalHTML(data: ProposalData): string {
     }
 
     .grand-total-label {
-      font-size: 17px;
+      font-size: 20px;
       color: #666666;
       text-transform: uppercase;
       font-weight: 600;
@@ -324,7 +324,7 @@ function createProposalHTML(data: ProposalData): string {
 
     .grand-total-value {
       font-family: 'Inter', sans-serif;
-      font-size: 43px;
+      font-size: 52px;
       color: #000000;
       font-weight: 300;
       font-variant-numeric: tabular-nums;
