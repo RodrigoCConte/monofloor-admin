@@ -147,13 +147,13 @@ function createProposalHTML(data: ProposalData): string {
 
     .trademark {
       font-family: 'Inter', sans-serif;
-      font-size: 21px;
+      font-size: 27px;
       font-weight: 500;
       color: #ffffff;
-      vertical-align: baseline;
+      vertical-align: top;
       margin-left: 4px;
       position: relative;
-      top: 1px;
+      top: 0px;
     }
 
     .header {
@@ -350,14 +350,6 @@ function createProposalHTML(data: ProposalData): string {
           <span class="value-label">Área Total</span>
           <span class="value-amount">${formatarMetragem(data.metragemTotalStelion)} m²</span>
         </div>
-        ${data.pisoStelion ? `<div class="value-row surface-row">
-          <span class="value-label">↳ Piso</span>
-          <span class="value-amount">${formatarMetragem(data.pisoStelion)} m²</span>
-        </div>` : ''}
-        ${data.paredeStelion ? `<div class="value-row surface-row">
-          <span class="value-label">↳ Parede</span>
-          <span class="value-amount">${formatarMetragem(data.paredeStelion)} m²</span>
-        </div>` : ''}
         <div class="value-row">
           <span class="value-label">Valor por m²</span>
           <span class="value-amount">R$ ${totalM2Stelion}/m²</span>
@@ -391,14 +383,6 @@ function createProposalHTML(data: ProposalData): string {
           <span class="value-label">Área Total</span>
           <span class="value-amount">${formatarMetragem(data.metragemTotalLilit)} m²</span>
         </div>
-        ${data.pisoLilit ? `<div class="value-row surface-row">
-          <span class="value-label">↳ Piso</span>
-          <span class="value-amount">${formatarMetragem(data.pisoLilit)} m²</span>
-        </div>` : ''}
-        ${data.paredeLilit ? `<div class="value-row surface-row">
-          <span class="value-label">↳ Parede</span>
-          <span class="value-amount">${formatarMetragem(data.paredeLilit)} m²</span>
-        </div>` : ''}
         <div class="value-row">
           <span class="value-label">Valor por m²</span>
           <span class="value-amount">R$ ${totalM2Lilit}/m²</span>
@@ -613,10 +597,10 @@ function createSurfacesTableHTML(data: ProposalData): string {
 
     .trademark {
       font-family: 'Inter', sans-serif;
-      font-size: 12px;
+      font-size: 16px;
       font-weight: 500;
       color: #ffffff;
-      vertical-align: baseline;
+      vertical-align: top;
     }
 
     .row-stelion {
@@ -872,30 +856,41 @@ async function applyClientInfoOverlays(
   if (!detalhes) detalhes = '-';
 
   // Espaçamentos
-  const paddingY = 15; // Espaço vertical entre elementos
-  const lineHeight = valueFontSize * 1.3; // Altura de cada linha de texto
+  const paddingY = 25; // Espaço vertical entre elementos (mais respiro)
+  const lineHeight = valueFontSize * 1.6; // Altura de cada linha de texto (evita sobreposição)
 
   // Largura máxima para valores (para quebra de linha)
   const maxValueWidth = blockWidth - paddingX * 2 - labelWidth - 20;
 
-  // Função para quebrar texto em múltiplas linhas
+  // Função para quebrar texto em múltiplas linhas (respeita \n existentes)
   const wrapText = (text: string, maxWidth: number, font: any, fontSize: number): string[] => {
-    const words = text.split(' ');
     const lines: string[] = [];
-    let currentLine = '';
 
-    for (const word of words) {
-      const testLine = currentLine ? `${currentLine} ${word}` : word;
-      const testWidth = font.widthOfTextAtSize(testLine, fontSize);
+    // Primeiro, dividir por quebras de linha existentes
+    const paragraphs = text.split(/\n/);
 
-      if (testWidth > maxWidth && currentLine) {
-        lines.push(currentLine);
-        currentLine = word;
-      } else {
-        currentLine = testLine;
+    for (const paragraph of paragraphs) {
+      const trimmedParagraph = paragraph.trim();
+      if (!trimmedParagraph) continue;
+
+      // Depois, quebrar cada parágrafo por largura se necessário
+      const words = trimmedParagraph.split(' ');
+      let currentLine = '';
+
+      for (const word of words) {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const testWidth = font.widthOfTextAtSize(testLine, fontSize);
+
+        if (testWidth > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
       }
+      if (currentLine) lines.push(currentLine);
     }
-    if (currentLine) lines.push(currentLine);
+
     return lines.length > 0 ? lines : ['-'];
   };
 
