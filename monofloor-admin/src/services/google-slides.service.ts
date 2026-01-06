@@ -218,14 +218,14 @@ function createProposalHTML(data: ProposalData): string {
     }
 
     .value-label {
-      font-size: 23px;
+      font-size: 26px;
       color: #999999;
       font-weight: 500;
     }
 
     .value-amount {
       font-family: 'Inter', sans-serif;
-      font-size: 25px;
+      font-size: 29px;
       color: #ffffff;
       font-weight: 300;
       font-variant-numeric: tabular-nums;
@@ -243,7 +243,7 @@ function createProposalHTML(data: ProposalData): string {
     }
 
     .value-row.highlight .value-amount {
-      font-size: 29px;
+      font-size: 33px;
       font-weight: 700;
     }
 
@@ -438,28 +438,25 @@ function createProposalHTML(data: ProposalData): string {
   `;
 }
 
-// HTML template - Slide 27 - Detalhamento por Produto
+// HTML template - Slide 27 - Detalhamento por Superfície
 function createSurfacesTableHTML(data: ProposalData): string {
   const logoBase64 = loadLogoBase64();
   const niteclubFontBase64 = getNiteclubFontBase64();
 
-  const valorM2Stelion = data.metragemTotalStelion > 0
-    ? data.valorTotalStelion / data.metragemTotalStelion
-    : data.precoBaseStelion || 910;
+  // Calcular valores por superfície
+  const areaPisoTotal = (data.pisoStelion || 0) + (data.pisoLilit || 0);
+  const areaParedeTotal = (data.paredeStelion || 0) + (data.paredeLilit || 0);
 
-  const valorM2Lilit = data.metragemTotalLilit > 0
-    ? data.valorTotalLilit / data.metragemTotalLilit
-    : data.precoBaseLilit || 590;
+  // Valor por m² (usando preço base do produto principal para cada superfície)
+  const valorM2Piso = data.precoBaseStelion || 910;
+  const valorM2Parede = data.precoBaseLilit || 590;
 
-  const temStelion = data.metragemTotalStelion > 0;
-  const temLilit = data.metragemTotalLilit > 0;
+  // Totais por superfície
+  const totalPiso = areaPisoTotal * valorM2Piso;
+  const totalParede = areaParedeTotal * valorM2Parede;
 
-  const descricaoStelion = data.pisoStelion && data.pisoStelion > 0
-    ? 'Piso + Superfícies Especiais'
-    : 'Superfícies Especiais';
-  const descricaoLilit = data.pisoLilit && data.pisoLilit > 0
-    ? 'Piso + Parede + Teto'
-    : 'Parede + Teto';
+  const temPiso = areaPisoTotal > 0;
+  const temParede = areaParedeTotal > 0;
 
   return `
 <!DOCTYPE html>
@@ -631,7 +628,7 @@ function createSurfacesTableHTML(data: ProposalData): string {
 
     .totals-grid {
       display: grid;
-      grid-template-columns: ${temStelion && temLilit ? '1fr 1fr' : '1fr'};
+      grid-template-columns: ${temPiso && temParede ? '1fr 1fr' : '1fr'};
       gap: 24px;
     }
 
@@ -674,68 +671,68 @@ function createSurfacesTableHTML(data: ProposalData): string {
   <!-- Header -->
   <div class="header">
     ${logoBase64 ? `<img src="${logoBase64}" alt="Monofloor" class="logo-img">` : '<div class="logo">MONOFLOOR</div>'}
-    <div class="subtitle">DETALHAMENTO POR PRODUTO</div>
+    <div class="subtitle">DETALHAMENTO POR SUPERFÍCIE</div>
   </div>
 
-  <!-- Tabela de Produtos -->
+  <!-- Tabela por Superfície -->
   <div class="table-container">
-    <div class="section-title">Investimento por Produto</div>
+    <div class="section-title">Investimento por Superfície</div>
 
     <table class="data-table">
       <thead>
         <tr>
-          <th>Produto</th>
+          <th>Superfície</th>
           <th>Área Total</th>
           <th>R$/m²</th>
           <th>Total</th>
         </tr>
       </thead>
       <tbody>
-        ${temStelion ? `
+        ${temPiso ? `
         <tr class="row-stelion">
           <td>
             <div class="product-cell">
-              <span class="product-name">STELION<span class="trademark">™</span></span>
-              <span class="surface-desc">${descricaoStelion}</span>
+              <span class="product-name">PISO</span>
+              <span class="surface-desc">STELION™</span>
             </div>
           </td>
-          <td>${formatarMetragem(data.metragemTotalStelion)} m²</td>
-          <td>R$ ${formatarMoeda(valorM2Stelion)}</td>
-          <td>R$ ${formatarMoeda(data.valorTotalStelion)}</td>
+          <td>${formatarMetragem(areaPisoTotal)} m²</td>
+          <td>R$ ${formatarMoeda(valorM2Piso)}</td>
+          <td>R$ ${formatarMoeda(totalPiso)}</td>
         </tr>
         ` : ''}
-        ${temLilit ? `
+        ${temParede ? `
         <tr class="row-lilit">
           <td>
             <div class="product-cell">
-              <span class="product-name">LILIT<span class="trademark">™</span></span>
-              <span class="surface-desc">${descricaoLilit}</span>
+              <span class="product-name">PAREDE</span>
+              <span class="surface-desc">LILIT™</span>
             </div>
           </td>
-          <td>${formatarMetragem(data.metragemTotalLilit)} m²</td>
-          <td>R$ ${formatarMoeda(valorM2Lilit)}</td>
-          <td>R$ ${formatarMoeda(data.valorTotalLilit)}</td>
+          <td>${formatarMetragem(areaParedeTotal)} m²</td>
+          <td>R$ ${formatarMoeda(valorM2Parede)}</td>
+          <td>R$ ${formatarMoeda(totalParede)}</td>
         </tr>
         ` : ''}
       </tbody>
     </table>
 
-    <!-- Resumo por Produto -->
+    <!-- Resumo por Superfície -->
     <div class="totals-section">
-      <div class="totals-title">Resumo por Produto</div>
+      <div class="totals-title">Resumo por Superfície</div>
       <div class="totals-grid">
-        ${temStelion ? `
+        ${temPiso ? `
         <div class="total-card">
-          <div class="total-card-label">STELION™</div>
-          <div class="total-card-area">${formatarMetragem(data.metragemTotalStelion)} m²</div>
-          <div class="total-card-value">R$ ${formatarMoeda(data.valorTotalStelion)}</div>
+          <div class="total-card-label">PISO</div>
+          <div class="total-card-area">${formatarMetragem(areaPisoTotal)} m²</div>
+          <div class="total-card-value">R$ ${formatarMoeda(totalPiso)}</div>
         </div>
         ` : ''}
-        ${temLilit ? `
+        ${temParede ? `
         <div class="total-card">
-          <div class="total-card-label">LILIT™</div>
-          <div class="total-card-area">${formatarMetragem(data.metragemTotalLilit)} m²</div>
-          <div class="total-card-value">R$ ${formatarMoeda(data.valorTotalLilit)}</div>
+          <div class="total-card-label">PAREDE</div>
+          <div class="total-card-area">${formatarMetragem(areaParedeTotal)} m²</div>
+          <div class="total-card-value">R$ ${formatarMoeda(totalParede)}</div>
         </div>
         ` : ''}
       </div>
