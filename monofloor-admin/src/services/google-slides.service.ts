@@ -1609,6 +1609,8 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
       console.log('✅ Slide Detalhamento adicionado');
     }
 
+    console.log('📊 PDF final tem', finalPdf.getPageCount(), 'páginas');
+
     const finalPdfBytes = await finalPdf.save();
     const finalBuffer = Buffer.from(finalPdfBytes);
 
