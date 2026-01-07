@@ -1270,41 +1270,64 @@
       <div v-if="showNewDealModal" class="modal-overlay" @click.self="closeNewDeal">
         <div class="modal">
           <div class="modal__header">
-            <h2 class="modal__title">🚀 Novo Deal</h2>
+            <h2 class="modal__title">🚀 Novo Lead</h2>
             <button class="modal__close" @click="closeNewDeal">✕</button>
           </div>
           <div class="modal__body">
             <div class="form-group">
               <label class="form-label">Nome do Cliente *</label>
-              <input type="text" class="form-input" v-model="newDeal.clientName" placeholder="Ex: João Silva" />
+              <input type="text" class="form-input" v-model="newDeal.cliente" placeholder="Ex: João Silva" />
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">Valor (R$)</label>
-                <input type="number" class="form-input" v-model="newDeal.value" placeholder="0" />
+                <label class="form-label">Telefone *</label>
+                <input type="tel" class="form-input" v-model="newDeal.personPhone" placeholder="(11) 99999-9999" />
               </div>
               <div class="form-group">
-                <label class="form-label">Estágio</label>
-                <select class="form-select" v-model="newDeal.status">
-                  <option v-for="stage in stages" :key="stage.id" :value="stage.id">
-                    {{ stage.emoji }} {{ stage.name }}
-                  </option>
-                </select>
+                <label class="form-label">E-mail</label>
+                <input type="email" class="form-input" v-model="newDeal.personEmail" placeholder="email@exemplo.com" />
               </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">Telefone</label>
-              <input type="tel" class="form-input" v-model="newDeal.phone" placeholder="(11) 99999-9999" />
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Cidade</label>
+                <input type="text" class="form-input" v-model="newDeal.cidade" placeholder="Ex: São Paulo" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Metragem (m²)</label>
+                <input type="number" class="form-input" v-model="newDeal.m2Total" placeholder="Ex: 150" />
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label">Endereço</label>
               <input type="text" class="form-input" v-model="newDeal.endereco" placeholder="Rua, número, bairro" />
             </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Tipo de Cliente</label>
+                <select class="form-select" v-model="newDeal.tipoCliente">
+                  <option value="FINAL">Cliente Final</option>
+                  <option value="ARQUITETO">Arquiteto</option>
+                  <option value="CONSTRUTORA">Construtora</option>
+                  <option value="DESIGNER">Designer</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Origem</label>
+                <select class="form-select" v-model="newDeal.origem">
+                  <option value="CRM_MANUAL">Cadastro Manual</option>
+                  <option value="INDICACAO">Indicação</option>
+                  <option value="SITE">Site</option>
+                  <option value="INSTAGRAM">Instagram</option>
+                  <option value="WHATSAPP">WhatsApp</option>
+                </select>
+              </div>
+            </div>
           </div>
           <div class="modal__footer">
             <button class="btn btn--outline" @click="closeNewDeal">Cancelar</button>
-            <button class="btn btn--primary" @click="createDeal" :disabled="!newDeal.clientName">
-              Criar Deal
+            <button class="btn btn--primary" @click="createDeal" :disabled="!newDeal.cliente || !newDeal.personPhone">
+              Criar Lead
             </button>
           </div>
         </div>
@@ -2110,11 +2133,14 @@ const unsubscribeProposalClosed = ref<(() => void) | null>(null);
 
 // New Deal Form
 const newDeal = ref({
-  clientName: '',
-  value: 0,
-  status: 'Form Orçamento',
-  phone: '',
-  endereco: ''
+  cliente: '',
+  personPhone: '',
+  personEmail: '',
+  endereco: '',
+  cidade: '',
+  m2Total: '',
+  tipoCliente: 'FINAL',
+  origem: 'CRM_MANUAL'
 });
 
 // Color map for settings (hex colors)
@@ -2729,13 +2755,16 @@ const getConsultorDeals = (consultor: string): number => {
   return deals.value.filter(d => d.consultor === consultor).length;
 };
 
-const openNewDeal = (stageId?: string) => {
+const openNewDeal = (_stageId?: string) => {
   newDeal.value = {
-    clientName: '',
-    value: 0,
-    status: stageId || 'Form Orçamento',
-    phone: '',
-    endereco: ''
+    cliente: '',
+    personPhone: '',
+    personEmail: '',
+    endereco: '',
+    cidade: '',
+    m2Total: '',
+    tipoCliente: 'FINAL',
+    origem: 'CRM_MANUAL'
   };
   showNewDealModal.value = true;
 };
@@ -2745,23 +2774,52 @@ const closeNewDeal = () => {
 };
 
 const createDeal = async () => {
-  if (!newDeal.value.clientName) return;
+  if (!newDeal.value.cliente || !newDeal.value.personPhone) return;
 
   try {
-    const response = await fetch('/api/admin/comercial', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newDeal.value)
+    const response = await comercialApi.create({
+      cliente: newDeal.value.cliente,
+      personPhone: newDeal.value.personPhone,
+      personEmail: newDeal.value.personEmail || undefined,
+      endereco: newDeal.value.endereco || undefined,
+      cidade: newDeal.value.cidade || undefined,
+      m2Total: newDeal.value.m2Total ? parseFloat(newDeal.value.m2Total) : undefined,
+      tipoCliente: newDeal.value.tipoCliente,
+      origem: newDeal.value.origem
     });
 
-    if (!response.ok) throw new Error('Falha ao criar deal');
-
-    const created = await response.json();
-    deals.value.unshift(created);
-    closeNewDeal();
-    toast.success('Deal criado com sucesso!');
-  } catch (error) {
-    toast.error('Erro ao criar deal');
+    if (response.data?.success && response.data?.data) {
+      // Converter o retorno da API para o formato Deal esperado pelo frontend
+      const created = response.data.data;
+      const newDealItem: Deal = {
+        id: created.comercialData?.id || created.id,
+        personName: created.cliente || newDeal.value.cliente,
+        consultor: '',
+        status: 'Form Orçamento',
+        dealValue: undefined,
+        m2Total: newDeal.value.m2Total ? parseFloat(newDeal.value.m2Total) : undefined,
+        addTime: new Date().toISOString(),
+        stageId: 'Form Orçamento',
+        stageChangedTime: new Date().toISOString(),
+        pipedriveId: undefined,
+        personPhone: newDeal.value.personPhone,
+        personEmail: newDeal.value.personEmail || undefined,
+        cidadeExecucao: newDeal.value.cidade || undefined,
+        endereco: newDeal.value.endereco || undefined,
+        tipoCliente: newDeal.value.tipoCliente,
+        origem: newDeal.value.origem
+      };
+      deals.value.unshift(newDealItem);
+      closeNewDeal();
+      toast.success('Lead criado com sucesso!');
+      // Recarregar os dados para garantir sincronização
+      await fetchDeals();
+    } else {
+      throw new Error(response.data?.error || 'Falha ao criar lead');
+    }
+  } catch (error: any) {
+    console.error('Erro ao criar lead:', error);
+    toast.error(error.message || 'Erro ao criar lead');
   }
 };
 
@@ -2820,6 +2878,13 @@ const fetchPropostaAnalytics = async (propostaId: string) => {
   try {
     const response = await comercialApi.getPropostaAnalytics(propostaId);
     if (response.data?.stats) {
+      // Debug: verificar se pageTimes está chegando
+      const viewWithPageTimes = response.data.views?.find((v: any) => v.pageTimes);
+      console.log('[DEBUG] Analytics recebido:', {
+        totalViews: response.data.views?.length,
+        viewWithPageTimes: viewWithPageTimes ? 'SIM' : 'NAO',
+        pageTimesExample: viewWithPageTimes?.pageTimes
+      });
       propostaAnalytics.value = response.data;
     }
   } catch (error: any) {
