@@ -336,6 +336,19 @@ router.post('/track', async (req, res) => {
   try {
     const { slug, sessionId, timeOnPage, scrollDepth, pageTimes, pagesViewed, currentPage } = req.body;
 
+    // Debug: Log para verificar dados recebidos
+    if (pageTimes) {
+      console.log('📊 [TRACK] Dados recebidos:', {
+        slug,
+        sessionId,
+        timeOnPage,
+        scrollDepth,
+        currentPage,
+        pageTimes: JSON.stringify(pageTimes),
+        pagesViewed
+      });
+    }
+
     if (!slug) {
       return res.status(400).json({ error: 'slug é obrigatório' });
     }
@@ -379,15 +392,19 @@ router.post('/track', async (req, res) => {
       });
 
       if (existingView) {
+        const updateData = {
+          timeOnPage: time,
+          scrollDepth: scroll,
+          pageTimes: pageTimes || undefined,
+          pagesViewed: pagesViewed || undefined,
+          currentPage: currentPage ? parseInt(currentPage) : undefined
+        };
+
+        console.log('📊 [TRACK] Atualizando view:', existingView.id, 'com pageTimes:', pageTimes ? 'SIM' : 'NAO');
+
         await prisma.propostaView.update({
           where: { id: existingView.id },
-          data: {
-            timeOnPage: time,
-            scrollDepth: scroll,
-            pageTimes: pageTimes || undefined,
-            pagesViewed: pagesViewed || undefined,
-            currentPage: currentPage ? parseInt(currentPage) : undefined
-          }
+          data: updateData
         });
 
         // Atualizar sessão ativa e emitir evento de viewing
