@@ -334,7 +334,7 @@ router.post('/generate-html', async (req, res) => {
  */
 router.post('/track', async (req, res) => {
   try {
-    const { slug, sessionId, timeOnPage, scrollDepth } = req.body;
+    const { slug, sessionId, timeOnPage, scrollDepth, pageTimes, pagesViewed, currentPage } = req.body;
 
     if (!slug) {
       return res.status(400).json({ error: 'slug é obrigatório' });
@@ -383,7 +383,10 @@ router.post('/track', async (req, res) => {
           where: { id: existingView.id },
           data: {
             timeOnPage: time,
-            scrollDepth: scroll
+            scrollDepth: scroll,
+            pageTimes: pageTimes || undefined,
+            pagesViewed: pagesViewed || undefined,
+            currentPage: currentPage ? parseInt(currentPage) : undefined
           }
         });
 

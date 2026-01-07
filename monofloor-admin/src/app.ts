@@ -214,14 +214,15 @@ app.get('/p/:slug(*)', async (req, res) => {
 
 // Função para gerar HTML com imagens do PDF e tracking
 function generateProposalImageHTML(slug: string, sessionId: string, clienteName: string, images: string[]): string {
+  const totalPages = images.length;
   const imagesHtml = images.map((img, idx) => `
-    <div class="page">
+    <div class="page" data-page="${idx + 1}">
       <img src="${img}" alt="Proposta página ${idx + 1}" loading="lazy" />
     </div>
   `).join('');
 
   const ogTitle = `Proposta Monofloor - ${clienteName}`;
-  const ogDescription = 'Proposta comercial exclusiva Monofloor - Premium Unique Surfaces';
+  const ogDescription = 'Um piso sem juntas é um caminho sem volta.';
   const ogImage = 'https://propostas.monofloor.cloud/og-image.jpg';
   const ogUrl = `https://propostas.monofloor.cloud/p/${slug}`;
 
@@ -248,7 +249,8 @@ function generateProposalImageHTML(slug: string, sessionId: string, clienteName:
   <meta name="twitter:description" content="${ogDescription}">
   <meta name="twitter:image" content="${ogImage}">
 
-  <link rel="icon" type="image/png" href="https://monofloor.com.br/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://propostas.monofloor.cloud/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://propostas.monofloor.cloud/apple-touch-icon.png">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -312,16 +314,62 @@ function generateProposalImageHTML(slug: string, sessionId: string, clienteName:
     </div>
   </div>
 
-  <!-- Tracking Script -->
+  <!-- Tracking Script with Page Analytics -->
   <script>
     (function() {
       const slug = '${slug}';
       const sessionId = '${sessionId}';
       const apiBase = window.location.origin;
+      const totalPages = ${totalPages};
+
       let startTime = Date.now();
       let maxScroll = 0;
       let lastUpdate = 0;
+      let currentPage = 1;
+      let pageStartTime = Date.now();
+      let isTabVisible = !document.hidden;
+      let hiddenTime = 0; // Tempo total que a aba ficou oculta
 
+      // Tracking de tempo por página
+      const pageTimes = {};
+      const pagesViewed = new Set();
+      for (let i = 1; i <= totalPages; i++) {
+        pageTimes[i] = 0;
+      }
+
+      // Formatador de tempo
+      function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return mins + ':' + (secs < 10 ? '0' : '') + secs;
+      }
+
+      // Intersection Observer para detectar página visível
+      const pages = document.querySelectorAll('.page[data-page]');
+      const observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+            const newPage = parseInt(entry.target.dataset.page);
+            if (newPage !== currentPage) {
+              // Salvar tempo da página anterior
+              const timeOnPrevPage = Math.round((Date.now() - pageStartTime) / 1000);
+              pageTimes[currentPage] = (pageTimes[currentPage] || 0) + timeOnPrevPage;
+
+              // Atualizar para nova página
+              currentPage = newPage;
+              pageStartTime = Date.now();
+              pagesViewed.add(newPage);
+            }
+          }
+        });
+      }, { threshold: 0.5 });
+
+      pages.forEach(function(page) {
+        observer.observe(page);
+        if (page.dataset.page === '1') pagesViewed.add(1);
+      });
+
+      // Atualizar scroll
       function updateScroll() {
         const scrollTop = window.scrollY || document.documentElement.scrollTop;
         const docHeight = Math.max(document.body.scrollHeight - window.innerHeight, 1);
@@ -332,12 +380,29 @@ function generateProposalImageHTML(slug: string, sessionId: string, clienteName:
       window.addEventListener('scroll', updateScroll);
       updateScroll();
 
-      function sendTracking(final = false) {
-        const timeOnPage = Math.round((Date.now() - startTime) / 1000);
+      // Enviar tracking
+      function sendTracking(final) {
+        // Só atualizar tempo da página se a aba estiver visível
+        if (isTabVisible) {
+          const timeOnCurrentPage = Math.round((Date.now() - pageStartTime) / 1000);
+          pageTimes[currentPage] = (pageTimes[currentPage] || 0) + timeOnCurrentPage;
+          pageStartTime = Date.now();
+        }
+
+        // Tempo real na página (excluindo tempo oculto)
+        const timeOnPage = Math.round((Date.now() - startTime - hiddenTime) / 1000);
         if (!final && Date.now() - lastUpdate < 1000) return;
         lastUpdate = Date.now();
 
-        const data = { slug, sessionId, timeOnPage, scrollDepth: maxScroll };
+        const data = {
+          slug: slug,
+          sessionId: sessionId,
+          timeOnPage: timeOnPage,
+          scrollDepth: maxScroll,
+          currentPage: currentPage,
+          pageTimes: pageTimes,
+          pagesViewed: Array.from(pagesViewed)
+        };
 
         if (final && navigator.sendBeacon) {
           navigator.sendBeacon(apiBase + '/api/proposals/track', new Blob([JSON.stringify(data)], { type: 'application/json' }));
@@ -347,17 +412,46 @@ function generateProposalImageHTML(slug: string, sessionId: string, clienteName:
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
             keepalive: true
-          }).catch(() => {});
+          }).catch(function() {});
         }
       }
 
-      setInterval(() => sendTracking(false), 10000);
-      window.addEventListener('beforeunload', () => sendTracking(true));
-      window.addEventListener('pagehide', () => sendTracking(true));
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') sendTracking(true);
+      setInterval(function() {
+        if (isTabVisible) sendTracking(false);
+      }, 5000);
+      window.addEventListener('beforeunload', function() { sendTracking(true); });
+      window.addEventListener('pagehide', function() { sendTracking(true); });
+
+      // Pausar contagem quando aba não está visível
+      let hiddenStartTime = null;
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'hidden') {
+          isTabVisible = false;
+          hiddenStartTime = Date.now();
+          // Salvar tempo da página atual antes de ocultar
+          const timeOnCurrentPage = Math.round((Date.now() - pageStartTime) / 1000);
+          pageTimes[currentPage] = (pageTimes[currentPage] || 0) + timeOnCurrentPage;
+          sendTracking(true);
+        } else {
+          isTabVisible = true;
+          // Adicionar tempo oculto ao total de tempo ignorado
+          if (hiddenStartTime) {
+            hiddenTime += (Date.now() - hiddenStartTime);
+            hiddenStartTime = null;
+          }
+          // Resetar pageStartTime para não contar tempo oculto
+          pageStartTime = Date.now();
+        }
       });
-      setTimeout(() => sendTracking(false), 3000);
+      setTimeout(function() { sendTracking(false); }, 3000);
+
+      // Expor funções para acesso externo
+      window.proposalTracking = {
+        getPageTimes: function() { return pageTimes; },
+        getCurrentPage: function() { return currentPage; },
+        getTotalTime: function() { return Math.round((Date.now() - startTime) / 1000); },
+        getPagesViewed: function() { return Array.from(pagesViewed); }
+      };
     })();
   </script>
 
@@ -466,7 +560,7 @@ function generateProposalImageHTML(slug: string, sessionId: string, clienteName:
 // HTML leve para bots (WhatsApp, Facebook, etc) - apenas meta tags OG
 function generateBotFriendlyHTML(slug: string, clienteName: string): string {
   const ogTitle = `Proposta Monofloor - ${clienteName}`;
-  const ogDescription = 'Proposta comercial exclusiva Monofloor - Premium Unique Surfaces';
+  const ogDescription = 'Um piso sem juntas é um caminho sem volta.';
   const ogImage = 'https://propostas.monofloor.cloud/og-image.jpg';
   const ogUrl = `https://propostas.monofloor.cloud/p/${slug}`;
 
@@ -493,7 +587,8 @@ function generateBotFriendlyHTML(slug: string, clienteName: string): string {
   <meta name="twitter:description" content="${ogDescription}">
   <meta name="twitter:image" content="${ogImage}">
 
-  <link rel="icon" type="image/png" href="https://monofloor.com.br/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://propostas.monofloor.cloud/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://propostas.monofloor.cloud/apple-touch-icon.png">
 </head>
 <body style="background: #000; color: #fff; font-family: sans-serif; text-align: center; padding: 50px;">
   <h1>${ogTitle}</h1>

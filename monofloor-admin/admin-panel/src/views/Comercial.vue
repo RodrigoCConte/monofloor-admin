@@ -1125,6 +1125,14 @@
                     >
                       ▶️
                     </span>
+                    <span
+                      v-if="view.pageTimes && Object.keys(view.pageTimes).length > 0"
+                      class="analytics-view-item__report"
+                      title="Ver tempo por página"
+                      @click.stop="openPageTimesModal(view)"
+                    >
+                      📊
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1528,6 +1536,72 @@
       </div>
     </Teleport>
 
+    <!-- Modal Tempo por Página -->
+    <Teleport to="body">
+      <div v-if="showPageTimesModal" class="modal-overlay" @click.self="showPageTimesModal = false">
+        <div class="modal modal--page-times">
+          <div class="modal__header">
+            <h2 class="modal__title">
+              <svg class="modal__title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M3 3v18h18"/>
+                <path d="M8 17V9"/>
+                <path d="M12 17V5"/>
+                <path d="M16 17v-4"/>
+                <path d="M20 17v-8"/>
+              </svg>
+              Tempo por Página
+            </h2>
+            <button class="modal__close" @click="showPageTimesModal = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="modal__body">
+            <!-- Info da visualização -->
+            <div class="page-times-info" v-if="selectedPageTimesView">
+              <span class="page-times-info__device">
+                {{ selectedPageTimesView.deviceType === 'mobile' ? '📱' : selectedPageTimesView.deviceType === 'tablet' ? '📟' : '💻' }}
+              </span>
+              <span class="page-times-info__date">
+                {{ formatViewDate(selectedPageTimesView.viewedAt) }}
+              </span>
+              <span class="page-times-info__total">
+                Total: {{ formatTime(selectedPageTimesView.timeOnPage) }}
+              </span>
+            </div>
+
+            <!-- Gráfico de barras por página -->
+            <div class="page-times-chart" v-if="selectedPageTimesView?.pageTimes">
+              <div
+                v-for="(time, page) in selectedPageTimesView.pageTimes"
+                :key="page"
+                class="page-time-bar"
+              >
+                <span class="page-time-bar__label">Página {{ page }}</span>
+                <div class="page-time-bar__track">
+                  <div
+                    class="page-time-bar__fill"
+                    :style="{ width: getPageTimePercentage(time) + '%' }"
+                  ></div>
+                </div>
+                <span class="page-time-bar__value">{{ formatTime(time) }}</span>
+              </div>
+            </div>
+
+            <!-- Páginas visualizadas -->
+            <div class="page-times-pages" v-if="selectedPageTimesView?.pagesViewed">
+              <span class="page-times-pages__label">Páginas vistas:</span>
+              <span class="page-times-pages__list">
+                {{ Array.isArray(selectedPageTimesView.pagesViewed) ? selectedPageTimesView.pagesViewed.join(', ') : selectedPageTimesView.pagesViewed }}
+              </span>
+            </div>
+          </div>
+          <div class="modal__footer">
+            <button class="btn btn--outline" @click="showPageTimesModal = false">Fechar</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- ===== NOTIFICAÇÕES DE PROPOSTA EM TEMPO REAL ===== -->
     <div class="proposal-notifications" v-if="filteredActiveProposals.length > 0 || filteredProposalNotifications.length > 0">
       <!-- Propostas sendo visualizadas agora -->
@@ -1766,6 +1840,9 @@ interface ProposalViewRecord {
   timeOnPage: number;
   scrollDepth: number;
   isBot: boolean;
+  pageTimes?: Record<string, number>; // Tempo por página: {"1": 30, "2": 15, ...}
+  pagesViewed?: number[]; // Páginas visualizadas: [1, 2, 3, ...]
+  currentPage?: number; // Página atual
 }
 
 interface ProposalAnalytics {
@@ -1921,6 +1998,10 @@ const showReplayModal = ref(false);
 const selectedRecording = ref<SessionRecording | null>(null);
 const replayEvents = ref<any[]>([]);
 const loadingReplayEvents = ref(false);
+
+// Page Times Modal (Relatório de tempo por página)
+const showPageTimesModal = ref(false);
+const selectedPageTimesView = ref<any>(null);
 
 // Replay player state
 const isReplayPlaying = ref(false);
@@ -2795,6 +2876,20 @@ const closeReplayModal = () => {
   showReplayModal.value = false;
   selectedRecording.value = null;
   replayEvents.value = [];
+};
+
+// Abrir modal de tempo por página
+const openPageTimesModal = (view: any) => {
+  selectedPageTimesView.value = view;
+  showPageTimesModal.value = true;
+};
+
+// Calcular percentual do tempo da página em relação ao máximo
+const getPageTimePercentage = (time: number): number => {
+  if (!selectedPageTimesView.value?.pageTimes) return 0;
+  const times = Object.values(selectedPageTimesView.value.pageTimes) as number[];
+  const maxTime = Math.max(...times, 1);
+  return Math.min(100, (time / maxTime) * 100);
 };
 
 // Encontrar gravação por sessionId
@@ -6812,6 +6907,123 @@ onUnmounted(() => {
 .analytics-view-item--has-recording:hover .analytics-view-item__play {
   opacity: 1;
   transform: scale(1.1);
+}
+
+.analytics-view-item__report {
+  font-size: 14px;
+  opacity: 0.7;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-left: 4px;
+}
+
+.analytics-view-item__report:hover {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+/* ===== PAGE TIMES MODAL ===== */
+.modal--page-times {
+  width: 400px;
+  max-width: 90vw;
+}
+
+.page-times-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  border: 2px solid #1a1a1a;
+}
+
+.page-times-info__device {
+  font-size: 20px;
+}
+
+.page-times-info__date {
+  flex: 1;
+  font-size: 13px;
+  color: #666;
+}
+
+.page-times-info__total {
+  font-weight: 700;
+  font-size: 14px;
+  color: #c9a962;
+  background: rgba(201, 169, 98, 0.1);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.page-times-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.page-time-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.page-time-bar__label {
+  width: 80px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.page-time-bar__track {
+  flex: 1;
+  height: 20px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #d1d5db;
+}
+
+.page-time-bar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #c9a962 0%, #d4b87a 100%);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  min-width: 2px;
+}
+
+.page-time-bar__value {
+  width: 50px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #f97316;
+  text-align: right;
+}
+
+.page-times-pages {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f0fdf4;
+  border-radius: 6px;
+  border: 1px solid #bbf7d0;
+}
+
+.page-times-pages__label {
+  font-size: 11px;
+  color: #16a34a;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.page-times-pages__list {
+  font-size: 13px;
+  color: #166534;
+  font-weight: 500;
 }
 
 .analytics-dates {

@@ -1289,6 +1289,9 @@ model PropostaView {
   deviceType    String?  @map("device_type") // mobile, tablet, desktop
   isBot         Boolean  @default(false) @map("is_bot") // Se detectou como bot
   sessionId     String?  @map("session_id") // ID da sessão para agrupar eventos
+  pageTimes     Json?    @map("page_times") // Tempo por página: {1: 30, 2: 15, ...}
+  pagesViewed   Json?    @map("pages_viewed") // Páginas visualizadas: [1, 2, 3, ...]
+  currentPage   Int?     @map("current_page") // Página atual
   proposta      Proposta @relation(fields: [propostaId], references: [id], onDelete: Cascade)
 
   @@index([propostaId])
