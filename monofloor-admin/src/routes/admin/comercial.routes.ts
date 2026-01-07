@@ -354,6 +354,7 @@ router.post('/', async (req: Request, res: Response) => {
       tipoProjeto,
       budgetEstimado,
       origem,
+      detalhes,
     } = req.body;
 
     // Create project and comercial data together
@@ -366,8 +367,15 @@ router.post('/', async (req: Request, res: Response) => {
         currentModule: 'COMERCIAL',
         comercialData: {
           create: {
+            // Campos essenciais para listagem
+            personName: cliente,
+            dealStatus: 'open',
+            stageName: 'Form Orçamento',
+            dealAddTime: new Date(),
+            // Contato
             personPhone,
             personEmail,
+            // Dados do projeto
             arquiteto,
             escritorio,
             telefoneArquiteto,
@@ -375,7 +383,9 @@ router.post('/', async (req: Request, res: Response) => {
             tipoProjeto,
             cidadeExecucao: cidade || null,
             budgetEstimado: budgetEstimado || null,
+            metragemEstimada: m2Total ? parseFloat(m2Total) : null,
             origem,
+            resumo: detalhes || null,
             status: 'LEAD',
           },
         },
@@ -395,6 +405,9 @@ router.post('/', async (req: Request, res: Response) => {
         descricao: `Novo lead criado: ${cliente}`,
       },
     });
+
+    // Limpar cache para que o novo deal apareça na listagem
+    comercialCache.clear();
 
     res.json({ success: true, data: project });
   } catch (error: any) {
