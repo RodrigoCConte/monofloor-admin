@@ -355,6 +355,7 @@ router.post('/', async (req: Request, res: Response) => {
       budgetEstimado,
       origem,
       detalhes,
+      consultor,
     } = req.body;
 
     // Create project and comercial data together
@@ -372,6 +373,9 @@ router.post('/', async (req: Request, res: Response) => {
             dealStatus: 'open',
             stageName: 'Form Orçamento',
             dealAddTime: new Date(),
+            // Consultor responsável
+            ownerUserName: consultor || null,
+            consultorId: consultor || null,
             // Contato
             personPhone,
             personEmail,

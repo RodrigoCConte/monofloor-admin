@@ -55,6 +55,7 @@
     "@types/node": "^20.10.5",
     "@types/ua-parser-js": "^0.7.39",
     "@types/uuid": "^9.0.7",
+    "playwright": "^1.57.0",
     "prisma": "^5.7.0",
     "puppeteer": "^24.34.0",
     "tsx": "^4.7.0",

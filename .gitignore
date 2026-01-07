@@ -41,3 +41,9 @@ politica-privacidade.html
 termos-de-uso.html
 store-description.md
 Chaves de API.md
+
+# Sensitive files
+CREDENCIAIS.md
+API_KEYS.md
+monofloor-admin/scripts/check-typeform-response.js
+monofloor-admin/scripts/fill-missing-from-typeform.js

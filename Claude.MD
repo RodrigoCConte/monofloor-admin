@@ -690,6 +690,22 @@ export const academyApi = {
 
 ---
 
+## Assets de Branding
+
+Arquivos de identidade visual salvos em `monofloor-admin/public/branding/`:
+
+| Arquivo | Descrição | Uso |
+|---------|-----------|-----|
+| `Capa Proposta de investimento.001.jpeg` | Capa da proposta com foto de ambiente e logo | Thumbnail/OG Image para compartilhamento WhatsApp |
+| `Simbolo Icone Ajustado Final.png` | Símbolo Monofloor (ondas em preto) | Ícone/favicon |
+
+**OG Image para Propostas HTML:**
+- Arquivo: `monofloor-admin/public/og-image.jpg` (cópia da capa)
+- URL produção: `https://propostas.monofloor.cloud/og-image.jpg`
+- Descrição OG: "Um piso sem juntas é um caminho sem volta."
+
+---
+
 ## Próximos Passos Sugeridos
 
 1. ~~Configurar PostgreSQL e rodar migrations~~ ✅

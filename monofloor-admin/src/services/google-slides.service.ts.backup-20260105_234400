@@ -54,10 +54,8 @@ interface ProposalData {
   percentualEntrada?: number;
   numeroParcelas?: number;
   descontoVista?: number;
-  taxaTransacaoCartao?: number;
-  taxaPorParcelaCartao?: number;
+  taxaJurosCartao?: number;
   numeroParcelasCartao?: number;
-  percentualRT?: number;
 }
 
 function formatarMoeda(valor: number): string {
@@ -93,35 +91,6 @@ function getNiteclubFontBase64(): string {
     console.warn('⚠️ Não foi possível carregar a fonte NITECLUB:', error);
     return '';
   }
-}
-
-// Helper para carregar fontes Widescreen como base64
-function getWidescreenFontsBase64(): { exBold: string; regular: string } {
-  const exBoldPath = path.join(__dirname, '../../public/fonts/Widescreen Ex Bold.otf');
-  const regularPath = path.join(__dirname, '../../public/fonts/Widescreen Regular.otf');
-
-  let exBold = '';
-  let regular = '';
-
-  try {
-    if (fs.existsSync(exBoldPath)) {
-      const fontBuffer = fs.readFileSync(exBoldPath);
-      exBold = `data:font/opentype;base64,${fontBuffer.toString('base64')}`;
-    }
-  } catch (error) {
-    console.warn('⚠️ Não foi possível carregar Widescreen Ex Bold:', error);
-  }
-
-  try {
-    if (fs.existsSync(regularPath)) {
-      const fontBuffer = fs.readFileSync(regularPath);
-      regular = `data:font/opentype;base64,${fontBuffer.toString('base64')}`;
-    }
-  } catch (error) {
-    console.warn('⚠️ Não foi possível carregar Widescreen Regular:', error);
-  }
-
-  return { exBold, regular };
 }
 
 // CSS compartilhado para fontes (usando Google Fonts para produção)
@@ -809,21 +778,14 @@ function createSurfacesTableHTML(data: ProposalData): string {
 // HTML template - Slide de Pagamento (entre Investimento e Detalhamento)
 function createPaymentHTML(data: ProposalData): string {
   const logoBase64 = loadLogoBase64();
-  const widescreenFonts = getWidescreenFontsBase64();
+  const niteclubFontBase64 = getNiteclubFontBase64();
 
   // Valores de pagamento
-  const valorTotalBase = data.valorTotal || 0;
-  const percentualRT = data.percentualRT || 10;
+  const valorTotal = data.valorTotal || 0;
   const percentualEntrada = data.percentualEntrada || 50;
   const descontoVista = data.descontoVista || 5;
-  const taxaTransacaoCartao = data.taxaTransacaoCartao || 2.36;
-  const taxaPorParcelaCartao = data.taxaPorParcelaCartao || 1;
-  const numeroParcelasCartao = data.numeroParcelasCartao || 6;
-
-  // Aplicar RT ao valor total
-  // RT 10% é o valor neutro (já embutido nos preços base)
-  // Valores acima de 10% aumentam o preço, abaixo diminuem
-  const valorTotal = valorTotalBase * (1 + (percentualRT - 10) / 100);
+  const taxaJurosCartao = data.taxaJurosCartao || 2.5;
+  const numeroParcelasCartao = data.numeroParcelasCartao || 12;
 
   // Cálculos
   const valorEntrada = valorTotal * (percentualEntrada / 100);
@@ -834,10 +796,8 @@ function createPaymentHTML(data: ProposalData): string {
   // À vista com desconto
   const valorVista = valorTotal * (1 - descontoVista / 100);
 
-  // Cartão de crédito com juros
-  // Taxa Total = Taxa de Transação + (Taxa por Parcela × Número de Parcelas)
-  const totalJurosCartao = taxaTransacaoCartao + (taxaPorParcelaCartao * numeroParcelasCartao);
-  const valorComJuros = valorTotal * (1 + totalJurosCartao / 100);
+  // Cartão de crédito com juros (juros simples para simplificar)
+  const valorComJuros = valorTotal * (1 + (taxaJurosCartao * numeroParcelasCartao) / 100);
   const parcelaCartao = valorComJuros / numeroParcelasCartao;
 
   return `
@@ -849,346 +809,260 @@ function createPaymentHTML(data: ProposalData): string {
     ${sharedFontStyles}
 
     @font-face {
-      font-family: 'Widescreen';
-      src: url('${widescreenFonts.exBold}') format('opentype');
-      font-weight: 700;
+      font-family: 'NITECLUB';
+      src: url('${niteclubFontBase64}') format('truetype');
+      font-weight: normal;
       font-style: normal;
       font-display: block;
-    }
-
-    @font-face {
-      font-family: 'Widescreen';
-      src: url('${widescreenFonts.regular}') format('opentype');
-      font-weight: 400;
-      font-style: normal;
-      font-display: block;
-    }
-
-    :root {
-      --accent: #ffffff;
-      --accent-soft: #cccccc;
-      --bg-primary: #000000;
-      --bg-card: #080808;
-      --border-subtle: #1a1a1a;
-      --border-accent: rgba(255, 255, 255, 0.2);
-      --text-primary: #ffffff;
-      --text-secondary: #888888;
-      --text-muted: #555555;
     }
 
     body {
       width: 1080px;
       height: 1920px;
-      background: var(--bg-primary);
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #000000;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       overflow: hidden;
-      color: var(--text-primary);
-      padding: 70px 60px;
+      color: #ffffff;
+      padding: 80px 53px;
       display: flex;
       flex-direction: column;
-      box-sizing: border-box;
     }
 
-    /* Header */
     .header {
       text-align: center;
-      margin-bottom: 50px;
+      margin-bottom: 53px;
     }
 
     .logo-img {
-      width: 480px;
+      width: 562px;
       height: auto;
-      margin-bottom: 20px;
-      opacity: 0.95;
+      margin-bottom: 10px;
     }
 
-    .page-title {
-      font-family: 'Widescreen', 'Inter', sans-serif;
-      font-weight: 700;
-      font-size: 32px;
-      color: var(--accent);
+    .subtitle {
+      font-family: 'Inter', sans-serif;
+      font-size: 21px;
+      color: #999999;
+      font-weight: 400;
       text-transform: uppercase;
-      letter-spacing: 0.4em;
-      margin: 0;
+      letter-spacing: 0.3em;
     }
 
-    /* Section Container */
     .payment-section {
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 28px;
+      gap: 32px;
     }
 
-    /* Payment Card Base */
     .payment-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-subtle);
-      border-radius: 16px;
-      padding: 36px 40px;
-      position: relative;
-      overflow: hidden;
+      background: #0a0a0a;
+      border: 1px solid #1a1a1a;
+      border-radius: 11px;
+      padding: 32px;
     }
 
-    /* Accent line on left */
-    .payment-card::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 24px;
-      bottom: 24px;
-      width: 3px;
-      background: linear-gradient(180deg, var(--accent) 0%, var(--accent-soft) 100%);
-      border-radius: 0 2px 2px 0;
-    }
-
-    /* Featured Card - À Vista */
-    .payment-card.featured {
-      background: linear-gradient(135deg, #0f0f0f 0%, #080808 100%);
-      border: 1px solid var(--border-accent);
-      padding: 40px 44px;
-    }
-
-    .payment-card.featured::before {
-      width: 4px;
-      top: 20px;
-      bottom: 20px;
-      background: var(--accent);
-      box-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
-    }
-
-    /* Card Header */
-    .card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 28px;
-      padding-bottom: 20px;
-      border-bottom: 1px solid var(--border-subtle);
-    }
-
-    .payment-card.featured .card-header {
-      border-bottom-color: var(--border-accent);
+    .payment-card.highlight {
+      background: #ffffff;
+      color: #000000;
     }
 
     .card-title {
-      font-family: 'Widescreen', 'Inter', sans-serif;
-      font-weight: 700;
-      font-size: 26px;
-      color: var(--text-primary);
-      text-transform: uppercase;
-      letter-spacing: 0.15em;
-      margin: 0;
-    }
-
-    .payment-card.featured .card-title {
-      color: var(--accent);
+      font-family: 'NITECLUB', 'Inter', sans-serif;
+      letter-spacing: 2px;
       font-size: 28px;
-    }
-
-    /* Badges */
-    .badge {
-      font-family: 'Inter', sans-serif;
-      font-size: 12px;
-      font-weight: 700;
-      padding: 6px 14px;
-      border-radius: 20px;
+      font-weight: normal;
       text-transform: uppercase;
-      letter-spacing: 0.1em;
-      background: rgba(255, 255, 255, 0.1);
-      color: var(--text-primary);
-      border: 1px solid var(--border-accent);
-    }
-
-    /* Card Description */
-    .card-description {
-      font-size: 17px;
-      color: var(--text-secondary);
-      line-height: 1.7;
       margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #222222;
     }
 
-    .payment-card.featured .card-description {
-      color: #999999;
-      font-size: 18px;
+    .payment-card.highlight .card-title {
+      border-bottom-color: #cccccc;
     }
 
-    /* Payment Details Grid */
-    .payment-grid {
+    .payment-details {
       display: flex;
       flex-direction: column;
-      gap: 0;
+      gap: 16px;
     }
 
     .payment-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 16px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    }
-
-    .payment-row:last-child {
-      border-bottom: none;
     }
 
     .payment-label {
-      font-size: 18px;
-      color: var(--text-secondary);
+      font-size: 22px;
+      color: #999999;
       font-weight: 400;
+    }
+
+    .payment-card.highlight .payment-label {
+      color: #666666;
     }
 
     .payment-value {
       font-family: 'Inter', sans-serif;
-      font-size: 22px;
-      color: var(--text-primary);
+      font-size: 26px;
+      color: #ffffff;
       font-weight: 500;
       font-variant-numeric: tabular-nums;
-      letter-spacing: -0.02em;
     }
 
-    /* Featured Total Box */
-    .total-box {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border-accent);
-      border-radius: 12px;
-      padding: 28px 32px;
-      text-align: center;
+    .payment-card.highlight .payment-value {
+      color: #000000;
     }
 
-    .total-label {
-      font-size: 14px;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.15em;
-      margin-bottom: 12px;
-      font-weight: 500;
+    .payment-desc {
+      font-size: 18px;
+      color: #666666;
+      margin-bottom: 20px;
+      line-height: 1.5;
     }
 
-    .total-value {
-      font-family: 'Widescreen', 'Inter', sans-serif;
-      font-weight: 700;
-      font-size: 42px;
-      color: var(--accent);
-      letter-spacing: -0.02em;
-      margin-bottom: 8px;
+    .payment-card.highlight .payment-desc {
+      color: #888888;
     }
 
-    .total-savings {
-      font-size: 15px;
-      color: var(--accent-soft);
-      font-weight: 500;
-    }
-
-    /* Credit Card Section */
-    .installment-box {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid var(--border-subtle);
-      border-radius: 12px;
-      padding: 24px 28px;
-      text-align: center;
-    }
-
-    .installment-main {
-      display: flex;
-      align-items: baseline;
-      justify-content: center;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-
-    .installment-count {
-      font-family: 'Widescreen', 'Inter', sans-serif;
-      font-weight: 700;
-      font-size: 24px;
-      color: var(--text-primary);
-    }
-
-    .installment-value {
-      font-family: 'Inter', sans-serif;
-      font-size: 36px;
-      font-weight: 600;
-      color: var(--text-primary);
-      font-variant-numeric: tabular-nums;
-    }
-
-    .installment-total {
-      font-size: 14px;
-      color: var(--text-muted);
-    }
-
-    /* Decorative Elements */
-    .decoration-line {
+    .divider {
       height: 1px;
-      background: linear-gradient(90deg, transparent, var(--border-gold), transparent);
+      background: #222222;
       margin: 8px 0;
+    }
+
+    .payment-card.highlight .divider {
+      background: #dddddd;
+    }
+
+    .total-highlight {
+      background: #1a1a1a;
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 8px;
+    }
+
+    .total-highlight .payment-label {
+      color: #ffffff;
+      font-weight: 500;
+    }
+
+    .total-highlight .payment-value {
+      font-size: 32px;
+      font-weight: 600;
+    }
+
+    .payment-card.highlight .total-highlight {
+      background: #f0f0f0;
+    }
+
+    .payment-card.highlight .total-highlight .payment-label {
+      color: #000000;
+    }
+
+    .installment-info {
+      font-size: 16px;
+      color: #777777;
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    .payment-card.highlight .installment-info {
+      color: #888888;
+    }
+
+    .discount-badge {
+      display: inline-block;
+      background: #22c55e;
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 4px;
+      margin-left: 12px;
+      text-transform: uppercase;
+    }
+
+    .interest-badge {
+      display: inline-block;
+      background: #f97316;
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 4px;
+      margin-left: 12px;
+      text-transform: uppercase;
     }
   </style>
 </head>
 <body>
   <!-- Header -->
   <div class="header">
-    ${logoBase64 ? `<img src="${logoBase64}" alt="Monofloor" class="logo-img">` : ''}
-    <h1 class="page-title">Pagamento</h1>
+    ${logoBase64 ? `<img src="${logoBase64}" alt="Monofloor" class="logo-img">` : '<div class="logo">MONOFLOOR</div>'}
+    <div class="subtitle">FORMAS DE PAGAMENTO</div>
   </div>
 
   <div class="payment-section">
     <!-- Parcelado -->
     <div class="payment-card">
-      <div class="card-header">
-        <h2 class="card-title">Parcelado</h2>
-      </div>
-      <p class="card-description">
+      <div class="card-title">PARCELADO</div>
+      <div class="payment-desc">
         50% de entrada para produção de materiais<br>
-        25% em 30 dias • 25% em 60 dias
-      </p>
-      <div class="payment-grid">
+        25% em 30 dias<br>
+        25% em 60 dias
+      </div>
+      <div class="payment-details">
         <div class="payment-row">
           <span class="payment-label">Entrada (50%)</span>
           <span class="payment-value">R$ ${formatarMoeda(valorEntrada)}</span>
         </div>
+        <div class="divider"></div>
         <div class="payment-row">
-          <span class="payment-label">30 dias (25%)</span>
+          <span class="payment-label">Parcela 1 - 30 dias (25%)</span>
           <span class="payment-value">R$ ${formatarMoeda(parcela1)}</span>
         </div>
+        <div class="divider"></div>
         <div class="payment-row">
-          <span class="payment-label">60 dias (25%)</span>
+          <span class="payment-label">Parcela 2 - 60 dias (25%)</span>
           <span class="payment-value">R$ ${formatarMoeda(parcela2)}</span>
         </div>
       </div>
     </div>
 
-    <!-- À Vista - Featured -->
-    <div class="payment-card featured">
-      <div class="card-header">
-        <h2 class="card-title">À Vista</h2>
-        <span class="badge">${descontoVista}% desconto</span>
+    <!-- À Vista -->
+    <div class="payment-card highlight">
+      <div class="card-title">À VISTA <span class="discount-badge">${descontoVista}% OFF</span></div>
+      <div class="payment-desc">
+        100% antes da execução
       </div>
-      <p class="card-description">
-        Pagamento integral antes do início da execução
-      </p>
-      <div class="total-box">
-        <div class="total-label">Valor com desconto</div>
-        <div class="total-value">R$ ${formatarMoeda(valorVista)}</div>
-        <div class="total-savings">Economia de R$ ${formatarMoeda(valorTotal - valorVista)}</div>
+      <div class="payment-details">
+        <div class="total-highlight">
+          <div class="payment-row">
+            <span class="payment-label">Valor único</span>
+            <span class="payment-value">R$ ${formatarMoeda(valorVista)}</span>
+          </div>
+          <div class="installment-info">Economia de R$ ${formatarMoeda(valorTotal - valorVista)}</div>
+        </div>
       </div>
     </div>
 
     <!-- Cartão de Crédito -->
     <div class="payment-card">
-      <div class="card-header">
-        <h2 class="card-title">Cartão de Crédito</h2>
-        <span class="badge">Juros</span>
+      <div class="card-title">CARTÃO DE CRÉDITO <span class="interest-badge">SUJEITO A JUROS</span></div>
+      <div class="payment-desc">
+        Parcelamento em até ${numeroParcelasCartao}x
       </div>
-      <p class="card-description">
-        Parcelamento em até ${numeroParcelasCartao}x no cartão
-      </p>
-      <div class="installment-box">
-        <div class="installment-main">
-          <span class="installment-count">${numeroParcelasCartao}x</span>
-          <span class="installment-value">R$ ${formatarMoeda(parcelaCartao)}</span>
+      <div class="payment-details">
+        <div class="total-highlight">
+          <div class="payment-row">
+            <span class="payment-label">${numeroParcelasCartao}x de</span>
+            <span class="payment-value">R$ ${formatarMoeda(parcelaCartao)}</span>
+          </div>
+          <div class="installment-info">Valor total: R$ ${formatarMoeda(valorComJuros)}</div>
         </div>
-        <div class="installment-total">Valor total: R$ ${formatarMoeda(valorComJuros)}</div>
       </div>
     </div>
   </div>
@@ -1734,8 +1608,6 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
       slideSuperficiesPages.forEach(page => finalPdf.addPage(page));
       console.log('✅ Slide Detalhamento adicionado');
     }
-
-    console.log('📊 PDF final tem', finalPdf.getPageCount(), 'páginas');
 
     const finalPdfBytes = await finalPdf.save();
     const finalBuffer = Buffer.from(finalPdfBytes);

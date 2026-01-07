@@ -469,7 +469,10 @@
               v-for="deal in getStageDeals(stage.id)"
               :key="deal.id"
               class="deal-card"
-              :class="{ 'deal-card--dragging': draggingDeal?.id === deal.id }"
+              :class="{
+                'deal-card--dragging': draggingDeal?.id === deal.id,
+                'deal-card--new': newlyCreatedDealId === deal.id
+              }"
               draggable="true"
               @dragstart="handleDragStart($event, deal)"
               @dragend="handleDragEnd"
@@ -1323,6 +1326,10 @@
                 </select>
               </div>
             </div>
+            <div class="form-group">
+              <label class="form-label">Detalhes / Observações</label>
+              <textarea class="form-input" v-model="newDeal.detalhes" placeholder="Informações adicionais sobre o lead..." rows="3"></textarea>
+            </div>
           </div>
           <div class="modal__footer">
             <button class="btn btn--outline" @click="closeNewDeal">Cancelar</button>
@@ -2140,7 +2147,8 @@ const newDeal = ref({
   cidade: '',
   m2Total: '',
   tipoCliente: 'FINAL',
-  origem: 'CRM_MANUAL'
+  origem: 'CRM_MANUAL',
+  detalhes: ''
 });
 
 // Color map for settings (hex colors)
@@ -2764,7 +2772,8 @@ const openNewDeal = (_stageId?: string) => {
     cidade: '',
     m2Total: '',
     tipoCliente: 'FINAL',
-    origem: 'CRM_MANUAL'
+    origem: 'CRM_MANUAL',
+    detalhes: ''
   };
   showNewDealModal.value = true;
 };
@@ -2773,8 +2782,14 @@ const closeNewDeal = () => {
   showNewDealModal.value = false;
 };
 
+// ID do deal recém-criado para animação
+const newlyCreatedDealId = ref<string | null>(null);
+
 const createDeal = async () => {
   if (!newDeal.value.cliente || !newDeal.value.personPhone) return;
+
+  // Pegar nome do consultor atual
+  const consultorNome = authStore.user?.name || authStore.user?.email || '';
 
   try {
     const response = await comercialApi.create({
@@ -2785,35 +2800,55 @@ const createDeal = async () => {
       cidade: newDeal.value.cidade || undefined,
       m2Total: newDeal.value.m2Total ? parseFloat(newDeal.value.m2Total) : undefined,
       tipoCliente: newDeal.value.tipoCliente,
-      origem: newDeal.value.origem
+      origem: newDeal.value.origem,
+      detalhes: newDeal.value.detalhes || undefined,
+      consultor: consultorNome
     });
 
     if (response.data?.success && response.data?.data) {
       // Converter o retorno da API para o formato Deal esperado pelo frontend
       const created = response.data.data;
+      const dealId = created.comercialData?.id || created.id;
+
       const newDealItem: Deal = {
-        id: created.comercialData?.id || created.id,
+        id: dealId,
         personName: created.cliente || newDeal.value.cliente,
-        consultor: '',
+        clientName: created.cliente || newDeal.value.cliente,
+        consultor: consultorNome,
+        ownerUserName: consultorNome,
         status: 'Form Orçamento',
+        stageName: 'Form Orçamento',
         dealValue: undefined,
         m2Total: newDeal.value.m2Total ? parseFloat(newDeal.value.m2Total) : undefined,
         addTime: new Date().toISOString(),
+        dealAddTime: new Date().toISOString(),
         stageId: 'Form Orçamento',
         stageChangedTime: new Date().toISOString(),
         pipedriveId: undefined,
         personPhone: newDeal.value.personPhone,
+        phone: newDeal.value.personPhone,
         personEmail: newDeal.value.personEmail || undefined,
         cidadeExecucao: newDeal.value.cidade || undefined,
         endereco: newDeal.value.endereco || undefined,
         tipoCliente: newDeal.value.tipoCliente,
-        origem: newDeal.value.origem
+        origem: newDeal.value.origem,
+        resumo: newDeal.value.detalhes || undefined,
+        daysInStage: 0
       };
-      deals.value.unshift(newDealItem);
+
+      // Fechar modal primeiro para transição suave
       closeNewDeal();
-      toast.success('Lead criado com sucesso!');
-      // Recarregar os dados para garantir sincronização
-      await fetchDeals();
+
+      // Adicionar deal com animação
+      newlyCreatedDealId.value = dealId;
+      deals.value.unshift(newDealItem);
+
+      toast.success(`Lead "${newDeal.value.cliente}" criado com sucesso!`);
+
+      // Remover destaque após animação
+      setTimeout(() => {
+        newlyCreatedDealId.value = null;
+      }, 3000);
     } else {
       throw new Error(response.data?.error || 'Falha ao criar lead');
     }
@@ -5221,6 +5256,37 @@ onUnmounted(() => {
   box-shadow: var(--shadow-xl);
   z-index: 100;
   opacity: 0.9;
+}
+
+/* Animação para novo deal criado */
+.deal-card--new {
+  animation: newDealPulse 2s ease-in-out;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(201, 169, 98, 0.3), 3px 3px 0 #1a1a1a;
+}
+
+@keyframes newDealPulse {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(0) scale(1.02);
+  }
+  40% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(201, 169, 98, 0.4), 3px 3px 0 #1a1a1a;
+  }
+  60% {
+    box-shadow: 0 0 0 3px rgba(201, 169, 98, 0.3), 3px 3px 0 #1a1a1a;
+  }
+  80% {
+    box-shadow: 0 0 0 6px rgba(201, 169, 98, 0.2), 3px 3px 0 #1a1a1a;
+  }
+  100% {
+    box-shadow: 0 0 0 3px rgba(201, 169, 98, 0.3), 3px 3px 0 #1a1a1a;
+  }
 }
 
 .deal-card__header {
