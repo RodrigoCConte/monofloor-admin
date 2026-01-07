@@ -392,15 +392,29 @@ router.post('/track', async (req, res) => {
       });
 
       if (existingView) {
-        const updateData = {
+        // Construir objeto de update - só incluir campos que foram enviados
+        const updateData: any = {
           timeOnPage: time,
-          scrollDepth: scroll,
-          pageTimes: pageTimes || undefined,
-          pagesViewed: pagesViewed || undefined,
-          currentPage: currentPage ? parseInt(currentPage) : undefined
+          scrollDepth: scroll
         };
 
-        console.log('📊 [TRACK] Atualizando view:', existingView.id, 'com pageTimes:', pageTimes ? 'SIM' : 'NAO');
+        // Sempre salvar pageTimes se for um objeto válido
+        if (pageTimes && typeof pageTimes === 'object' && Object.keys(pageTimes).length > 0) {
+          updateData.pageTimes = pageTimes;
+          console.log('📊 [TRACK] pageTimes recebido:', JSON.stringify(pageTimes));
+        }
+
+        // Salvar pagesViewed se fornecido
+        if (pagesViewed && Array.isArray(pagesViewed)) {
+          updateData.pagesViewed = pagesViewed;
+        }
+
+        // Salvar currentPage se fornecido
+        if (currentPage !== undefined && currentPage !== null) {
+          updateData.currentPage = parseInt(String(currentPage));
+        }
+
+        console.log('📊 [TRACK] Atualizando view:', existingView.id, 'campos:', Object.keys(updateData).join(', '));
 
         await prisma.propostaView.update({
           where: { id: existingView.id },
@@ -523,13 +537,13 @@ router.get('/:id/analytics', async (req, res) => {
       orderBy: { viewedAt: 'desc' }
     });
 
-    // Debug: Verificar se pageTimes está presente nas views
+    // Debug: Verificar detalhadamente cada view
     if (views.length > 0) {
-      const viewWithPageTimes = views.find(v => v.pageTimes);
-      console.log('📊 [ANALYTICS] Views encontradas:', views.length, 'Com pageTimes:', viewWithPageTimes ? 'SIM' : 'NAO');
-      if (viewWithPageTimes) {
-        console.log('📊 [ANALYTICS] Exemplo pageTimes:', JSON.stringify(viewWithPageTimes.pageTimes));
-      }
+      console.log('📊 [ANALYTICS] Views encontradas:', views.length);
+      views.forEach((v, i) => {
+        const hasPageTimes = v.pageTimes && typeof v.pageTimes === 'object' && Object.keys(v.pageTimes as object).length > 0;
+        console.log(`  View ${i}: id=${v.id.substring(0, 8)}... time=${v.timeOnPage}s scroll=${v.scrollDepth}% pageTimes=${hasPageTimes ? 'SIM(' + Object.keys(v.pageTimes as object).length + ' páginas)' : 'NAO'}`);
+      });
     }
 
     // Calcular estatísticas
