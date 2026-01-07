@@ -387,7 +387,7 @@ router.post('/', async (req: Request, res: Response) => {
             tipoProjeto,
             cidadeExecucao: cidade || null,
             budgetEstimado: budgetEstimado || null,
-            metragemEstimada: m2Total ? parseFloat(m2Total) : null,
+            metragemEstimada: m2Total ? String(m2Total) : null,
             origem,
             resumo: detalhes || null,
             status: 'LEAD',
