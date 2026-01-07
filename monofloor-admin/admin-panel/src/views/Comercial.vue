@@ -5916,6 +5916,33 @@ onUnmounted(() => {
   color: white;
 }
 
+/* Form elements inside modal (white background) */
+.modal__body .form-label {
+  color: #374151;
+}
+
+.modal__body .form-input,
+.modal__body .form-select {
+  background: #f9fafb;
+  border: 2px solid #e5e7eb;
+  color: #1a1a1a;
+}
+
+.modal__body .form-input::placeholder {
+  color: #9ca3af;
+}
+
+.modal__body .form-input:focus,
+.modal__body .form-select:focus {
+  border-color: #c9a962;
+  box-shadow: 0 0 0 3px rgba(201, 169, 98, 0.15);
+}
+
+.modal__body .form-select option {
+  background: white;
+  color: #1a1a1a;
+}
+
 /* ============================================
    DETAIL GRID
    ============================================ */
