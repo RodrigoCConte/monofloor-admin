@@ -404,6 +404,15 @@ function generateProposalImageHTML(slug: string, sessionId: string, clienteName:
           pagesViewed: Array.from(pagesViewed)
         };
 
+        // Debug: Log para verificar dados enviados
+        console.log('[Tracking] Enviando:', {
+          time: timeOnPage,
+          scroll: maxScroll,
+          page: currentPage,
+          pages: Object.keys(pageTimes).length,
+          pageTimes: JSON.stringify(pageTimes)
+        });
+
         if (final && navigator.sendBeacon) {
           navigator.sendBeacon(apiBase + '/api/proposals/track', new Blob([JSON.stringify(data)], { type: 'application/json' }));
         } else {
@@ -412,7 +421,11 @@ function generateProposalImageHTML(slug: string, sessionId: string, clienteName:
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
             keepalive: true
-          }).catch(function() {});
+          }).then(function(res) {
+            if (!res.ok) console.error('[Tracking] Erro:', res.status);
+          }).catch(function(err) {
+            console.error('[Tracking] Falha:', err);
+          });
         }
       }
 
