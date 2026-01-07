@@ -380,7 +380,7 @@
           </div>
           <div v-if="suggestion.cidadeExecucao" class="search-suggestion__location">
             <svg class="search-suggestion__detail-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-            {{ suggestion.cidadeExecucao }}
+            {{ traduzirCidade(suggestion.cidadeExecucao) }}
           </div>
         </div>
       </div>
@@ -499,7 +499,7 @@
 
               <!-- Cidade -->
               <div class="deal-card__location" v-if="deal.cidadeExecucao">
-                📍 {{ deal.cidadeExecucao }}
+                📍 {{ traduzirCidade(deal.cidadeExecucao) }}
               </div>
 
               <div class="deal-card__footer">
@@ -808,7 +808,7 @@
                     />
                   </template>
                   <span v-else class="detail-value detail-value--editable" @click="startEditing('cidadeExecucao', selectedDeal.cidadeExecucao)" title="Clique para editar">
-                    {{ selectedDeal.cidadeExecucao || 'N/A' }}
+                    {{ traduzirCidade(selectedDeal.cidadeExecucao) || 'N/A' }}
                   </span>
                 </div>
                 <div class="detail-item">
@@ -1860,6 +1860,29 @@ const EMAIL_TO_SPECIALIST: Record<string, string> = {
   'rodrigo': 'Rodrigo',
   'maria': 'Maria Clara',
   'mariaclara': 'Maria Clara',
+};
+
+// Mapeamento de IDs de cidade do Pipedrive para nomes legíveis
+const CIDADE_ID_MAP: Record<string, string> = {
+  '179': 'São Paulo (Capital)',
+  '180': 'Rio de Janeiro (Capital)',
+  '181': 'Curitiba',
+  '182': 'Interior ou Litoral Paulista',
+  '183': 'Interior ou Litoral Carioca',
+  '184': 'Santa Catarina',
+  '185': 'Litoral Paranaense',
+  '186': 'Outro',
+};
+
+// Função para traduzir ID de cidade para nome legível
+const traduzirCidade = (cidade: string | null | undefined): string => {
+  if (!cidade) return '';
+  // Se for um número (ID do Pipedrive), traduzir
+  if (/^\d+$/.test(cidade)) {
+    return CIDADE_ID_MAP[cidade] || cidade;
+  }
+  // Se já for texto, retornar como está
+  return cidade;
 };
 
 // Função para pré-selecionar vendedor baseado no email do usuário logado
@@ -3191,6 +3214,12 @@ const gerarProposta = async () => {
 
   // Arquiteto
   if (deal.nomeEscritorio) params.set('arquiteto', deal.nomeEscritorio);
+
+  // Detalhes (campo resumo do Pipedrive - contém informações de metragem como "90 metros de piso")
+  if (deal.resumo) params.set('detalhes', deal.resumo);
+
+  // Descritivo da área (backup se resumo estiver vazio)
+  if (!deal.resumo && deal.descritivoArea) params.set('detalhes', deal.descritivoArea);
 
   // ID do deal para callback
   params.set('dealId', deal.id);

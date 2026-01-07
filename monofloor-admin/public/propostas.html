@@ -182,25 +182,34 @@
       if (valorMedioM2LilitEl) valorMedioM2LilitEl.textContent = formatarMoeda(valorMedioM2Lilit);
 
       // 5. CALCULAR E ATUALIZAR CONDIÇÕES DE PAGAMENTO
+      const percentualRT = parseFloat(document.getElementById('percentualRT')?.value) || 10;
       const descontoVista = parseFloat(document.getElementById('descontoVista')?.value) || 5;
-      const taxaJurosBase = parseFloat(document.getElementById('taxaJurosBase')?.value) || 2.36;
-      const taxaJurosParcela = parseFloat(document.getElementById('taxaJurosParcela')?.value) || 1;
       const percentualEntrada = parseFloat(document.getElementById('percentualEntrada')?.value) || 50;
       const numeroParcelas = parseInt(document.getElementById('numeroParcelas')?.value) || 2;
 
+      // Aplicar RT (Retenção Técnica) ao valor total
+      // RT 10% é o valor neutro (já embutido nos preços base)
+      // Valores acima de 10% aumentam o preço, abaixo diminuem
+      const valorGeralComRT = valorGeral * (1 + (percentualRT - 10) / 100);
+
       // À VISTA (com desconto)
-      const valorAVista = valorGeral * (1 - descontoVista / 100);
-      const economiaVista = valorGeral - valorAVista;
+      const valorAVista = valorGeralComRT * (1 - descontoVista / 100);
+      const economiaVista = valorGeralComRT - valorAVista;
 
-      // PARCELADO
-      const valorEntrada = valorGeral * (percentualEntrada / 100);
-      const valorSaldo = valorGeral - valorEntrada;
+      // PARCELADO (sem juros - apenas divisão do valor)
+      const valorEntrada = valorGeralComRT * (percentualEntrada / 100);
+      const valorSaldo = valorGeralComRT - valorEntrada;
+      const valorParcela = valorSaldo / numeroParcelas;
+      const totalParcelado = valorGeralComRT; // Sem juros
 
-      // Taxa de juros total = base + (adicional × número de parcelas)
-      const taxaJurosTotal = taxaJurosBase + (taxaJurosParcela * numeroParcelas);
-      const valorSaldoComJuros = valorSaldo * (1 + taxaJurosTotal / 100);
-      const valorParcela = valorSaldoComJuros / numeroParcelas;
-      const totalParcelado = valorEntrada + valorSaldoComJuros;
+      // CARTÃO DE CRÉDITO
+      // Taxa total = Taxa de transação + (Taxa por parcela × Número de parcelas)
+      const taxaTransacaoCartao = parseFloat(document.getElementById('taxaTransacaoCartao')?.value) || 2.36;
+      const taxaPorParcelaCartao = parseFloat(document.getElementById('taxaPorParcelaCartao')?.value) || 1;
+      const numeroParcelasCartao = parseInt(document.getElementById('numeroParcelasCartao')?.value) || 6;
+      const totalJurosCartao = taxaTransacaoCartao + (taxaPorParcelaCartao * numeroParcelasCartao);
+      const valorTotalCartao = valorGeralComRT * (1 + totalJurosCartao / 100);
+      const valorParcelaCartao = valorTotalCartao / numeroParcelasCartao;
 
       // Atualizar DOM - Pagamento
       const valorAVistaEl = document.getElementById('valorAVista');
@@ -209,9 +218,13 @@
       const valorParcelaEl = document.getElementById('valorParcela');
       const numParcelasDisplayEl = document.getElementById('numParcelasDisplay');
       const totalParceladoEl = document.getElementById('totalParcelado');
-      const totalJurosEl = document.getElementById('totalJuros');
       const tituloAVistaEl = document.getElementById('tituloAVista');
       const tituloParceladoEl = document.getElementById('tituloParcelado');
+      const valorParcelaCartaoEl = document.getElementById('valorParcelaCartao');
+      const numParcelasCartaoDisplayEl = document.getElementById('numParcelasCartaoDisplay');
+      const totalCartaoEl = document.getElementById('totalCartao');
+      const totalJurosCartaoEl = document.getElementById('totalJurosCartao');
+      const tituloCartaoEl = document.getElementById('tituloCartao');
 
       if (valorAVistaEl) valorAVistaEl.textContent = formatarMoeda(valorAVista);
       if (economiaVistaEl) economiaVistaEl.textContent = formatarMoeda(economiaVista);
@@ -219,7 +232,6 @@
       if (valorParcelaEl) valorParcelaEl.textContent = formatarMoeda(valorParcela);
       if (numParcelasDisplayEl) numParcelasDisplayEl.textContent = numeroParcelas;
       if (totalParceladoEl) totalParceladoEl.textContent = formatarMoeda(totalParcelado);
-      if (totalJurosEl) totalJurosEl.textContent = taxaJurosTotal.toFixed(2);
 
       // Atualizar títulos dos cards dinamicamente
       if (tituloAVistaEl) {
@@ -229,12 +241,23 @@
         tituloParceladoEl.textContent = `💳 PARCELADO (${percentualEntrada}% entrada + ${numeroParcelas}x)`;
       }
 
+      // Atualizar Cartão de Crédito
+      if (valorParcelaCartaoEl) valorParcelaCartaoEl.textContent = formatarMoeda(valorParcelaCartao);
+      if (numParcelasCartaoDisplayEl) numParcelasCartaoDisplayEl.textContent = numeroParcelasCartao;
+      if (totalCartaoEl) totalCartaoEl.textContent = formatarMoeda(valorTotalCartao);
+      if (totalJurosCartaoEl) totalJurosCartaoEl.textContent = totalJurosCartao.toFixed(2);
+      if (tituloCartaoEl) {
+        tituloCartaoEl.textContent = `💳 CARTÃO (${numeroParcelasCartao}x com juros)`;
+      }
+
       console.log('✅ PAGINA INTEIRA ATUALIZADA!');
       console.log('   STELION:', formatarMoeda(valorTotalStelion), '-', metragemTotalStelion.toFixed(2), 'm²');
       console.log('   LILIT:', formatarMoeda(valorTotalLilit), '-', metragemTotalLilit.toFixed(2), 'm²');
-      console.log('   TOTAL:', formatarMoeda(valorGeral), '-', metragemComPerdaTotal.toFixed(2), 'm²');
+      console.log('   TOTAL (sem RT):', formatarMoeda(valorGeral), '-', metragemComPerdaTotal.toFixed(2), 'm²');
+      console.log('   TOTAL (com RT ' + percentualRT + '%):', formatarMoeda(valorGeralComRT));
       console.log('   À VISTA:', formatarMoeda(valorAVista), '(economia:', formatarMoeda(economiaVista), ')');
       console.log('   PARCELADO:', percentualEntrada + '% entrada +', numeroParcelas + 'x de', formatarMoeda(valorParcela));
+      console.log('   CARTÃO:', numeroParcelasCartao + 'x de', formatarMoeda(valorParcelaCartao), '(juros:', totalJurosCartao.toFixed(2) + '%)');
     };
 
     console.log('✅ HEAD SCRIPT: window.calcularPrecos COMPLETO definido!');
@@ -257,8 +280,8 @@
         status.style.color = '#c9a962';
 
         // Coletar valores calculados
-        const precoBaseStelion = parseFloat(document.getElementById('precoStelion')?.value) || 910;
-        const precoBaseLilit = parseFloat(document.getElementById('precoLilit')?.value) || 590;
+        const precoBaseStelion = parseFloat(document.getElementById('precoBaseStelion')?.value) || 910;
+        const precoBaseLilit = parseFloat(document.getElementById('precoBaseLilit')?.value) || 590;
 
         // Valores STELION
         const valorTotalStelionEl = document.getElementById('totalStelion');
@@ -317,9 +340,16 @@
         const maoObraTotal = maoObraStelion + maoObraLilit;
         const impostosTotal = impostosStelion + impostosLilit;
 
-        // Coletar dados de superfície (piso/parede)
-        const metrosPiso = parseFloat(document.getElementById('metrosPiso')?.value) || 0;
-        const metrosParede = parseFloat(document.getElementById('metrosParede')?.value) || 0;
+        // Coletar dados de superfície (piso/parede e demais)
+        // IMPORTANTE: Aplicar perda de 10% (dividir por 0.9) em cada superfície
+        const metrosPiso = (parseFloat(document.getElementById('metrosPiso')?.value) || 0) / 0.9;
+        const metrosParede = (parseFloat(document.getElementById('metrosParede')?.value) || 0) / 0.9;
+        const metrosTeto = (parseFloat(document.getElementById('metrosTeto')?.value) || 0) / 0.9;
+        const metrosBancadas = (parseFloat(document.getElementById('metrosBancadas')?.value) || 0) / 0.9;
+        const metrosEscadas = (parseFloat(document.getElementById('metrosEscadas')?.value) || 0) / 0.9;
+        const metrosEspeciaisPequenos = (parseFloat(document.getElementById('metrosEspeciaisPequenos')?.value) || 0) / 0.9;
+        const metrosEspeciaisGrandes = (parseFloat(document.getElementById('metrosEspeciaisGrandes')?.value) || 0) / 0.9;
+        const metrosPiscina = (parseFloat(document.getElementById('metrosPiscina')?.value) || 0) / 0.9;
 
         // Determinar qual produto recebe cada superfície
         // pisoProduto é uma variável global que define se o piso vai para STELION ou LILIT
@@ -328,21 +358,44 @@
         const pisoLilit = (pisoProduto === 'lilit') ? metrosPiso : 0;
         const paredeLilit = metrosParede; // Parede sempre vai para LILIT
 
+        // Coletar dados do cliente para overlay na página de informações
+        const clienteNome = document.getElementById('nomeCliente')?.value?.trim() || '';
+        const clienteLocal = document.getElementById('endereco')?.value?.trim() || '';
+        const clienteDetalhes = document.getElementById('detalhes')?.value?.trim() || '';
+        // Área total interna é a metragem total calculada (com 10% de perda já incluída)
+        const areaTotalInterna = metragemTotal;
+
+        // Coletar configurações de pagamento
+        const percentualRT = parseFloat(document.getElementById('percentualRT')?.value) || 10;
+        const percentualEntrada = parseFloat(document.getElementById('percentualEntrada')?.value) || 50;
+        const descontoVista = parseFloat(document.getElementById('descontoVista')?.value) || 5;
+        const taxaTransacaoCartao = parseFloat(document.getElementById('taxaTransacaoCartao')?.value) || 2.36;
+        const taxaPorParcelaCartao = parseFloat(document.getElementById('taxaPorParcelaCartao')?.value) || 1;
+        const numeroParcelasCartao = parseInt(document.getElementById('numeroParcelasCartao')?.value) || 6;
+
         console.log('📊 Dados coletados:', {
           stelion: { metragem: metragemTotalStelion, piso: pisoStelion, parede: paredeStelion, materiais: materiaisStelion, maoObra: maoObraStelion, impostos: impostosStelion, total: valorTotalStelion },
           lilit: { metragem: metragemTotalLilit, piso: pisoLilit, parede: paredeLilit, materiais: materiaisLilit, maoObra: maoObraLilit, impostos: impostosLilit, total: valorTotalLilit },
           totais: { metragem: metragemTotal, materiais: materiaisTotal, maoObra: maoObraTotal, impostos: impostosTotal, total: valorTotal }
         });
 
-        // Fazer requisição para API
-        const API_URL = 'http://localhost:3000/api/proposals/generate';
+        console.log('🔍 SUPERFÍCIES DETALHADAS:', {
+          metrosTeto,
+          metrosBancadas,
+          metrosEscadas,
+          metrosEspeciaisPequenos,
+          metrosEspeciaisGrandes,
+          metrosPiscina
+        });
 
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+        // Fazer requisição para API
+        const API_BASE_URL = window.location.hostname === 'localhost'
+          ? 'http://localhost:3000'
+          : '';  // Em produção, usa a mesma origem (proxy nginx)
+        const API_URL = `${API_BASE_URL}/api/proposals/generate`;
+
+        // Construir body da requisição
+        const requestBody = {
             // STELION
             metragemTotalStelion,
             materiaisStelion,
@@ -373,7 +426,38 @@
             paredeStelion,
             pisoLilit,
             paredeLilit,
-          }),
+
+            // SUPERFÍCIES DETALHADAS
+            teto: metrosTeto,
+            bancadas: metrosBancadas,
+            escadas: metrosEscadas,
+            especiaisPequenos: metrosEspeciaisPequenos,
+            especiaisGrandes: metrosEspeciaisGrandes,
+            piscina: metrosPiscina,
+
+            // DADOS DO CLIENTE (para overlay na página de info)
+            clienteNome,
+            clienteLocal,
+            clienteDetalhes,
+            areaTotalInterna,
+
+            // CONFIGURAÇÕES DE PAGAMENTO
+            percentualRT,
+            percentualEntrada,
+            descontoVista,
+            taxaTransacaoCartao,
+            taxaPorParcelaCartao,
+            numeroParcelasCartao,
+        };
+
+        console.log('📤 REQUEST BODY COMPLETO:', JSON.stringify(requestBody, null, 2));
+
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
         });
 
         if (!response.ok) {
@@ -458,7 +542,7 @@
 
         const API_BASE = window.location.hostname === 'localhost'
           ? 'http://localhost:3000'
-          : 'https://devoted-wholeness-production.up.railway.app';
+          : '';  // Em produção, usa a mesma origem (proxy nginx)
 
         // ====== PASSO 1: Verificar se já tem proposta com PDF ======
         status.textContent = '🔍 Verificando proposta...';
@@ -1504,27 +1588,36 @@
           <!-- Configurações de Pagamento -->
           <div class="form-row">
             <div class="form-group">
+              <label for="percentualRT">% RT (Retenção Técnica)</label>
+              <input id="percentualRT" type="number" min="0" max="100" step="1" value="10" oninput="calcularPrecos()" />
+            </div>
+            <div class="form-group">
               <label for="descontoVista">Desconto à Vista (%)</label>
               <input id="descontoVista" type="number" min="0" max="100" step="0.01" value="5" oninput="calcularPrecos()" />
             </div>
-            <div class="form-group">
-              <label for="taxaJurosBase">Taxa de Juros Base (%)</label>
-              <input id="taxaJurosBase" type="number" min="0" max="100" step="0.01" value="2.36" oninput="calcularPrecos()" />
-            </div>
-            <div class="form-group">
-              <label for="taxaJurosParcela">Taxa Adicional por Parcela (%)</label>
-              <input id="taxaJurosParcela" type="number" min="0" max="100" step="0.01" value="1" oninput="calcularPrecos()" />
-            </div>
-          </div>
-
-          <div class="form-row">
             <div class="form-group">
               <label for="percentualEntrada">Entrada (%)</label>
               <input id="percentualEntrada" type="number" min="0" max="100" step="1" value="50" oninput="calcularPrecos()" />
             </div>
             <div class="form-group">
-              <label for="numeroParcelas">Número de Parcelas</label>
+              <label for="numeroParcelas">Parcelas (sem juros)</label>
               <input id="numeroParcelas" type="number" min="1" max="24" step="1" value="2" oninput="calcularPrecos()" />
+            </div>
+          </div>
+
+          <!-- Configurações de Cartão de Crédito -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="taxaTransacaoCartao">Taxa de Transação (%)</label>
+              <input id="taxaTransacaoCartao" type="number" min="0" max="100" step="0.01" value="2.36" oninput="calcularPrecos()" />
+            </div>
+            <div class="form-group">
+              <label for="taxaPorParcelaCartao">Taxa por Parcela (%)</label>
+              <input id="taxaPorParcelaCartao" type="number" min="0" max="100" step="0.01" value="1" oninput="calcularPrecos()" />
+            </div>
+            <div class="form-group">
+              <label for="numeroParcelasCartao">Parcelas no Cartão</label>
+              <input id="numeroParcelasCartao" type="number" min="1" max="24" step="1" value="6" oninput="calcularPrecos()" />
             </div>
           </div>
 
@@ -1554,7 +1647,20 @@
                   <span id="numParcelasDisplay">2</span>x de R$ <span id="valorParcela">0,00</span>
                 </div>
                 <div style="color: #888888; font-size: 12px;">
-                  Total: R$ <span id="totalParcelado">0,00</span> (juros: <span id="totalJuros">0,00</span>%)
+                  Total: R$ <span id="totalParcelado">0,00</span> (sem juros)
+                </div>
+              </div>
+            </div>
+
+            <!-- Cartão de Crédito -->
+            <div class="form-group">
+              <label id="tituloCartao" style="color: #f97316; font-weight: 600;">💳 CARTÃO (6x com juros)</label>
+              <div style="background: #1a1a1a; border: 1px solid #333333; border-radius: 4px; padding: 16px;">
+                <div style="color: #ffffff; font-size: 16px; font-weight: 600; margin-bottom: 8px;">
+                  <span id="numParcelasCartaoDisplay">6</span>x de R$ <span id="valorParcelaCartao">0,00</span>
+                </div>
+                <div style="color: #888888; font-size: 12px;">
+                  Total: R$ <span id="totalCartao">0,00</span> (juros: <span id="totalJurosCartao">0,00</span>%)
                 </div>
               </div>
             </div>
@@ -1786,149 +1892,8 @@
     // ============================================
     // Nota: MAO_OBRA_M2 e IMPOSTOS_PERCENT já definidos no início do script (linhas ~15-16)
 
-    function formatarMoeda(valor) {
-      return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    window.calcularPrecos = function() {
-      console.log('🔄 Calculando preços...');
-
-      // Pegar valores base
-      const precoBaseStelion = parseFloat(document.getElementById('precoBaseStelion')?.value) || 910;
-      const precoBaseLilit = parseFloat(document.getElementById('precoBaseLilit')?.value) || 590;
-
-      console.log('Preço Base STELION:', precoBaseStelion);
-      console.log('Preço Base LILIT:', precoBaseLilit);
-
-      // Pegar metragens de cada tipo
-      const metrosPiso = parseFloat(document.getElementById('metrosPiso').value) || 0;
-      const metrosParede = parseFloat(document.getElementById('metrosParede').value) || 0;
-      const metrosTeto = parseFloat(document.getElementById('metrosTeto').value) || 0;
-      const metrosBancadas = parseFloat(document.getElementById('metrosBancadas').value) || 0;
-      const metrosEscadas = parseFloat(document.getElementById('metrosEscadas').value) || 0;
-      const metrosEspeciaisPequenos = parseFloat(document.getElementById('metrosEspeciaisPequenos').value) || 0;
-      const metrosEspeciaisGrandes = parseFloat(document.getElementById('metrosEspeciaisGrandes').value) || 0;
-      const metrosPiscina = parseFloat(document.getElementById('metrosPiscina').value) || 0;
-
-      console.log('Metragens:', { metrosPiso, metrosParede, metrosTeto, metrosBancadas, metrosEscadas, metrosEspeciaisPequenos, metrosEspeciaisGrandes, metrosPiscina });
-
-      // Calcular valor total considerando produtos e multiplicadores
-      let valorTotalStelion = 0;
-      let valorTotalLilit = 0;
-      let metragemTotalStelion = 0;
-      let metragemTotalLilit = 0;
-
-      // PISO → STELION ou LILIT (1.0x) - CONFIGURÁVEL
-      if (metrosPiso > 0) {
-        const metrosComPerda = metrosPiso / 0.9;
-
-        if (pisoProduto === 'stelion') {
-          valorTotalStelion += metrosComPerda * precoBaseStelion * 1.0;
-          metragemTotalStelion += metrosComPerda;
-          console.log(`  ✅ Piso: ${metrosComPerda.toFixed(2)}m² × STELION (R$ ${precoBaseStelion}) × 1.0x = R$ ${(metrosComPerda * precoBaseStelion * 1.0).toFixed(2)}`);
-        } else {
-          valorTotalLilit += metrosComPerda * precoBaseLilit * 1.0;
-          metragemTotalLilit += metrosComPerda;
-          console.log(`  ✅ Piso: ${metrosComPerda.toFixed(2)}m² × LILIT (R$ ${precoBaseLilit}) × 1.0x = R$ ${(metrosComPerda * precoBaseLilit * 1.0).toFixed(2)}`);
-        }
-      }
-
-      // PAREDE → LILIT (0.8x)
-      if (metrosParede > 0) {
-        const metrosComPerda = metrosParede / 0.9;
-        valorTotalLilit += metrosComPerda * precoBaseLilit * 0.8;
-        metragemTotalLilit += metrosComPerda;
-      }
-
-      // TETO → LILIT (0.8x)
-      if (metrosTeto > 0) {
-        const metrosComPerda = metrosTeto / 0.9;
-        valorTotalLilit += metrosComPerda * precoBaseLilit * 0.8;
-        metragemTotalLilit += metrosComPerda;
-      }
-
-      // ESPECIAIS PEQUENOS → STELION (0.5x)
-      if (metrosEspeciaisPequenos > 0) {
-        const metrosComPerda = metrosEspeciaisPequenos / 0.9;
-        valorTotalStelion += metrosComPerda * precoBaseStelion * 0.5;
-        metragemTotalStelion += metrosComPerda;
-      }
-
-      // ESPECIAIS GRANDES → STELION (1.5x)
-      if (metrosEspeciaisGrandes > 0) {
-        const metrosComPerda = metrosEspeciaisGrandes / 0.9;
-        valorTotalStelion += metrosComPerda * precoBaseStelion * 1.5;
-        metragemTotalStelion += metrosComPerda;
-      }
-
-      // BANCADAS → STELION (1.5x)
-      if (metrosBancadas > 0) {
-        const metrosComPerda = metrosBancadas / 0.9;
-        valorTotalStelion += metrosComPerda * precoBaseStelion * 1.5;
-        metragemTotalStelion += metrosComPerda;
-      }
-
-      // ESCADAS → STELION (1.5x)
-      if (metrosEscadas > 0) {
-        const metrosComPerda = metrosEscadas / 0.9;
-        valorTotalStelion += metrosComPerda * precoBaseStelion * 1.5;
-        metragemTotalStelion += metrosComPerda;
-      }
-
-      // PISCINA → STELION (1.5x)
-      if (metrosPiscina > 0) {
-        const metrosComPerda = metrosPiscina / 0.9;
-        valorTotalStelion += metrosComPerda * precoBaseStelion * 1.5;
-        metragemTotalStelion += metrosComPerda;
-      }
-
-      console.log('💰 Valores Calculados:');
-      console.log('  STELION Total:', valorTotalStelion, 'Metragem:', metragemTotalStelion);
-      console.log('  LILIT Total:', valorTotalLilit, 'Metragem:', metragemTotalLilit);
-
-      // Atualizar metragem total nos campos de resumo
-      const metragemOriginalTotal = metrosPiso + metrosParede + metrosTeto + metrosBancadas + metrosEscadas + metrosEspeciaisPequenos + metrosEspeciaisGrandes + metrosPiscina;
-      const metragemComPerdaTotal = metragemTotalStelion + metragemTotalLilit;
-
-      const metragemOriginalEl = document.getElementById('metragemOriginal');
-      const metragemTotalEl = document.getElementById('metragemTotal');
-      if (metragemOriginalEl) metragemOriginalEl.textContent = metragemOriginalTotal.toFixed(2) + ' m²';
-      if (metragemTotalEl) metragemTotalEl.textContent = metragemComPerdaTotal.toFixed(2) + ' m²';
-
-      // Calcular composição de preços para cada produto
-      calcularProdutoPorValor('Stelion', valorTotalStelion, metragemTotalStelion);
-      calcularProdutoPorValor('Lilit', valorTotalLilit, metragemTotalLilit);
-
-      // Atualizar resumo geral
-      const metragemGeral = metragemTotalStelion + metragemTotalLilit;
-      const valorGeral = valorTotalStelion + valorTotalLilit;
-
-      console.log('📊 Resumo Geral - Metragem:', metragemGeral, 'Valor:', valorGeral);
-
-      document.getElementById('resumoTotalStelion').textContent = formatarMoeda(valorTotalStelion);
-      document.getElementById('resumoMetragemStelion').textContent = metragemTotalStelion.toFixed(2);
-
-      document.getElementById('resumoTotalLilit').textContent = formatarMoeda(valorTotalLilit);
-      document.getElementById('resumoMetragemLilit').textContent = metragemTotalLilit.toFixed(2);
-
-      document.getElementById('resumoTotalGeral').textContent = formatarMoeda(valorGeral);
-      document.getElementById('resumoMetragemGeral').textContent = metragemGeral.toFixed(2);
-
-      // Atualizar campos usados pela geração de proposta
-      document.getElementById('metragemTotalStelionDisplay').textContent = metragemTotalStelion.toFixed(2);
-      document.getElementById('metragemTotalLilitDisplay').textContent = metragemTotalLilit.toFixed(2);
-      document.getElementById('totalStelion').textContent = formatarMoeda(valorTotalStelion);
-      document.getElementById('totalLilit').textContent = formatarMoeda(valorTotalLilit);
-
-      // Calcular e atualizar valor médio por m² (separado por produto)
-      const valorMedioM2Stelion = metragemTotalStelion > 0 ? valorTotalStelion / metragemTotalStelion : 0;
-      const valorMedioM2Lilit = metragemTotalLilit > 0 ? valorTotalLilit / metragemTotalLilit : 0;
-
-      document.getElementById('valorMedioM2Stelion').textContent = formatarMoeda(valorMedioM2Stelion);
-      document.getElementById('valorMedioM2Lilit').textContent = formatarMoeda(valorMedioM2Lilit);
-
-      console.log('✅ DOM atualizado com sucesso!');
-    };
+    // Nota: formatarMoeda já definida no HEAD
+    // Nota: window.calcularPrecos já definida no HEAD com cálculos de pagamento
 
     function calcularProdutoPorValor(produto, valorTotal, metragem) {
       console.log(`  📦 Calculando ${produto}...`);
@@ -1981,14 +1946,16 @@
     function resetForm() {
       document.getElementById('proposalForm').reset();
       document.getElementById('percentualEntrada').value = '50';
-      document.getElementById('numeroParcelas').value = '1';
-      document.getElementById('numeroParcelasCartao').value = '1';
+      document.getElementById('numeroParcelas').value = '2';
+      document.getElementById('numeroParcelasCartao').value = '6';
       metragemFields.forEach(id => {
         document.getElementById(id).value = '0';
       });
       document.getElementById('valorTotal').value = '0';
-      document.getElementById('descontoVista').value = '0';
-      document.getElementById('taxaJurosCartao').value = '0';
+      document.getElementById('percentualRT').value = '10';
+      document.getElementById('descontoVista').value = '5';
+      document.getElementById('taxaTransacaoCartao').value = '2.36';
+      document.getElementById('taxaPorParcelaCartao').value = '1';
       document.getElementById('precoStelion').value = '0';
       document.getElementById('precoLilit').value = '0';
       calcularPrecos();
@@ -2047,10 +2014,12 @@
         },
         valores: {
           valorTotal: parseFloat(document.getElementById('valorTotal').value) || 0,
+          percentualRT: parseFloat(document.getElementById('percentualRT').value) || 10,
           percentualEntrada: parseFloat(document.getElementById('percentualEntrada').value) || 50,
           numeroParcelas: parseInt(document.getElementById('numeroParcelas').value) || 1,
           descontoVista: parseFloat(document.getElementById('descontoVista').value) || 0,
-          taxaJurosCartao: parseFloat(document.getElementById('taxaJurosCartao').value) || 0,
+          taxaTransacaoCartao: parseFloat(document.getElementById('taxaTransacaoCartao').value) || 2.36,
+          taxaPorParcelaCartao: parseFloat(document.getElementById('taxaPorParcelaCartao').value) || 1,
           numeroParcelasCartao: parseInt(document.getElementById('numeroParcelasCartao').value) || 1,
         },
         tabela: {
@@ -2089,12 +2058,15 @@
     function preencherDadosDoCRM() {
       const urlParams = new URLSearchParams(window.location.search);
 
-      // Verificar se há parâmetros do CRM
-      if (urlParams.has('dealId')) {
+      // Verificar se há parâmetros do CRM (qualquer um deles)
+      const hasCRMParams = urlParams.has('dealId') || urlParams.has('cliente') || urlParams.has('cidade') || urlParams.has('consultor') || urlParams.has('arquiteto');
+      if (hasCRMParams) {
         console.log('📋 Dados do CRM detectados, preenchendo campos...');
 
         // Armazenar dealId para uso posterior (callback para o CRM)
-        window.dealIdCRM = urlParams.get('dealId');
+        if (urlParams.has('dealId')) {
+          window.dealIdCRM = urlParams.get('dealId');
+        }
 
         // Nome do cliente
         if (urlParams.has('cliente')) {
@@ -2108,28 +2080,70 @@
           if (enderecoInput) enderecoInput.value = urlParams.get('endereco');
         }
 
-        // Cidade
+        // Cidade - Converter código para nome legível
         if (urlParams.has('cidade')) {
+          const cidadeCodigo = urlParams.get('cidade');
+          const cidadeMap = {
+            // Códigos de texto
+            'SP_CAPITAL': 'São Paulo (Capital)',
+            'SP_INTERIOR': 'São Paulo (Interior)',
+            'SP_LITORAL': 'São Paulo (Litoral)',
+            'RJ_CAPITAL': 'Rio de Janeiro (Capital)',
+            'RJ_INTERIOR': 'Rio de Janeiro (Interior)',
+            'RJ_LITORAL': 'Rio de Janeiro (Litoral)',
+            'MG': 'Minas Gerais',
+            'PR': 'Paraná',
+            'SC': 'Santa Catarina',
+            'RS': 'Rio Grande do Sul',
+            'BA': 'Bahia',
+            'ES': 'Espírito Santo',
+            'DF': 'Distrito Federal',
+            'GO': 'Goiás',
+            'PE': 'Pernambuco',
+            'CE': 'Ceará',
+            'CURITIBA': 'Curitiba',
+            'PR_LITORAL': 'Litoral Paranaense',
+            'OUTROS': null, // Será tratado abaixo
+            // IDs numéricos do Pipedrive
+            '179': 'São Paulo (Capital)',
+            '180': 'Rio de Janeiro (Capital)',
+            '181': 'Curitiba',
+            '182': 'Interior ou Litoral Paulista',
+            '183': 'Interior ou Litoral Carioca',
+            '184': 'Santa Catarina',
+            '185': 'Litoral Paranaense',
+            '186': 'Outro'
+          };
+
           const enderecoInput = document.getElementById('endereco');
           if (enderecoInput && !enderecoInput.value) {
-            enderecoInput.value = urlParams.get('cidade');
+            // Se for OUTROS, usar o endereço que o cliente informou
+            if (cidadeCodigo === 'OUTROS' && urlParams.has('endereco')) {
+              enderecoInput.value = urlParams.get('endereco');
+            } else if (cidadeMap[cidadeCodigo]) {
+              enderecoInput.value = cidadeMap[cidadeCodigo];
+            } else if (cidadeCodigo !== 'OUTROS') {
+              // Se não encontrar no mapa e não for OUTROS, usar o código original
+              enderecoInput.value = cidadeCodigo;
+            }
           }
         }
 
-        // Detalhes do projeto
-        let detalhes = [];
-        if (urlParams.has('tipoProjeto')) detalhes.push('Tipo: ' + urlParams.get('tipoProjeto'));
-        if (urlParams.has('area')) detalhes.push('Área: ' + urlParams.get('area'));
-        if (urlParams.has('estadoObra')) detalhes.push('Estado: ' + urlParams.get('estadoObra'));
-        if (urlParams.has('arquiteto')) detalhes.push('Arquiteto: ' + urlParams.get('arquiteto'));
-        if (urlParams.has('consultor')) detalhes.push('Consultor: ' + urlParams.get('consultor'));
+        // Processar parâmetro 'detalhes' ou 'area' da URL para extrair áreas (se existir)
+        // O CRM pode enviar como 'detalhes' (campo resumo) ou 'area' (campo descritivoArea)
+        const detalhesTexto = urlParams.get('detalhes') || urlParams.get('area');
+        if (detalhesTexto) {
+          console.log('📝 [CRM] Detalhes/Area recebidos:', detalhesTexto);
 
-        if (detalhes.length > 0) {
-          const detalhesInput = document.getElementById('detalhes');
-          if (detalhesInput) detalhesInput.value = detalhes.join('\n');
+          // Tentar extrair áreas do texto
+          const areasExtraidas = parseAreasFromDetails(detalhesTexto);
+          if (areasExtraidas) {
+            console.log('🎯 [CRM] Áreas extraídas:', areasExtraidas);
+            distribuirAreas(areasExtraidas);
+          }
         }
 
-        // Metragem - preencher no campo de piso por padrão
+        // Metragem - preencher no campo de piso por padrão (fallback se não veio nos detalhes)
         if (urlParams.has('metragem')) {
           const metragem = parseFloat(urlParams.get('metragem'));
           if (metragem > 0) {
@@ -2481,6 +2495,173 @@
         }).catch(function(error) {
           console.error('❌ Erro ao carregar fonte NITECLUB:', error);
         });
+      }
+    });
+
+    // =====================================================
+    // AGENTE DE DISTRIBUIÇÃO DE ÁREAS
+    // Analisa o campo "detalhes" e distribui metragens
+    // =====================================================
+
+    function parseAreasFromDetails(texto) {
+      if (!texto) return null;
+
+      const areas = {
+        piso: null,
+        parede: null,
+        teto: null,
+        bancadas: null,
+        escadas: null,
+        especiaisPequenos: null,
+        especiaisGrandes: null,
+        piscina: null
+      };
+
+      // Normalizar texto: remover acentos e converter para lowercase
+      const textoNorm = texto.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+      // Padrões para detectar áreas
+      // Formatos aceitos: "150m2 de piso", "150 m² piso", "piso: 150", "piso 150m2", etc.
+      const patterns = [
+        // Padrão: número + unidade + tipo
+        { regex: /(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros?\s*(?:quadrados?)?)\s*(?:de\s+)?(?:piso|chao|floor)/gi, field: 'piso' },
+        { regex: /(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros?\s*(?:quadrados?)?)\s*(?:de\s+)?(?:parede|wall|paredes)/gi, field: 'parede' },
+        { regex: /(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros?\s*(?:quadrados?)?)\s*(?:de\s+)?(?:teto|forro|ceiling)/gi, field: 'teto' },
+        { regex: /(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros?\s*(?:quadrados?)?)\s*(?:de\s+)?(?:bancada|bancadas|countertop)/gi, field: 'bancadas' },
+        { regex: /(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros?\s*(?:quadrados?)?)\s*(?:de\s+)?(?:escada|escadas|stairs)/gi, field: 'escadas' },
+        { regex: /(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros?\s*(?:quadrados?)?)\s*(?:de\s+)?(?:piscina|pool)/gi, field: 'piscina' },
+
+        // Padrão: tipo + número
+        { regex: /(?:piso|chao|floor)\s*[:\-]?\s*(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros?)?/gi, field: 'piso' },
+        { regex: /(?:parede|wall|paredes)\s*[:\-]?\s*(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros?)?/gi, field: 'parede' },
+        { regex: /(?:teto|forro|ceiling)\s*[:\-]?\s*(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros?)?/gi, field: 'teto' },
+        { regex: /(?:bancada|bancadas|countertop)\s*[:\-]?\s*(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros?)?/gi, field: 'bancadas' },
+        { regex: /(?:escada|escadas|stairs)\s*[:\-]?\s*(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros?)?/gi, field: 'escadas' },
+        { regex: /(?:piscina|pool)\s*[:\-]?\s*(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros?)?/gi, field: 'piscina' },
+
+        // Padrão simplificado: número + "de" + tipo (sem unidade)
+        { regex: /(\d+(?:[.,]\d+)?)\s+(?:de\s+)?piso/gi, field: 'piso' },
+        { regex: /(\d+(?:[.,]\d+)?)\s+(?:de\s+)?parede/gi, field: 'parede' },
+        { regex: /(\d+(?:[.,]\d+)?)\s+(?:de\s+)?teto/gi, field: 'teto' },
+        { regex: /(\d+(?:[.,]\d+)?)\s+(?:de\s+)?bancada/gi, field: 'bancadas' },
+        { regex: /(\d+(?:[.,]\d+)?)\s+(?:de\s+)?escada/gi, field: 'escadas' },
+        { regex: /(\d+(?:[.,]\d+)?)\s+(?:de\s+)?piscina/gi, field: 'piscina' }
+      ];
+
+      let foundAny = false;
+
+      for (const pattern of patterns) {
+        let match;
+        while ((match = pattern.regex.exec(textoNorm)) !== null) {
+          // Converter valor (aceitar vírgula como decimal)
+          const valor = parseFloat(match[1].replace(',', '.'));
+          if (valor > 0 && areas[pattern.field] === null) {
+            areas[pattern.field] = valor;
+            foundAny = true;
+            console.log(`🎯 [Agente] Detectado: ${pattern.field} = ${valor}m²`);
+          }
+        }
+        // Reset regex lastIndex
+        pattern.regex.lastIndex = 0;
+      }
+
+      return foundAny ? areas : null;
+    }
+
+    function distribuirAreas(areas) {
+      if (!areas) return;
+
+      const fieldMap = {
+        piso: 'metrosPiso',
+        parede: 'metrosParede',
+        teto: 'metrosTeto',
+        bancadas: 'metrosBancadas',
+        escadas: 'metrosEscadas',
+        especiaisPequenos: 'metrosEspeciaisPequenos',
+        especiaisGrandes: 'metrosEspeciaisGrandes',
+        piscina: 'metrosPiscina'
+      };
+
+      let preenchidos = [];
+
+      for (const [tipo, valor] of Object.entries(areas)) {
+        if (valor !== null && valor > 0) {
+          const input = document.getElementById(fieldMap[tipo]);
+          if (input) {
+            // Só preencher se o campo estiver vazio ou zerado
+            const valorAtual = parseFloat(input.value) || 0;
+            if (valorAtual === 0) {
+              input.value = valor;
+              preenchidos.push(`${tipo}: ${valor}m²`);
+
+              // Trigger input event para recalcular
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          }
+        }
+      }
+
+      if (preenchidos.length > 0) {
+        console.log('✅ [Agente] Áreas distribuídas:', preenchidos.join(', '));
+        showToast(`🎯 Áreas detectadas e preenchidas: ${preenchidos.join(', ')}`, 'success');
+
+        // Recalcular valores
+        setTimeout(calcularValores, 100);
+      }
+    }
+
+    // Debounce para não processar a cada tecla
+    let detalhesDebounceTimer = null;
+
+    function processarDetalhes() {
+      const detalhesInput = document.getElementById('detalhes');
+      if (!detalhesInput) return;
+
+      const texto = detalhesInput.value;
+      if (texto.length < 5) return; // Texto muito curto
+
+      const areas = parseAreasFromDetails(texto);
+      if (areas) {
+        distribuirAreas(areas);
+      }
+    }
+
+    // Adicionar listener no campo detalhes
+    document.addEventListener('DOMContentLoaded', function() {
+      const detalhesInput = document.getElementById('detalhes');
+      if (detalhesInput) {
+        // Processar quando o usuário para de digitar (debounce de 1 segundo)
+        detalhesInput.addEventListener('input', function() {
+          clearTimeout(detalhesDebounceTimer);
+          detalhesDebounceTimer = setTimeout(processarDetalhes, 1000);
+        });
+
+        // Também processar ao sair do campo
+        detalhesInput.addEventListener('blur', function() {
+          clearTimeout(detalhesDebounceTimer);
+          processarDetalhes();
+        });
+
+        console.log('🤖 [Agente] Distribuição de áreas ativado no campo Detalhes');
+
+        // Preencher Especialista/Arquiteto nos detalhes após 500ms
+        setTimeout(function() {
+          const urlParams = new URLSearchParams(window.location.search);
+          const consultor = urlParams.get('consultor');
+          const arquiteto = urlParams.get('arquiteto');
+
+          if (consultor || arquiteto) {
+            const detalhesInput = document.getElementById('detalhes');
+            if (detalhesInput && !detalhesInput.value.trim()) {
+              let linhas = [];
+              if (consultor) linhas.push('Especialista: ' + consultor);
+              if (arquiteto) linhas.push('Arquiteto: ' + arquiteto);
+              detalhesInput.value = linhas.join('\n');
+              console.log('👤 [Agente] Detalhes preenchidos:', linhas.join(', '));
+            }
+          }
+        }, 500);
       }
     });
   </script>
