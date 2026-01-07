@@ -523,6 +523,15 @@ router.get('/:id/analytics', async (req, res) => {
       orderBy: { viewedAt: 'desc' }
     });
 
+    // Debug: Verificar se pageTimes está presente nas views
+    if (views.length > 0) {
+      const viewWithPageTimes = views.find(v => v.pageTimes);
+      console.log('📊 [ANALYTICS] Views encontradas:', views.length, 'Com pageTimes:', viewWithPageTimes ? 'SIM' : 'NAO');
+      if (viewWithPageTimes) {
+        console.log('📊 [ANALYTICS] Exemplo pageTimes:', JSON.stringify(viewWithPageTimes.pageTimes));
+      }
+    }
+
     // Calcular estatísticas
     const humanViews = views.filter(v => !v.isBot);
     const uniqueIps = new Set(humanViews.map(v => v.ip)).size;
