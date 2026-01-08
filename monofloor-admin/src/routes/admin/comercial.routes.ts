@@ -17,13 +17,35 @@ interface CacheEntry {
   timestamp: number;
 }
 
-const comercialCache: Map<string, CacheEntry> = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+interface DetailCacheEntry {
+  data: any;
+  timestamp: number;
+}
 
-// Função para invalidar cache
+const comercialCache: Map<string, CacheEntry> = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos para lista principal
+
+// Cache para detalhes do lead (ultima-proposta, anexos, orcamentos)
+const detailCache: Map<string, DetailCacheEntry> = new Map();
+const DETAIL_CACHE_TTL = 60 * 1000; // 1 minuto para detalhes
+
+// Função para invalidar cache da lista
 export const invalidateComercialCache = () => {
   comercialCache.clear();
   console.log('[Cache] Comercial cache invalidated');
+};
+
+// Invalidar cache de detalhes de um lead específico
+export const invalidateLeadDetailCache = (leadId: string) => {
+  const keysToDelete = Array.from(detailCache.keys()).filter(k => k.startsWith(leadId));
+  keysToDelete.forEach(k => detailCache.delete(k));
+  console.log(`[Cache] Detail cache invalidated for lead ${leadId} (${keysToDelete.length} keys)`);
+};
+
+// Invalidar todo o cache de detalhes
+export const invalidateAllDetailCache = () => {
+  detailCache.clear();
+  console.log('[Cache] All detail cache invalidated');
 };
 
 // =============================================
@@ -3170,6 +3192,9 @@ router.put('/:id/proposta/:propostaId/pdf', async (req: Request, res: Response) 
 
     console.log(`[Propostas] PDF salvo, orçamento registrado e anexado ao lead ${id}`);
 
+    // Invalidar cache (nova proposta afeta ultima-proposta, anexos e orçamentos)
+    invalidateLeadDetailCache(id);
+
     res.json({
       success: true,
       proposta,
@@ -3300,11 +3325,200 @@ router.post('/:id/proposta/:propostaId/enviar-whatsapp', async (req: Request, re
   }
 });
 
+// GET /comercial/:id/details - Retorna TODOS os dados do lead de uma vez (ULTRA OTIMIZADO)
+// Combina: ultima-proposta + analytics + anexos + orcamentos em uma única chamada
+// Cache de 5 minutos para máxima performance
+const DETAILS_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+router.get('/:id/details', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const cacheKey = `${id}:details`;
+    const startTime = Date.now();
+
+    // Verificar cache (5 minutos)
+    const cached = detailCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < DETAILS_CACHE_TTL) {
+      console.log(`[Cache] HIT details for ${id} (${Date.now() - startTime}ms)`);
+      return res.json({ ...cached.data, cached: true });
+    }
+
+    // UMA ÚNICA QUERY para proposta + views (otimizado com include)
+    const propostaComViews = await prisma.proposta.findFirst({
+      where: { comercialId: id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        versao: true,
+        valorTotal: true,
+        valorM2: true,
+        metragem: true,
+        status: true,
+        enviadaEm: true,
+        createdAt: true,
+        dadosCalculo: true,
+        htmlSlug: true,
+        htmlGeradoEm: true,
+        pdfBase64: false, // Não carregar o base64 gigante, só verificar se existe
+        views: {
+          orderBy: { viewedAt: 'desc' },
+          take: 20, // Reduzido para 20 (suficiente para UI)
+          select: {
+            id: true,
+            sessionId: true,
+            viewedAt: true,
+            timeOnPage: true,
+            scrollDepth: true,
+            deviceType: true,
+            isBot: true,
+            ip: true,
+            gpsCity: true,
+            gpsState: true,
+            gpsNeighbourhood: true,
+            gpsRoad: true,
+            pageTimes: true,
+            pagesViewed: true,
+          }
+        },
+        _count: {
+          select: { views: true }
+        }
+      },
+    });
+
+    // Queries secundárias em paralelo (anexos + orcamentos + verificação PDF)
+    const [anexos, orcamentos, hasPdfResult] = await Promise.all([
+      prisma.comercialAnexo.findMany({
+        where: { comercialId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          nome: true,
+          tipo: true,
+          descricao: true,
+          mimeType: true,
+          fileSize: true,
+          fileUrl: true,
+          createdAt: true,
+        },
+      }),
+      prisma.orcamentoEnviado.findMany({
+        where: { comercialId: id },
+        orderBy: { dataEnvio: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          dataEnvio: true,
+          valor: true,
+          descricao: true,
+          metragem: true,
+          proposta: {
+            select: {
+              id: true,
+              versao: true,
+              valorTotal: true,
+              status: true,
+            },
+          },
+        },
+      }),
+      propostaComViews ? prisma.proposta.count({
+        where: { id: propostaComViews.id, pdfBase64: { not: null } }
+      }) : Promise.resolve(0)
+    ]);
+
+    // Processar analytics (cálculos rápidos em memória)
+    let analytics = null;
+    if (propostaComViews && propostaComViews.htmlSlug) {
+      const views = propostaComViews.views || [];
+      const humanViews = views.filter((v: any) => !v.isBot);
+      const uniqueIps = new Set(humanViews.map((v: any) => v.ip)).size;
+
+      let avgTimeOnPage = 0;
+      let maxScrollDepth = 0;
+      if (humanViews.length > 0) {
+        avgTimeOnPage = Math.round(humanViews.reduce((acc: number, v: any) => acc + (v.timeOnPage || 0), 0) / humanViews.length);
+        maxScrollDepth = Math.max(...humanViews.map((v: any) => v.scrollDepth || 0));
+      }
+
+      analytics = {
+        proposta: {
+          id: propostaComViews.id,
+          htmlSlug: propostaComViews.htmlSlug,
+          htmlGeradoEm: propostaComViews.htmlGeradoEm,
+          publicUrl: `${process.env.BASE_URL || 'https://propostas.monofloor.cloud'}/p/${propostaComViews.htmlSlug}`
+        },
+        views,
+        stats: {
+          totalViews: (propostaComViews as any)._count?.views || views.length,
+          humanViews: humanViews.length,
+          botViews: views.length - humanViews.length,
+          uniqueVisitors: uniqueIps,
+          avgTimeOnPage,
+          maxScrollDepth,
+          deviceBreakdown: {
+            desktop: humanViews.filter((v: any) => v.deviceType === 'desktop').length,
+            mobile: humanViews.filter((v: any) => v.deviceType === 'mobile').length,
+            tablet: humanViews.filter((v: any) => v.deviceType === 'tablet').length
+          },
+          firstView: views[views.length - 1]?.viewedAt || null,
+          lastView: views[0]?.viewedAt || null
+        }
+      };
+    }
+
+    // Preparar proposta sem views (para não duplicar dados)
+    const proposta = propostaComViews ? {
+      id: propostaComViews.id,
+      versao: propostaComViews.versao,
+      valorTotal: propostaComViews.valorTotal,
+      valorM2: propostaComViews.valorM2,
+      metragem: propostaComViews.metragem,
+      status: propostaComViews.status,
+      enviadaEm: propostaComViews.enviadaEm,
+      createdAt: propostaComViews.createdAt,
+      dadosCalculo: propostaComViews.dadosCalculo,
+      htmlSlug: propostaComViews.htmlSlug,
+      htmlGeradoEm: propostaComViews.htmlGeradoEm,
+      pdfBase64: hasPdfResult > 0 ? 'exists' : null
+    } : null;
+
+    const responseData = {
+      success: true,
+      proposta,
+      analytics,
+      anexos,
+      orcamentos,
+      loadTime: Date.now() - startTime
+    };
+
+    // Salvar no cache (5 minutos)
+    detailCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+    console.log(`[Cache] MISS details for ${id} - saved (${Date.now() - startTime}ms)`);
+
+    res.json(responseData);
+  } catch (error: any) {
+    console.error('[Details] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // GET /comercial/:id/ultima-proposta - Retorna última proposta do lead
 router.get('/:id/ultima-proposta', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const cacheKey = `${id}:ultima-proposta`;
+    const startTime = Date.now();
 
+    // Verificar cache
+    const cached = detailCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < DETAIL_CACHE_TTL) {
+      console.log(`[Cache] HIT ultima-proposta for ${id} (${Date.now() - startTime}ms)`);
+      return res.json({ ...cached.data, cached: true });
+    }
+
+    // Query otimizada: NÃO carrega o pdfBase64 inteiro (pode ter vários MB)
     const proposta = await prisma.proposta.findFirst({
       where: { comercialId: id },
       orderBy: { createdAt: 'desc' },
@@ -3315,16 +3529,40 @@ router.get('/:id/ultima-proposta', async (req: Request, res: Response) => {
         valorM2: true,
         metragem: true,
         status: true,
-        pdfBase64: true,
         enviadaEm: true,
         createdAt: true,
         dadosCalculo: true,
       },
     });
 
-    res.json({ success: true, proposta });
+    if (!proposta) {
+      const responseData = { success: true, proposta: null };
+      detailCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+      console.log(`[Cache] MISS ultima-proposta for ${id} - no proposta (${Date.now() - startTime}ms)`);
+      return res.json(responseData);
+    }
+
+    // Verificar se tem PDF usando count (mais rápido que carregar o campo)
+    const countWithPdf = await prisma.proposta.count({
+      where: {
+        id: proposta.id,
+        pdfBase64: { not: null }
+      }
+    });
+    const hasPdf = countWithPdf > 0;
+
+    const responseData = {
+      success: true,
+      proposta: { ...proposta, pdfBase64: hasPdf ? 'exists' : null }
+    };
+
+    // Salvar no cache
+    detailCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+    console.log(`[Cache] MISS ultima-proposta for ${id} - saved (${Date.now() - startTime}ms)`);
+
+    res.json(responseData);
   } catch (error: any) {
-    console.error('[Propostas] Error getting last:', error);
+    console.error('[ultima-proposta] Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -3337,6 +3575,15 @@ router.get('/:id/ultima-proposta', async (req: Request, res: Response) => {
 router.get('/:id/anexos', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const cacheKey = `${id}:anexos`;
+    const startTime = Date.now();
+
+    // Verificar cache
+    const cached = detailCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < DETAIL_CACHE_TTL) {
+      console.log(`[Cache] HIT anexos for ${id} (${Date.now() - startTime}ms)`);
+      return res.json({ ...cached.data, cached: true });
+    }
 
     const anexos = await prisma.comercialAnexo.findMany({
       where: { comercialId: id },
@@ -3353,7 +3600,11 @@ router.get('/:id/anexos', async (req: Request, res: Response) => {
       },
     });
 
-    res.json({ success: true, anexos });
+    const responseData = { success: true, anexos };
+    detailCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+    console.log(`[Cache] MISS anexos for ${id} - saved (${Date.now() - startTime}ms)`);
+
+    res.json(responseData);
   } catch (error: any) {
     console.error('[Anexos] Error listing:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -3427,6 +3678,9 @@ router.post('/:id/anexos', async (req: Request, res: Response) => {
       },
     });
 
+    // Invalidar cache de anexos
+    invalidateLeadDetailCache(id);
+
     console.log(`[Anexos] Created for deal ${id}: ${nome} (${tipo})`);
     res.json({ success: true, anexo });
   } catch (error: any) {
@@ -3450,6 +3704,9 @@ router.delete('/:id/anexos/:anexoId', async (req: Request, res: Response) => {
 
     await prisma.comercialAnexo.delete({ where: { id: anexoId } });
 
+    // Invalidar cache de anexos
+    invalidateLeadDetailCache(id);
+
     console.log(`[Anexos] Deleted: ${anexo.nome}`);
     res.json({ success: true, message: 'Anexo deletado com sucesso' });
   } catch (error: any) {
@@ -3466,6 +3723,15 @@ router.delete('/:id/anexos/:anexoId', async (req: Request, res: Response) => {
 router.get('/:id/orcamentos-enviados', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const cacheKey = `${id}:orcamentos`;
+    const startTime = Date.now();
+
+    // Verificar cache
+    const cached = detailCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < DETAIL_CACHE_TTL) {
+      console.log(`[Cache] HIT orcamentos for ${id} (${Date.now() - startTime}ms)`);
+      return res.json({ ...cached.data, cached: true });
+    }
 
     const orcamentos = await prisma.orcamentoEnviado.findMany({
       where: { comercialId: id },
@@ -3482,7 +3748,11 @@ router.get('/:id/orcamentos-enviados', async (req: Request, res: Response) => {
       },
     });
 
-    res.json({ success: true, orcamentos });
+    const responseData = { success: true, orcamentos };
+    detailCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+    console.log(`[Cache] MISS orcamentos for ${id} - saved (${Date.now() - startTime}ms)`);
+
+    res.json(responseData);
   } catch (error: any) {
     console.error('[Orçamentos] Error listing:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -3526,6 +3796,9 @@ router.post('/:id/orcamentos-enviados', async (req: Request, res: Response) => {
         },
       },
     });
+
+    // Invalidar cache
+    invalidateLeadDetailCache(id);
 
     console.log(`[Orçamentos] Created for deal ${id}: ${descricao || 'Sem descrição'}`);
     res.json({ success: true, orcamento });
