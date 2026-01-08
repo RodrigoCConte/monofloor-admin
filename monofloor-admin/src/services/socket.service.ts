@@ -539,3 +539,27 @@ export function emitProposalClosed(data: {
     console.log(`[Socket] Emitted proposal:closed - "${data.clientName}" fechou proposta após ${data.totalTimeOnPage}s`);
   }
 }
+
+/**
+ * Emit proposal GPS location updated event
+ * Triggered when client grants GPS permission and location is saved
+ */
+export function emitProposalGPSUpdated(data: {
+  propostaId: string;
+  leadId: string;
+  clientName: string;
+  sessionId: string;
+  city: string | null;
+  state: string | null;
+  neighbourhood: string | null;
+  road: string | null;
+  latitude: number;
+  longitude: number;
+  timestamp: Date;
+}): void {
+  if (io) {
+    io.to('admin').emit('proposal:gpsUpdated', data);
+    const location = data.road || data.neighbourhood || data.city || 'local desconhecido';
+    console.log(`[Socket] Emitted proposal:gpsUpdated - "${data.clientName}" em ${location}`);
+  }
+}

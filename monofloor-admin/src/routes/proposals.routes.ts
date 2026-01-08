@@ -8,7 +8,8 @@ import { UAParser } from 'ua-parser-js';
 import {
   emitProposalOpened,
   emitProposalViewing,
-  emitProposalClosed
+  emitProposalClosed,
+  emitProposalGPSUpdated
 } from '../services/socket.service';
 
 const gzip = promisify(zlib.gzip);
@@ -27,6 +28,29 @@ const activeSessions = new Map<string, {
   timeOnPage: number;
   scrollDepth: number;
 }>();
+
+// =============================================
+// CACHE SYSTEM FOR ANALYTICS
+// =============================================
+interface AnalyticsCacheEntry {
+  data: any;
+  timestamp: number;
+}
+
+const analyticsCache = new Map<string, AnalyticsCacheEntry>();
+const ANALYTICS_CACHE_TTL = 30 * 1000; // 30 segundos (analytics mudam frequentemente)
+
+// Invalidar cache de analytics de uma proposta específica
+export const invalidateAnalyticsCache = (propostaId: string) => {
+  analyticsCache.delete(propostaId);
+  console.log(`[Cache] Analytics cache invalidated for proposta ${propostaId}`);
+};
+
+// Invalidar todo o cache de analytics
+export const invalidateAllAnalyticsCache = () => {
+  analyticsCache.clear();
+  console.log('[Cache] All analytics cache invalidated');
+};
 
 // Limpar sessões inativas a cada 2 minutos
 setInterval(() => {
@@ -488,6 +512,9 @@ router.post('/track', async (req, res) => {
       }
     });
 
+    // Invalidar cache de analytics
+    invalidateAnalyticsCache(proposta.id);
+
     res.json({ success: true, sessionId: newSessionId });
 
   } catch (error: any) {
@@ -497,12 +524,148 @@ router.post('/track', async (req, res) => {
 });
 
 /**
+ * POST /api/proposals/track/location
+ * Recebe coordenadas GPS do cliente (com permissão)
+ */
+router.post('/track/location', async (req, res) => {
+  try {
+    const { slug, sessionId, latitude, longitude, accuracy } = req.body;
+
+    console.log('📍 [GPS] Localização recebida:', { slug, sessionId, latitude, longitude, accuracy });
+
+    if (!slug || !sessionId || latitude === undefined || longitude === undefined) {
+      return res.status(400).json({ error: 'Dados incompletos' });
+    }
+
+    // Buscar a view pelo sessionId
+    const view = await prisma.propostaView.findFirst({
+      where: { sessionId }
+    });
+
+    if (!view) {
+      console.log('📍 [GPS] View não encontrada para sessionId:', sessionId);
+      return res.status(404).json({ error: 'Sessão não encontrada' });
+    }
+
+    // Fazer geocoding reverso para obter cidade/estado/bairro/rua
+    let gpsCity = null;
+    let gpsState = null;
+    let gpsNeighbourhood = null;
+    let gpsRoad = null;
+
+    try {
+      // Usar Nominatim (OpenStreetMap) - gratuito
+      // zoom=18 para máximo detalhe (nível de rua)
+      const geocodeUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`;
+      const geocodeResponse = await fetch(geocodeUrl, {
+        headers: {
+          'User-Agent': 'MonofloorProposals/1.0'
+        }
+      });
+
+      if (geocodeResponse.ok) {
+        const geocodeData = await geocodeResponse.json() as {
+          address?: {
+            road?: string;
+            street?: string;
+            neighbourhood?: string;
+            suburb?: string;
+            quarter?: string;
+            city?: string;
+            town?: string;
+            municipality?: string;
+            village?: string;
+            state?: string;
+          }
+        };
+        if (geocodeData.address) {
+          gpsCity = geocodeData.address.city || geocodeData.address.town || geocodeData.address.municipality || geocodeData.address.village || null;
+          gpsState = geocodeData.address.state || null;
+          gpsNeighbourhood = geocodeData.address.neighbourhood || geocodeData.address.suburb || geocodeData.address.quarter || null;
+          gpsRoad = geocodeData.address.road || geocodeData.address.street || null;
+          console.log('📍 [GPS] Geocoding detalhado:', gpsRoad, '-', gpsNeighbourhood, '-', gpsCity, '-', gpsState);
+        }
+      }
+    } catch (geocodeError) {
+      console.error('📍 [GPS] Erro no geocoding:', geocodeError);
+    }
+
+    // Atualizar a view com as coordenadas
+    const updatedView = await prisma.propostaView.update({
+      where: { id: view.id },
+      data: {
+        latitude,
+        longitude,
+        gpsAccuracy: accuracy,
+        gpsCity,
+        gpsState,
+        gpsNeighbourhood,
+        gpsRoad,
+        gpsGranted: true
+      },
+      include: {
+        proposta: {
+          include: {
+            comercial: {
+              select: { id: true, personName: true }
+            }
+          }
+        }
+      }
+    });
+
+    console.log('📍 [GPS] Localização salva com sucesso:', gpsRoad, '-', gpsNeighbourhood, '-', gpsCity, '-', gpsState);
+
+    // Invalidar cache de analytics
+    invalidateAnalyticsCache(updatedView.propostaId);
+
+    // Emitir evento para atualização em tempo real no admin
+    emitProposalGPSUpdated({
+      propostaId: updatedView.propostaId,
+      leadId: updatedView.proposta.comercialId,
+      clientName: updatedView.proposta.comercial?.personName || 'Cliente',
+      sessionId,
+      city: gpsCity,
+      state: gpsState,
+      neighbourhood: gpsNeighbourhood,
+      road: gpsRoad,
+      latitude,
+      longitude,
+      timestamp: new Date()
+    });
+
+    res.json({
+      success: true,
+      location: {
+        city: gpsCity,
+        state: gpsState,
+        neighbourhood: gpsNeighbourhood,
+        road: gpsRoad
+      }
+    });
+
+  } catch (error: any) {
+    console.error('❌ [GPS] Erro ao salvar localização:', error);
+    res.status(500).json({ error: 'Erro ao salvar localização' });
+  }
+});
+
+/**
  * GET /api/proposals/:id/analytics
  * Retorna analytics de visualização da proposta
+ * Cache de 30 segundos para melhor performance
  */
 router.get('/:id/analytics', async (req, res) => {
   try {
     const { id } = req.params;
+    const startTime = Date.now();
+
+    // Verificar cache
+    const cached = analyticsCache.get(id);
+    if (cached && (Date.now() - cached.timestamp) < ANALYTICS_CACHE_TTL) {
+      console.log(`[Cache] HIT analytics for ${id} (${Date.now() - startTime}ms)`);
+      return res.json({ ...cached.data, cached: true });
+    }
 
     const proposta = await prisma.proposta.findUnique({
       where: { id },
@@ -574,14 +737,20 @@ router.get('/:id/analytics', async (req, res) => {
 
     const baseUrl = process.env.BASE_URL || 'https://devoted-wholeness-production.up.railway.app';
 
-    res.json({
+    const responseData = {
       proposta: {
         ...proposta,
         publicUrl: `${baseUrl}/p/${proposta.htmlSlug}`
       },
       views: views.slice(0, 50), // Últimas 50 visualizações
       stats
-    });
+    };
+
+    // Salvar no cache
+    analyticsCache.set(id, { data: responseData, timestamp: Date.now() });
+    console.log(`[Cache] MISS analytics for ${id} - saved (${Date.now() - startTime}ms)`);
+
+    res.json(responseData);
 
   } catch (error: any) {
     console.error('❌ Erro ao buscar analytics:', error);

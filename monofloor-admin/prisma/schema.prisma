@@ -1284,6 +1284,15 @@ model PropostaView {
   country       String?  // País (geolocalização por IP)
   city          String?  // Cidade
   region        String?  // Estado/Região
+  // GPS Location (com permissão do usuário)
+  latitude      Float?   // Latitude GPS
+  longitude     Float?   // Longitude GPS
+  gpsAccuracy   Float?   @map("gps_accuracy") // Precisão em metros
+  gpsCity       String?  @map("gps_city") // Cidade obtida via geocoding reverso
+  gpsState      String?  @map("gps_state") // Estado obtido via geocoding reverso
+  gpsNeighbourhood String? @map("gps_neighbourhood") // Bairro obtido via geocoding reverso
+  gpsRoad       String?  @map("gps_road") // Rua aproximada obtida via geocoding reverso
+  gpsGranted    Boolean  @default(false) @map("gps_granted") // Se o usuário concedeu permissão
   timeOnPage    Int?     @map("time_on_page") // Tempo na página em segundos
   scrollDepth   Int?     @map("scroll_depth") // Profundidade de scroll (0-100%)
   deviceType    String?  @map("device_type") // mobile, tablet, desktop

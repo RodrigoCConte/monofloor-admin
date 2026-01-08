@@ -1048,8 +1048,8 @@
               </div>
             </div>
 
-            <!-- Analytics de Visualização da Proposta -->
-            <div class="detail-section" v-if="ultimaProposta && propostaAnalytics?.stats">
+            <!-- Analytics de Visualização da Proposta - Sempre mostra quando há proposta -->
+            <div class="detail-section" v-if="ultimaProposta">
               <div class="detail-section__header">
                 <h3 class="detail-section__title">
                   <svg class="detail-section__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -1060,110 +1060,117 @@
                 </h3>
               </div>
 
-              <!-- Stats resumidos -->
-              <div class="analytics-stats">
-                <div class="analytics-stat">
-                  <span class="analytics-stat__value">{{ propostaAnalytics.stats.humanViews }}</span>
-                  <span class="analytics-stat__label">Visualizações</span>
-                </div>
-                <div class="analytics-stat">
-                  <span class="analytics-stat__value">{{ propostaAnalytics.stats.uniqueVisitors }}</span>
-                  <span class="analytics-stat__label">Visitantes Únicos</span>
-                </div>
-                <div class="analytics-stat">
-                  <span class="analytics-stat__value">{{ formatTime(propostaAnalytics.stats.avgTimeOnPage) }}</span>
-                  <span class="analytics-stat__label">Tempo Médio</span>
-                </div>
-                <div class="analytics-stat">
-                  <span class="analytics-stat__value">{{ propostaAnalytics.stats.maxScrollDepth }}%</span>
-                  <span class="analytics-stat__label">Max Scroll</span>
-                </div>
+              <!-- Loading state -->
+              <div v-if="loadingPropostaAnalytics" class="detail-loading">
+                <span class="detail-loading__spinner"></span>
+                Carregando analytics...
               </div>
 
-              <!-- Dispositivos -->
-              <div class="analytics-devices">
-                <span class="analytics-device" title="Desktop">
-                  💻 {{ propostaAnalytics.stats.deviceBreakdown.desktop }}
-                </span>
-                <span class="analytics-device" title="Mobile">
-                  📱 {{ propostaAnalytics.stats.deviceBreakdown.mobile }}
-                </span>
-                <span class="analytics-device" title="Tablet">
-                  📟 {{ propostaAnalytics.stats.deviceBreakdown.tablet }}
-                </span>
-              </div>
-
-              <!-- Lista de visualizações recentes -->
-              <div class="analytics-views" v-if="propostaAnalytics.views.length > 0">
-                <div class="analytics-views__header">
-                  Últimas Visualizações
-                </div>
-                <div class="analytics-views__list">
-                  <div
-                    v-for="view in propostaAnalytics.views.slice(0, 5)"
-                    :key="view.id"
-                    class="analytics-view-item"
-                    :class="{
-                      'analytics-view-item--bot': view.isBot,
-                      'analytics-view-item--has-recording': getRecordingForView(view.sessionId)
-                    }"
-                    @click="playRecordingForView(view.sessionId)"
-                  >
-                    <span class="analytics-view-item__device">
-                      {{ view.deviceType === 'mobile' ? '📱' : view.deviceType === 'tablet' ? '📟' : '💻' }}
-                    </span>
-                    <span class="analytics-view-item__time">
-                      {{ formatViewDate(view.viewedAt) }}
-                    </span>
-                    <span class="analytics-view-item__duration">
-                      {{ formatTime(view.timeOnPage) }}
-                    </span>
-                    <span class="analytics-view-item__scroll">
-                      {{ view.scrollDepth }}%
-                    </span>
-                    <span
-                      v-if="getRecordingForView(view.sessionId)"
-                      class="analytics-view-item__play"
-                      title="Assistir gravação"
-                    >
-                      ▶️
-                    </span>
-                    <span
-                      v-if="view.pageTimes && Object.keys(view.pageTimes).length > 0"
-                      class="analytics-view-item__report"
-                      title="Ver tempo por página"
-                      @click.stop="openPageTimesModal(view)"
-                    >
-                      📊
-                    </span>
+              <!-- Conteúdo quando há dados -->
+              <template v-else-if="propostaAnalytics?.stats">
+                <!-- Stats resumidos -->
+                <div class="analytics-stats">
+                  <div class="analytics-stat">
+                    <span class="analytics-stat__value">{{ propostaAnalytics.stats.humanViews }}</span>
+                    <span class="analytics-stat__label">Visualizações</span>
+                  </div>
+                  <div class="analytics-stat">
+                    <span class="analytics-stat__value">{{ propostaAnalytics.stats.uniqueVisitors }}</span>
+                    <span class="analytics-stat__label">Visitantes Únicos</span>
+                  </div>
+                  <div class="analytics-stat">
+                    <span class="analytics-stat__value">{{ formatTime(propostaAnalytics.stats.avgTimeOnPage) }}</span>
+                    <span class="analytics-stat__label">Tempo Médio</span>
+                  </div>
+                  <div class="analytics-stat">
+                    <span class="analytics-stat__value">{{ propostaAnalytics.stats.maxScrollDepth }}%</span>
+                    <span class="analytics-stat__label">Max Scroll</span>
                   </div>
                 </div>
-              </div>
 
-              <!-- Primeira e última visualização -->
-              <div class="analytics-dates" v-if="propostaAnalytics.stats.firstView">
-                <span class="analytics-date">
-                  Primeira: {{ formatViewDate(propostaAnalytics.stats.firstView) }}
-                </span>
-                <span class="analytics-date" v-if="propostaAnalytics.stats.lastView">
-                  Última: {{ formatViewDate(propostaAnalytics.stats.lastView) }}
-                </span>
-              </div>
+                <!-- Dispositivos -->
+                <div class="analytics-devices">
+                  <span class="analytics-device" title="Desktop">
+                    💻 {{ propostaAnalytics.stats.deviceBreakdown.desktop }}
+                  </span>
+                  <span class="analytics-device" title="Mobile">
+                    📱 {{ propostaAnalytics.stats.deviceBreakdown.mobile }}
+                  </span>
+                  <span class="analytics-device" title="Tablet">
+                    📟 {{ propostaAnalytics.stats.deviceBreakdown.tablet }}
+                  </span>
+                </div>
 
-            </div>
+                <!-- Lista de visualizações recentes -->
+                <div class="analytics-views" v-if="propostaAnalytics.views.length > 0">
+                  <div class="analytics-views__header">
+                    Últimas Visualizações
+                  </div>
+                  <div class="analytics-views__list">
+                    <div
+                      v-for="view in propostaAnalytics.views.slice(0, 5)"
+                      :key="view.id"
+                      class="analytics-view-item"
+                      :class="{
+                        'analytics-view-item--bot': view.isBot,
+                        'analytics-view-item--has-recording': getRecordingForView(view.sessionId)
+                      }"
+                      @click="playRecordingForView(view.sessionId)"
+                    >
+                      <span class="analytics-view-item__visitor" :title="`Visitante: ${view.sessionId?.slice(0, 8) || 'anônimo'}`">
+                        {{ getVisitorEmoji(view.sessionId) }}
+                      </span>
+                      <span class="analytics-view-item__device">
+                        {{ view.deviceType === 'mobile' ? '📱' : view.deviceType === 'tablet' ? '📟' : '💻' }}
+                      </span>
+                      <span
+                        class="analytics-view-item__location"
+                        :class="{ 'analytics-view-item__location--unknown': !hasViewLocation(view) }"
+                        :title="getViewLocation(view)"
+                        :style="{ cursor: hasViewLocation(view) ? 'help' : 'default' }"
+                      >
+                        📍
+                      </span>
+                      <span class="analytics-view-item__time">
+                        {{ formatViewDate(view.viewedAt) }}
+                      </span>
+                      <span class="analytics-view-item__duration">
+                        {{ formatTime(view.timeOnPage) }}
+                      </span>
+                      <span
+                        class="analytics-view-item__report"
+                        title="Ver detalhes da sessão"
+                        @click.stop="openPageTimesModal(view)"
+                      >
+                        📊
+                      </span>
+                      <span class="analytics-view-item__scroll">
+                        {{ view.scrollDepth }}%
+                      </span>
+                      <span
+                        v-if="getRecordingForView(view.sessionId)"
+                        class="analytics-view-item__play"
+                        title="Assistir gravação"
+                      >
+                        ▶️
+                      </span>
+                    </div>
+                  </div>
+                </div>
 
-            <!-- Sem analytics ainda -->
-            <div class="detail-section" v-else-if="ultimaProposta && !loadingPropostaAnalytics">
-              <div class="detail-section__header">
-                <h3 class="detail-section__title">
-                  <svg class="detail-section__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                  Histórico de Visualizações
-                </h3>
-              </div>
-              <div class="detail-empty">
+                <!-- Primeira e última visualização -->
+                <div class="analytics-dates" v-if="propostaAnalytics.stats.firstView">
+                  <span class="analytics-date">
+                    Primeira: {{ formatViewDate(propostaAnalytics.stats.firstView) }}
+                  </span>
+                  <span class="analytics-date" v-if="propostaAnalytics.stats.lastView">
+                    Última: {{ formatViewDate(propostaAnalytics.stats.lastView) }}
+                  </span>
+                </div>
+              </template>
+
+              <!-- Sem visualizações ainda -->
+              <div v-else class="detail-empty">
                 A proposta ainda não foi visualizada pelo cliente.
               </div>
             </div>
@@ -1600,7 +1607,7 @@
             </div>
 
             <!-- Gráfico de barras por página -->
-            <div class="page-times-chart" v-if="selectedPageTimesView?.pageTimes">
+            <div class="page-times-chart" v-if="selectedPageTimesView?.pageTimes && Object.keys(selectedPageTimesView.pageTimes).length > 0">
               <div
                 v-for="(time, page) in selectedPageTimesView.pageTimes"
                 :key="page"
@@ -1617,8 +1624,14 @@
               </div>
             </div>
 
+            <!-- Mensagem quando não há dados detalhados -->
+            <div class="page-times-empty" v-if="!selectedPageTimesView?.pageTimes || Object.keys(selectedPageTimesView.pageTimes).length === 0">
+              <p>Dados detalhados de páginas não disponíveis para esta sessão.</p>
+              <p class="page-times-empty__hint">Sessões muito curtas podem não ter tempo suficiente para coletar dados por página.</p>
+            </div>
+
             <!-- Páginas visualizadas -->
-            <div class="page-times-pages" v-if="selectedPageTimesView?.pagesViewed">
+            <div class="page-times-pages" v-if="selectedPageTimesView?.pagesViewed && selectedPageTimesView.pagesViewed.length > 0">
               <span class="page-times-pages__label">Páginas vistas:</span>
               <span class="page-times-pages__list">
                 {{ Array.isArray(selectedPageTimesView.pagesViewed) ? selectedPageTimesView.pagesViewed.join(', ') : selectedPageTimesView.pagesViewed }}
@@ -1783,11 +1796,13 @@ import {
   onProposalOpened,
   onProposalViewing,
   onProposalClosed,
+  onProposalGPSUpdated,
 } from '@/services/socket';
 import type {
   ProposalOpenedEvent,
   ProposalViewingEvent,
   ProposalClosedEvent,
+  ProposalGPSUpdatedEvent,
 } from '@/services/socket';
 
 const authStore = useAuthStore();
@@ -1873,6 +1888,15 @@ interface ProposalViewRecord {
   pageTimes?: Record<string, number>; // Tempo por página: {"1": 30, "2": 15, ...}
   pagesViewed?: number[]; // Páginas visualizadas: [1, 2, 3, ...]
   currentPage?: number; // Página atual
+  // Localização
+  city?: string;
+  region?: string;
+  country?: string;
+  gpsCity?: string;
+  gpsState?: string;
+  gpsNeighbourhood?: string;
+  gpsRoad?: string;
+  gpsGranted?: boolean;
 }
 
 interface ProposalAnalytics {
@@ -1969,8 +1993,9 @@ const EMAIL_TO_SPECIALIST: Record<string, string> = {
   'mariaclara': 'Maria Clara',
 };
 
-// Mapeamento de IDs de cidade do Pipedrive para nomes legíveis
+// Mapeamento de IDs e códigos de cidade do Pipedrive para nomes legíveis
 const CIDADE_ID_MAP: Record<string, string> = {
+  // IDs numéricos
   '179': 'São Paulo (Capital)',
   '180': 'Rio de Janeiro (Capital)',
   '181': 'Curitiba',
@@ -1979,16 +2004,34 @@ const CIDADE_ID_MAP: Record<string, string> = {
   '184': 'Santa Catarina',
   '185': 'Litoral Paranaense',
   '186': 'Outro',
+  // Códigos string (formato antigo)
+  'SP_CAPITAL': 'São Paulo (Capital)',
+  'RJ_CAPITAL': 'Rio de Janeiro (Capital)',
+  'CURITIBA': 'Curitiba',
+  'SP_INTERIOR': 'Interior ou Litoral Paulista',
+  'SP_LITORAL': 'Interior ou Litoral Paulista',
+  'RJ_INTERIOR': 'Interior ou Litoral Carioca',
+  'RJ_LITORAL': 'Interior ou Litoral Carioca',
+  'SANTA_CATARINA': 'Santa Catarina',
+  'SC': 'Santa Catarina',
+  'PR_LITORAL': 'Litoral Paranaense',
+  'OUTRO': 'Outro',
+  'OUTROS': 'Outro',
 };
 
-// Função para traduzir ID de cidade para nome legível
+// Função para traduzir ID/código de cidade para nome legível
 const traduzirCidade = (cidade: string | null | undefined): string => {
   if (!cidade) return '';
-  // Se for um número (ID do Pipedrive), traduzir
-  if (/^\d+$/.test(cidade)) {
-    return CIDADE_ID_MAP[cidade] || cidade;
+  // Verificar se está no mapa (IDs numéricos ou códigos string)
+  if (CIDADE_ID_MAP[cidade]) {
+    return CIDADE_ID_MAP[cidade];
   }
-  // Se já for texto, retornar como está
+  // Verificar em maiúsculas também
+  const upperCidade = cidade.toUpperCase();
+  if (CIDADE_ID_MAP[upperCidade]) {
+    return CIDADE_ID_MAP[upperCidade];
+  }
+  // Se não encontrar, retornar como está
   return cidade;
 };
 
@@ -2007,6 +2050,37 @@ const preSelectSpecialistFromEmail = () => {
       return;
     }
   }
+};
+
+// =============================================
+// CACHE SYSTEM - Evita re-fetches desnecessários
+// =============================================
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+}
+
+const frontendCache = new Map<string, CacheEntry>();
+const FRONTEND_CACHE_TTL = 30 * 1000; // 30 segundos
+
+const getCached = <T>(key: string): T | null => {
+  const cached = frontendCache.get(key);
+  if (cached && (Date.now() - cached.timestamp) < FRONTEND_CACHE_TTL) {
+    console.log(`[FE Cache] HIT: ${key}`);
+    return cached.data as T;
+  }
+  return null;
+};
+
+const setCache = (key: string, data: any) => {
+  frontendCache.set(key, { data, timestamp: Date.now() });
+  console.log(`[FE Cache] SET: ${key}`);
+};
+
+const invalidateCache = (leadId: string) => {
+  const keysToDelete = Array.from(frontendCache.keys()).filter(k => k.includes(leadId));
+  keysToDelete.forEach(k => frontendCache.delete(k));
+  console.log(`[FE Cache] INVALIDATED: ${keysToDelete.length} keys for ${leadId}`);
 };
 
 // Propostas
@@ -2123,12 +2197,13 @@ interface ActiveProposalView {
 
 interface ProposalNotification {
   id: string;
-  type: 'opened' | 'closed';
+  type: 'opened' | 'closed' | 'gps';
   clientName: string;
   ownerUserName: string;
   leadId: string;
   timeOnPage?: number;
   deviceType?: string;
+  location?: string;
   timestamp: Date;
 }
 
@@ -2137,6 +2212,7 @@ const proposalNotifications = ref<ProposalNotification[]>([]);
 const unsubscribeProposalOpened = ref<(() => void) | null>(null);
 const unsubscribeProposalViewing = ref<(() => void) | null>(null);
 const unsubscribeProposalClosed = ref<(() => void) | null>(null);
+const unsubscribeProposalGPSUpdated = ref<(() => void) | null>(null);
 
 // New Deal Form
 const newDeal = ref({
@@ -2680,6 +2756,89 @@ const formatViewDate = (dateStr?: string | null): string => {
   });
 };
 
+// Verificar se tem dados de localização
+const hasViewLocation = (view: ProposalViewRecord): boolean => {
+  return !!(view.gpsRoad || view.gpsNeighbourhood || view.gpsCity || view.gpsState || view.city || view.region || view.country);
+};
+
+// Lista de emojis para identificar visitantes únicos
+const visitorEmojis = [
+  '🦊', '🐱', '🐶', '🦁', '🐯', '🐻', '🐼', '🐨', '🐵', '🦄',
+  '🐸', '🐙', '🦋', '🦅', '🦉', '🐬', '🦈', '🐢', '🦩', '🦜',
+  '🌸', '🌺', '🌻', '🌹', '🌷', '🍀', '🍁', '🌿', '🌵', '🌴',
+  '⭐', '🌙', '☀️', '⚡', '🔥', '💧', '❄️', '🌈', '💎', '🎯',
+  '🎨', '🎭', '🎪', '🎡', '🚀', '✈️', '🎸', '🎹', '🎺', '🎻'
+];
+
+// Cache de emojis por sessionId para consistência durante a sessão
+const sessionEmojiCache = new Map<string, string>();
+
+// Gerar emoji determinístico para um sessionId
+const getVisitorEmoji = (sessionId: string | undefined): string => {
+  if (!sessionId) return '👤';
+
+  // Verificar cache primeiro
+  const cached = sessionEmojiCache.get(sessionId);
+  if (cached) {
+    return cached;
+  }
+
+  // Gerar índice baseado no hash do sessionId
+  let hash = 0;
+  for (let i = 0; i < sessionId.length; i++) {
+    const char = sessionId.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+
+  const index = Math.abs(hash) % visitorEmojis.length;
+  const emoji: string = visitorEmojis[index] ?? '👤';
+
+  // Cachear para consistência
+  sessionEmojiCache.set(sessionId, emoji);
+
+  return emoji;
+};
+
+// Obter localização da visualização (para tooltip do pino)
+const getViewLocation = (view: ProposalViewRecord): string => {
+  const parts: string[] = [];
+
+  // Prioriza GPS (mais preciso) sobre IP geolocation
+  if (view.gpsRoad) {
+    parts.push(view.gpsRoad);
+  }
+  if (view.gpsNeighbourhood) {
+    parts.push(view.gpsNeighbourhood);
+  }
+  if (view.gpsCity) {
+    parts.push(view.gpsCity);
+  }
+  if (view.gpsState) {
+    parts.push(view.gpsState);
+  }
+
+  // Se temos dados de GPS, retornar
+  if (parts.length > 0) {
+    return parts.join(', ');
+  }
+
+  // Fallback para geolocalização por IP
+  if (view.city && view.region) {
+    return `${view.city}, ${view.region}`;
+  }
+  if (view.city) {
+    return view.city;
+  }
+  if (view.region) {
+    return view.region;
+  }
+  if (view.country) {
+    return view.country;
+  }
+  return 'Localização não disponível';
+};
+
 // Drag & Drop
 const handleDragStart = (e: DragEvent, deal: Deal) => {
   draggingDeal.value = deal;
@@ -2865,18 +3024,75 @@ const openDealDetail = async (deal: Deal) => {
   anexos.value = [];
   orcamentosEnviados.value = [];
 
-  // Buscar última proposta, anexos e orçamentos em paralelo
-  await Promise.all([
-    fetchUltimaProposta(deal.id),
-    fetchAnexos(deal.id),
-    fetchOrcamentosEnviados(deal.id)
-  ]);
+  // OTIMIZADO: Usar endpoint combinado que busca TUDO de uma vez
+  await fetchAllLeadDetails(deal.id);
+};
 
-  // Buscar analytics e recordings da proposta se existir
-  const proposta = ultimaProposta.value as Proposta | null;
-  if (proposta?.id) {
-    fetchPropostaAnalytics(proposta.id);
-    fetchRecordings(proposta.id);
+// Função otimizada: busca todos os dados do lead em uma única chamada
+const fetchAllLeadDetails = async (dealId: string, forceRefresh = false) => {
+  const cacheKey = `details:${dealId}`;
+  const startTime = Date.now();
+
+  // Verificar cache primeiro
+  if (!forceRefresh) {
+    const cached = getCached<any>(cacheKey);
+    if (cached) {
+      console.log(`[FE] Cache HIT details (${Date.now() - startTime}ms)`);
+      ultimaProposta.value = cached.proposta;
+      propostaAnalytics.value = cached.analytics;
+      anexos.value = cached.anexos || [];
+      orcamentosEnviados.value = cached.orcamentos || [];
+      // Buscar recordings separadamente (não está no endpoint combinado)
+      if (cached.proposta?.id) {
+        fetchRecordings(cached.proposta.id);
+      }
+      return;
+    }
+  }
+
+  // Mostrar loading states
+  loadingProposta.value = true;
+  loadingPropostaAnalytics.value = true;
+  loadingAnexos.value = true;
+  loadingOrcamentos.value = true;
+
+  try {
+    const response = await comercialApi.getLeadDetails(dealId);
+
+    if (response.data.success) {
+      ultimaProposta.value = response.data.proposta;
+      propostaAnalytics.value = response.data.analytics;
+      anexos.value = response.data.anexos || [];
+      orcamentosEnviados.value = response.data.orcamentos || [];
+
+      // Salvar no cache
+      setCache(cacheKey, response.data);
+
+      console.log(`[FE] Loaded all details in ${response.data.loadTime}ms (total: ${Date.now() - startTime}ms)`);
+
+      // Buscar recordings se tem proposta
+      if (response.data.proposta?.id) {
+        fetchRecordings(response.data.proposta.id);
+      }
+    }
+  } catch (error: any) {
+    console.error('Erro ao buscar detalhes do lead:', error);
+    // Fallback para chamadas individuais se o endpoint combinado falhar
+    await Promise.all([
+      fetchUltimaProposta(dealId),
+      fetchAnexos(dealId),
+      fetchOrcamentosEnviados(dealId)
+    ]);
+    const proposta = ultimaProposta.value as Proposta | null;
+    if (proposta?.id) {
+      fetchPropostaAnalytics(proposta.id);
+      fetchRecordings(proposta.id);
+    }
+  } finally {
+    loadingProposta.value = false;
+    loadingPropostaAnalytics.value = false;
+    loadingAnexos.value = false;
+    loadingOrcamentos.value = false;
   }
 };
 
@@ -2890,12 +3106,24 @@ const closeDealDetail = () => {
 };
 
 // Funções de Proposta
-const fetchUltimaProposta = async (dealId: string) => {
+const fetchUltimaProposta = async (dealId: string, forceRefresh = false) => {
+  const cacheKey = `proposta:${dealId}`;
+
+  // Verificar cache primeiro (a menos que forceRefresh)
+  if (!forceRefresh) {
+    const cached = getCached<Proposta>(cacheKey);
+    if (cached) {
+      ultimaProposta.value = cached;
+      return;
+    }
+  }
+
   loadingProposta.value = true;
   try {
     const response = await comercialApi.getUltimaProposta(dealId);
     if (response.data?.proposta) {
       ultimaProposta.value = response.data.proposta;
+      setCache(cacheKey, response.data.proposta);
     }
   } catch (error: any) {
     // 404 significa que não há proposta - é esperado
@@ -2908,19 +3136,24 @@ const fetchUltimaProposta = async (dealId: string) => {
 };
 
 // Buscar analytics de visualização da proposta
-const fetchPropostaAnalytics = async (propostaId: string) => {
+const fetchPropostaAnalytics = async (propostaId: string, forceRefresh = false) => {
+  const cacheKey = `analytics:${propostaId}`;
+
+  // Analytics tem cache mais curto (15s) pois muda com frequência
+  if (!forceRefresh) {
+    const cached = getCached<ProposalAnalytics>(cacheKey);
+    if (cached) {
+      propostaAnalytics.value = cached;
+      return;
+    }
+  }
+
   loadingPropostaAnalytics.value = true;
   try {
     const response = await comercialApi.getPropostaAnalytics(propostaId);
     if (response.data?.stats) {
-      // Debug: verificar se pageTimes está chegando
-      const viewWithPageTimes = response.data.views?.find((v: any) => v.pageTimes);
-      console.log('[DEBUG] Analytics recebido:', {
-        totalViews: response.data.views?.length,
-        viewWithPageTimes: viewWithPageTimes ? 'SIM' : 'NAO',
-        pageTimesExample: viewWithPageTimes?.pageTimes
-      });
       propostaAnalytics.value = response.data;
+      setCache(cacheKey, response.data);
     }
   } catch (error: any) {
     // 404 significa que não há analytics ainda
@@ -3164,12 +3397,23 @@ watch(replayEvents, async (events) => {
 // =============================================
 // FUNÇÕES DE ANEXOS
 // =============================================
-const fetchAnexos = async (dealId: string) => {
+const fetchAnexos = async (dealId: string, forceRefresh = false) => {
+  const cacheKey = `anexos:${dealId}`;
+
+  if (!forceRefresh) {
+    const cached = getCached<any[]>(cacheKey);
+    if (cached) {
+      anexos.value = cached;
+      return;
+    }
+  }
+
   loadingAnexos.value = true;
   try {
     const response = await comercialApi.getAnexos(dealId);
     if (response.data.success) {
       anexos.value = response.data.anexos;
+      setCache(cacheKey, response.data.anexos);
     }
   } catch (error: any) {
     console.error('Erro ao buscar anexos:', error);
@@ -3236,6 +3480,8 @@ const createAnexo = async () => {
     if (response.data.success) {
       toast.success('Anexo adicionado!');
       anexos.value.unshift(response.data.anexo);
+      // Invalidar cache de anexos
+      invalidateCache(selectedDeal.value.id);
       closeAnexoModal();
     }
   } catch (error: any) {
@@ -3282,6 +3528,8 @@ const deleteAnexo = async (anexo: Anexo) => {
     if (response.data.success) {
       toast.success('Anexo excluído!');
       anexos.value = anexos.value.filter(a => a.id !== anexo.id);
+      // Invalidar cache
+      invalidateCache(selectedDeal.value.id);
     }
   } catch (error: any) {
     console.error('Erro ao excluir anexo:', error);
@@ -3303,12 +3551,23 @@ const getTipoAnexoLabel = (tipo: string): string => {
 // =============================================
 // FUNÇÕES DE ORÇAMENTOS ENVIADOS
 // =============================================
-const fetchOrcamentosEnviados = async (dealId: string) => {
+const fetchOrcamentosEnviados = async (dealId: string, forceRefresh = false) => {
+  const cacheKey = `orcamentos:${dealId}`;
+
+  if (!forceRefresh) {
+    const cached = getCached<any[]>(cacheKey);
+    if (cached) {
+      orcamentosEnviados.value = cached;
+      return;
+    }
+  }
+
   loadingOrcamentos.value = true;
   try {
     const response = await comercialApi.getOrcamentosEnviados(dealId);
     if (response.data.success) {
       orcamentosEnviados.value = response.data.orcamentos;
+      setCache(cacheKey, response.data.orcamentos);
     }
   } catch (error: any) {
     console.error('Erro ao buscar orçamentos:', error);
@@ -3352,6 +3611,8 @@ const createOrcamentoEnviado = async () => {
     if (response.data.success) {
       toast.success('Orçamento registrado!');
       orcamentosEnviados.value.unshift(response.data.orcamento);
+      // Invalidar cache
+      invalidateCache(selectedDeal.value.id);
       closeOrcamentoModal();
     }
   } catch (error: any) {
@@ -3369,6 +3630,8 @@ const deleteOrcamentoEnviado = async (orcamento: OrcamentoEnviado) => {
     if (response.data.success) {
       toast.success('Registro excluído!');
       orcamentosEnviados.value = orcamentosEnviados.value.filter(o => o.id !== orcamento.id);
+      // Invalidar cache
+      invalidateCache(selectedDeal.value.id);
     }
   } catch (error: any) {
     console.error('Erro ao excluir orçamento:', error);
@@ -3628,7 +3891,7 @@ const gerarPropostaHTML = async () => {
       paredeLilit: dadosCalculo.paredeLilit || 0,
     };
 
-    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/proposals/generate-html`, {
+    const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/proposals/generate-html`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -4152,6 +4415,32 @@ const handleProposalClosed = (data: ProposalClosedEvent) => {
   }
 };
 
+const handleProposalGPSUpdated = (data: ProposalGPSUpdatedEvent) => {
+  console.log('[CRM] GPS atualizado:', data.clientName, data.city, data.state);
+
+  // Se o lead está aberto, recarregar todos os detalhes (forçar refresh do cache)
+  if (selectedDeal.value && selectedDeal.value.id === data.leadId) {
+    console.log('[CRM] Lead aberto - recarregando detalhes (force refresh)...');
+    fetchAllLeadDetails(data.leadId, true); // forceRefresh = true
+  }
+
+  // Adicionar notificação de localização
+  proposalNotifications.value.unshift({
+    id: `gps-${data.sessionId}`,
+    type: 'gps',
+    clientName: data.clientName,
+    ownerUserName: '',
+    leadId: data.leadId,
+    location: data.city && data.state ? `${data.city}, ${data.state}` : (data.city || 'Local detectado'),
+    timestamp: new Date(data.timestamp),
+  });
+
+  // Limitar a 20 notificações
+  if (proposalNotifications.value.length > 20) {
+    proposalNotifications.value = proposalNotifications.value.slice(0, 20);
+  }
+};
+
 const dismissNotification = (notificationId: string) => {
   proposalNotifications.value = proposalNotifications.value.filter(n => n.id !== notificationId);
 };
@@ -4171,6 +4460,7 @@ const setupProposalSocketListeners = () => {
   unsubscribeProposalOpened.value = onProposalOpened(handleProposalOpened);
   unsubscribeProposalViewing.value = onProposalViewing(handleProposalViewing);
   unsubscribeProposalClosed.value = onProposalClosed(handleProposalClosed);
+  unsubscribeProposalGPSUpdated.value = onProposalGPSUpdated(handleProposalGPSUpdated);
 
   console.log('[CRM] Listeners de proposta configurados');
 };
@@ -4187,6 +4477,10 @@ const cleanupProposalSocketListeners = () => {
   if (unsubscribeProposalClosed.value) {
     unsubscribeProposalClosed.value();
     unsubscribeProposalClosed.value = null;
+  }
+  if (unsubscribeProposalGPSUpdated.value) {
+    unsubscribeProposalGPSUpdated.value();
+    unsubscribeProposalGPSUpdated.value = null;
   }
   console.log('[CRM] Listeners de proposta limpos');
 };
@@ -6564,10 +6858,29 @@ onUnmounted(() => {
 }
 
 .detail-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   text-align: center;
   color: #888;
-  padding: 16px;
-  font-size: 14px;
+  padding: 20px;
+  font-size: 13px;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+.detail-loading__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #ddd;
+  border-top-color: #c9a962;
+  border-radius: 50%;
+  animation: spinner 0.8s linear infinite;
+}
+
+@keyframes spinner {
+  to { transform: rotate(360deg); }
 }
 
 .detail-empty {
@@ -7019,8 +7332,28 @@ onUnmounted(() => {
   background: #fef2f2;
 }
 
+.analytics-view-item__visitor {
+  font-size: 16px;
+  cursor: default;
+}
+
 .analytics-view-item__device {
   font-size: 14px;
+}
+
+.analytics-view-item__location {
+  font-size: 12px;
+  opacity: 0.8;
+  transition: opacity 0.2s, filter 0.2s;
+}
+
+.analytics-view-item__location:hover {
+  opacity: 1;
+}
+
+.analytics-view-item__location--unknown {
+  opacity: 0.4;
+  filter: grayscale(100%);
 }
 
 .analytics-view-item__time {
@@ -7069,10 +7402,11 @@ onUnmounted(() => {
 
 .analytics-view-item__report {
   font-size: 14px;
-  opacity: 0.7;
+  opacity: 0.6;
   cursor: pointer;
   transition: all 0.15s ease;
-  margin-left: 4px;
+  margin-left: 6px;
+  margin-right: 4px;
 }
 
 .analytics-view-item__report:hover {
@@ -7182,6 +7516,19 @@ onUnmounted(() => {
   font-size: 13px;
   color: #166534;
   font-weight: 500;
+}
+
+.page-times-empty {
+  padding: 16px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.page-times-empty__hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #9ca3af;
 }
 
 .analytics-dates {
