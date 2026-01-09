@@ -2,7 +2,6 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
-import saturnImage from '/images/saturn.png';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -69,7 +68,7 @@ const handleSubmit = async () => {
       </svg>
 
       <!-- Saturn - PNG Image -->
-      <img class="saturn" :src="saturnImage" alt="Saturn" />
+      <img class="saturn" src="/images/saturn.png" alt="Saturn" />
 
       <!-- Clouds -->
       <div class="cloud cloud-1">
