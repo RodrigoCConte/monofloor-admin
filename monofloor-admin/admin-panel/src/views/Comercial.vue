@@ -227,6 +227,177 @@
             </svg>
             Filtros
           </button>
+
+          <!-- Notification Bell - Always Visible -->
+          <div class="notification-bell-container">
+            <button
+              class="notification-bell"
+              :class="{
+                'notification-bell--active': filteredActiveProposals.length > 0,
+                'notification-bell--has-notifications': totalNotificationCount > 0
+              }"
+              @click="toggleNotificationPanel"
+              ref="bellButtonRef"
+            >
+              <svg class="notification-bell__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              <div v-if="filteredActiveProposals.length > 0" class="notification-bell__eye">
+                <div class="notification-bell__eye-pupil"></div>
+              </div>
+              <span v-if="totalNotificationCount > 0" class="notification-bell__badge">
+                {{ totalNotificationCount > 9 ? '9+' : totalNotificationCount }}
+              </span>
+            </button>
+
+            <!-- Notification Panel Dropdown -->
+            <Transition name="panel-slide">
+              <div v-if="showNotificationPanel" class="notification-panel" ref="notificationPanelRef">
+                <div class="notification-panel__header">
+                  <div class="notification-panel__title">
+                    <svg class="notification-panel__title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <circle cx="12" cy="12" r="10"/>
+                      <polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    CENTRAL DE ATIVIDADE
+                  </div>
+                  <button class="notification-panel__close" @click="showNotificationPanel = false">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Live Section - Controlável pelo usuário -->
+                <div class="notification-panel__section notification-panel__section--live" v-if="showLiveViewers && filteredActiveProposals.length > 0">
+                  <div class="notification-panel__section-header notification-panel__section-header--closeable">
+                    <div class="notification-panel__section-title">
+                      <span class="notification-panel__section-dot notification-panel__section-dot--live"></span>
+                      AO VIVO
+                      <span class="notification-panel__section-count">{{ filteredActiveProposals.length }}</span>
+                    </div>
+                    <button class="notification-panel__section-close" @click="showLiveViewers = false" title="Fechar">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="notification-panel__list">
+                    <div
+                      v-for="(proposal, index) in filteredActiveProposals"
+                      :key="proposal.sessionId"
+                      class="notification-item notification-item--live"
+                      :style="{ '--item-delay': index * 0.05 + 's' }"
+                      @click="openLeadFromNotification(proposal.leadId); showNotificationPanel = false;"
+                    >
+                      <div class="notification-item__avatar">
+                        <span class="notification-item__avatar-letter">{{ proposal.clientName?.charAt(0)?.toUpperCase() || '?' }}</span>
+                        <span class="notification-item__avatar-pulse"></span>
+                      </div>
+                      <div class="notification-item__content">
+                        <div class="notification-item__name">{{ proposal.clientName }}</div>
+                        <div class="notification-item__meta">
+                          <span class="notification-item__device">{{ proposal.deviceType === 'mobile' ? '📱' : '💻' }}</span>
+                          <span class="notification-item__owner">{{ proposal.ownerUserName }}</span>
+                        </div>
+                      </div>
+                      <div class="notification-item__stats">
+                        <div class="notification-item__timer">
+                          <svg class="notification-item__timer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                          </svg>
+                          <span class="notification-item__timer-value">{{ formatLiveTime(proposal.timeOnPage) }}</span>
+                        </div>
+                        <div class="notification-item__scroll-bar">
+                          <div class="notification-item__scroll-fill" :style="{ width: proposal.scrollDepth + '%' }"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Empty State - Apenas quando não há viewers ativos E histórico -->
+                <div v-if="filteredActiveProposals.length === 0 && filteredHistoryViews.length === 0" class="notification-panel__empty">
+                  <div class="notification-panel__empty-icon">👁️</div>
+                  <div class="notification-panel__empty-text">Nenhuma visualização registrada</div>
+                  <div class="notification-panel__empty-subtext">Você será notificado quando um cliente abrir</div>
+                </div>
+
+                <!-- History Section - Minimizável -->
+                <div class="notification-panel__section notification-panel__section--history" v-if="filteredHistoryViews.length > 0">
+                  <div class="notification-panel__section-header notification-panel__section-header--toggle" @click="isHistoryMinimized = !isHistoryMinimized">
+                    <div class="notification-panel__section-title">
+                      <span class="notification-panel__section-dot notification-panel__section-dot--history"></span>
+                      HISTÓRICO (24H)
+                      <span class="notification-panel__section-count">{{ filteredHistoryViews.length }}</span>
+                    </div>
+                    <button class="notification-panel__section-toggle" :class="{ 'notification-panel__section-toggle--minimized': isHistoryMinimized }">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="6 9 12 15 18 9"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <Transition name="collapse">
+                    <div v-show="!isHistoryMinimized" class="notification-panel__list notification-panel__list--compact">
+                      <div
+                        v-for="view in filteredHistoryViews.slice(0, 15)"
+                        :key="view.id"
+                        class="notification-item notification-item--history"
+                        @click="openLeadFromNotification(view.leadId); showNotificationPanel = false;"
+                      >
+                        <div class="notification-item__type-badge" :title="view.deviceType === 'mobile' ? 'Mobile' : 'Desktop'">
+                          {{ getVisitorEmoji(view.sessionId) }}
+                        </div>
+                        <div class="notification-item__content">
+                          <div class="notification-item__name">{{ view.clientName }}</div>
+                          <div class="notification-item__meta">
+                            <span>{{ formatLiveTime(view.timeOnPage) }} • {{ view.scrollDepth }}% scroll</span>
+                            <span class="notification-item__owner-small">{{ view.ownerUserName }}</span>
+                          </div>
+                        </div>
+                        <div class="notification-item__time-ago">
+                          {{ view.deviceType === 'mobile' ? '📱' : '💻' }}
+                          {{ formatTimeAgo(view.viewedAt.getTime()) }}
+                        </div>
+                      </div>
+                    </div>
+                  </Transition>
+                </div>
+              </div>
+            </Transition>
+
+            <!-- Toast Notifications - Aparecem no topo quando alguém abre proposta -->
+            <TransitionGroup name="toast-slide" tag="div" class="toast-notifications">
+              <div
+                v-for="toast in liveViewerToasts"
+                :key="toast.id"
+                class="toast-notification toast-notification--live"
+                @click="openLeadFromNotification(toast.leadId); dismissToast(toast.id)"
+              >
+                <div class="toast-notification__pulse"></div>
+                <div class="toast-notification__icon">
+                  {{ getVisitorEmoji(toast.sessionId) }}
+                </div>
+                <div class="toast-notification__content">
+                  <div class="toast-notification__title">{{ toast.clientName }}</div>
+                  <div class="toast-notification__subtitle">
+                    {{ toast.deviceType === 'mobile' ? '📱' : '💻' }} está visualizando a proposta
+                  </div>
+                </div>
+                <button class="toast-notification__close" @click.stop="dismissToast(toast.id)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            </TransitionGroup>
+          </div>
+
           <button class="btn btn--primary" @click="openNewDeal()">
             <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
               <line x1="12" y1="5" x2="12" y2="19"/>
@@ -1965,6 +2136,22 @@ const selectedSuggestionIndex = ref(-1);
 const showSpecialistModal = ref(false);
 const selectedSpecialist = ref('');
 
+// Notification Bell
+const showNotificationPanel = ref(false);
+const isHistoryMinimized = ref(false);
+const showLiveViewers = ref(false); // Mostra seção AO VIVO apenas quando há novas visualizações
+const liveViewerToasts = ref<Array<{
+  id: string;
+  clientName: string;
+  ownerUserName: string;
+  leadId: string;
+  deviceType: string;
+  sessionId: string;
+  timestamp: Date;
+}>>([]);
+const bellButtonRef = ref<HTMLElement | null>(null);
+const notificationPanelRef = ref<HTMLElement | null>(null);
+
 // Inline Editing
 const editingField = ref<string | null>(null);
 const editingValue = ref<string>('');
@@ -1985,7 +2172,7 @@ const availableConsultores = ref<string[]>([
 const EMAIL_TO_SPECIALIST: Record<string, string> = {
   'gabriel': 'Gabriel Accardo',
   'isabela': 'Isabela de Moraes',
-  'amanda': 'amanda vantini',
+  'amanda': 'Amanda Vantini',
   'joao': 'João Farah',
   'renata': 'Renata Garcia Penna',
   'rodrigo': 'Rodrigo',
@@ -2209,6 +2396,19 @@ interface ProposalNotification {
 
 const activeProposalViews = ref<Map<string, ActiveProposalView>>(new Map());
 const proposalNotifications = ref<ProposalNotification[]>([]);
+// Histórico de visualizações do banco de dados (últimas 24h)
+const historyViews = ref<Array<{
+  id: string;
+  sessionId: string;
+  propostaId: string;
+  leadId: string;
+  clientName: string;
+  ownerUserName: string;
+  deviceType: string;
+  timeOnPage: number;
+  scrollDepth: number;
+  viewedAt: Date;
+}>>([]);
 const unsubscribeProposalOpened = ref<(() => void) | null>(null);
 const unsubscribeProposalViewing = ref<(() => void) | null>(null);
 const unsubscribeProposalClosed = ref<(() => void) | null>(null);
@@ -2309,12 +2509,19 @@ const avgTicket = computed(() => {
   return Math.round(totalValue.value / dealsWithValue.length);
 });
 
+// Especialistas a serem excluídos da lista (admins, testes, etc)
+const EXCLUDED_SPECIALISTS = [
+  'x', 'admin', 'admin final', 'admin test', 'administrador', 'rodrigo'
+];
+
 const consultores = computed(() => {
   const set = new Set<string>();
   deals.value.forEach(d => {
     if (d.consultor) set.add(d.consultor);
   });
-  return Array.from(set).sort();
+  return Array.from(set)
+    .filter(c => !EXCLUDED_SPECIALISTS.includes(c.toLowerCase()))
+    .sort();
 });
 
 // Primeiro nome do especialista selecionado
@@ -2428,7 +2635,17 @@ const filteredActiveProposals = computed(() => {
   );
 });
 
-// Notificações filtradas pelo vendedor selecionado
+// Histórico de visualizações filtrado pelo vendedor selecionado (do banco de dados)
+const filteredHistoryViews = computed(() => {
+  if (!selectedSpecialist.value) return historyViews.value;
+
+  const specialistLower = selectedSpecialist.value.toLowerCase();
+  return historyViews.value.filter(v =>
+    v.ownerUserName?.toLowerCase() === specialistLower
+  );
+});
+
+// Notificações filtradas pelo vendedor selecionado (eventos de sessão)
 const filteredProposalNotifications = computed(() => {
   if (!selectedSpecialist.value) return proposalNotifications.value;
 
@@ -2437,6 +2654,92 @@ const filteredProposalNotifications = computed(() => {
     n.ownerUserName?.toLowerCase() === specialistLower
   );
 });
+
+// Total de notificações (ao vivo + histórico do banco)
+const totalNotificationCount = computed(() => {
+  return filteredActiveProposals.value.length + filteredHistoryViews.value.length;
+});
+
+// Toggle painel de notificações
+const toggleNotificationPanel = () => {
+  showNotificationPanel.value = !showNotificationPanel.value;
+};
+
+// Formatar tempo ao vivo (segundos para MM:SS)
+const formatLiveTime = (seconds: number): string => {
+  if (!seconds || seconds < 0) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+// Formatar tempo atrás (timestamp para "há X min")
+const formatTimeAgo = (timestamp: number): string => {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+
+  if (mins < 1) return 'agora';
+  if (mins < 60) return `${mins}min`;
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+};
+
+// Limpar todas as notificações
+const clearAllNotifications = () => {
+  proposalNotifications.value = [];
+};
+
+// Dismiss toast notification
+const dismissToast = (toastId: string) => {
+  liveViewerToasts.value = liveViewerToasts.value.filter(t => t.id !== toastId);
+};
+
+// Adicionar toast para nova visualização
+const addViewerToast = (viewer: { clientName: string; ownerUserName: string; leadId: string; deviceType: string; sessionId?: string }) => {
+  const toastId = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+  // Verificar se já existe toast para este lead
+  const existing = liveViewerToasts.value.find(t => t.leadId === viewer.leadId);
+  if (existing) return;
+
+  liveViewerToasts.value.unshift({
+    id: toastId,
+    clientName: viewer.clientName,
+    ownerUserName: viewer.ownerUserName,
+    leadId: viewer.leadId,
+    deviceType: viewer.deviceType,
+    sessionId: viewer.sessionId || toastId,
+    timestamp: new Date(),
+  });
+
+  // Limitar a 3 toasts
+  if (liveViewerToasts.value.length > 3) {
+    liveViewerToasts.value = liveViewerToasts.value.slice(0, 3);
+  }
+
+  // Auto-dismiss após 8 segundos
+  setTimeout(() => {
+    dismissToast(toastId);
+  }, 8000);
+
+  // Mostrar seção "AO VIVO" no painel
+  showLiveViewers.value = true;
+};
+
+// Click outside handler para fechar painel
+const handleClickOutsideNotification = (event: MouseEvent) => {
+  if (!showNotificationPanel.value) return;
+
+  const target = event.target as HTMLElement;
+  const panel = notificationPanelRef.value;
+  const bell = bellButtonRef.value;
+
+  if (panel && !panel.contains(target) && bell && !bell.contains(target)) {
+    showNotificationPanel.value = false;
+  }
+};
 
 // Search suggestions computed
 const searchSuggestions = computed(() => {
@@ -3697,11 +4000,8 @@ const gerarProposta = async () => {
   }
 
   // Abrir gerador de propostas em nova aba
-  // Em produção usa /geradordepropostas/, em dev local usa localhost:3000
-  const isDev = window.location.hostname === 'localhost';
-  const propostasUrl = isDev
-    ? `http://localhost:3000/propostas.html?${params.toString()}`
-    : `/geradordepropostas/?${params.toString()}`;
+  // Em produção e dev usa /propostas.html
+  const propostasUrl = `/propostas.html?${params.toString()}`;
 
   window.open(propostasUrl, '_blank');
 
@@ -4151,63 +4451,63 @@ const loadSavedStages = () => {
 // Minimum loading time for animation (ms)
 const MIN_LOADING_TIME = 1800;
 
-// Fetch Data
-const fetchDeals = async () => {
+// Cache local para deals (5 minutos)
+const DEALS_CACHE_KEY = 'comercial_deals_cache';
+const DEALS_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+interface DealsCache {
+  data: any[];
+  timestamp: number;
+}
+
+const getDealsFromCache = (): any[] | null => {
+  try {
+    const cached = sessionStorage.getItem(DEALS_CACHE_KEY);
+    if (!cached) return null;
+
+    const { data, timestamp }: DealsCache = JSON.parse(cached);
+    const age = Date.now() - timestamp;
+
+    if (age < DEALS_CACHE_TTL) {
+      console.log(`[Cache] HIT - ${data.length} deals (age: ${Math.round(age / 1000)}s)`);
+      return data;
+    }
+    console.log(`[Cache] EXPIRED (age: ${Math.round(age / 1000)}s)`);
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const saveDealsToCache = (data: any[]) => {
+  try {
+    const cache: DealsCache = { data, timestamp: Date.now() };
+    sessionStorage.setItem(DEALS_CACHE_KEY, JSON.stringify(cache));
+    console.log(`[Cache] SAVED - ${data.length} deals`);
+  } catch (e) {
+    console.warn('[Cache] Failed to save:', e);
+  }
+};
+
+// Fetch Data com cache local
+const fetchDeals = async (forceRefresh = false) => {
   loading.value = true;
   const startTime = Date.now();
 
   try {
-    // Carregar TODOS os deals (cache no servidor por 5 min)
-    const response = await fetch(`/api/admin/comercial`);
-    if (!response.ok) throw new Error('Falha ao carregar deals');
-
-    const data = await response.json();
-    console.log('API response:', data);
-
-    // Handle different API response formats
-    let rawDeals: any[] = [];
-    if (Array.isArray(data)) {
-      rawDeals = data;
-    } else if (data.deals && Array.isArray(data.deals)) {
-      rawDeals = data.deals;
-    } else if (data.data && Array.isArray(data.data)) {
-      rawDeals = data.data;
+    // Verificar cache local primeiro (se não forçar refresh)
+    if (!forceRefresh) {
+      const cached = getDealsFromCache();
+      if (cached) {
+        deals.value = cached;
+        loading.value = false;
+        // Atualizar em background para próximo acesso
+        setTimeout(() => fetchDealsFromAPI(true), 100);
+        return;
+      }
     }
 
-    deals.value = rawDeals.map((d: any) => ({
-      // Spread original data para manter todos os campos do Pipedrive
-      ...d,
-      // Campos principais formatados
-      clientName: d.personName || d.project?.cliente || d.pipedriveRawData?.title || 'Sem nome',
-      value: parseFloat(d.dealValue) || parseFloat(d.pipedriveRawData?.value) || 0,
-      status: mapStatus(d.stageName || d.status),
-      consultor: d.consultorId || d.ownerUserName || 'N/A',
-      phone: d.personPhone || '',
-      endereco: d.project?.endereco || d.cidadeExecucaoDesc || '',
-      m2Total: parseFloat(d.project?.m2Total) || parseFloat(d.metragemEstimada) || 0,
-      daysInStage: calculateDaysInStage(d.stageChangeTime || d.dealAddTime),
-      // Campos do Pipedrive preservados
-      personEmail: d.personEmail || '',
-      tipoCliente: d.tipoCliente || '',
-      tipoProjeto: d.tipoProjeto || '',
-      nomeEscritorio: d.nomeEscritorio || '',
-      budgetEstimado: d.budgetEstimado || '',
-      cidadeExecucao: d.cidadeExecucao || '',
-      metragemEstimada: d.metragemEstimada || '',
-      metragemEstimadaN1: d.metragemEstimadaN1 || '',
-      estadoObra: d.estadoObra || '',
-      dataPrevistaExec: d.dataPrevistaExec || '',
-      detalhesArquiteto: d.detalhesArquiteto || '',
-      descritivoArea: d.descritivoArea || '',
-      resumo: d.resumo || '',
-      primeiroNomeZapi: d.primeiroNomeZapi || '',
-      telefoneZapi: d.telefoneZapi || '',
-      pipedriveUrl: d.pipedriveUrl || `https://monofloor.pipedrive.com/deal/${d.pipedriveDealId}`,
-      pipedriveDealId: d.pipedriveDealId || '',
-      dealAddTime: d.dealAddTime,
-      dealUpdateTime: d.dealUpdateTime,
-      pipedriveSyncedAt: d.pipedriveSyncedAt
-    }));
+    await fetchDealsFromAPI(false);
   } catch (error) {
     console.error('Error fetching deals:', error);
     toast.error('Erro ao carregar deals');
@@ -4215,10 +4515,74 @@ const fetchDeals = async () => {
     // Ensure minimum loading time for animation to be visible
     const elapsed = Date.now() - startTime;
     const remaining = MIN_LOADING_TIME - elapsed;
-    if (remaining > 0) {
+    if (remaining > 0 && loading.value) {
       await new Promise(resolve => setTimeout(resolve, remaining));
     }
     loading.value = false;
+  }
+};
+
+// Buscar deals da API
+const fetchDealsFromAPI = async (isBackground: boolean) => {
+  const apiStart = Date.now();
+
+  const response = await fetch(`/api/admin/comercial`);
+  if (!response.ok) throw new Error('Falha ao carregar deals');
+
+  const data = await response.json();
+  console.log(`[API] ${isBackground ? 'Background' : 'Direct'} fetch: ${Date.now() - apiStart}ms`);
+
+  // Handle different API response formats
+  let rawDeals: any[] = [];
+  if (Array.isArray(data)) {
+    rawDeals = data;
+  } else if (data.deals && Array.isArray(data.deals)) {
+    rawDeals = data.deals;
+  } else if (data.data && Array.isArray(data.data)) {
+    rawDeals = data.data;
+  }
+
+  const processedDeals = rawDeals.map((d: any) => ({
+    // Spread original data para manter todos os campos do Pipedrive
+    ...d,
+    // Campos principais formatados
+    clientName: d.personName || d.project?.cliente || d.pipedriveRawData?.title || 'Sem nome',
+    value: parseFloat(d.dealValue) || parseFloat(d.pipedriveRawData?.value) || 0,
+    status: mapStatus(d.stageName || d.status),
+    consultor: d.consultorId || d.ownerUserName || 'N/A',
+    phone: d.personPhone || '',
+    endereco: d.project?.endereco || d.cidadeExecucaoDesc || '',
+    m2Total: parseFloat(d.project?.m2Total) || parseFloat(d.metragemEstimada) || 0,
+    daysInStage: calculateDaysInStage(d.stageChangeTime || d.dealAddTime),
+    // Campos do Pipedrive preservados
+    personEmail: d.personEmail || '',
+    tipoCliente: d.tipoCliente || '',
+    tipoProjeto: d.tipoProjeto || '',
+    nomeEscritorio: d.nomeEscritorio || '',
+    budgetEstimado: d.budgetEstimado || '',
+    cidadeExecucao: d.cidadeExecucao || '',
+    metragemEstimada: d.metragemEstimada || '',
+    metragemEstimadaN1: d.metragemEstimadaN1 || '',
+    estadoObra: d.estadoObra || '',
+    dataPrevistaExec: d.dataPrevistaExec || '',
+    detalhesArquiteto: d.detalhesArquiteto || '',
+    descritivoArea: d.descritivoArea || '',
+    resumo: d.resumo || '',
+    primeiroNomeZapi: d.primeiroNomeZapi || '',
+    telefoneZapi: d.telefoneZapi || '',
+    pipedriveUrl: d.pipedriveUrl || `https://monofloor.pipedrive.com/deal/${d.pipedriveDealId}`,
+    pipedriveDealId: d.pipedriveDealId || '',
+    dealAddTime: d.dealAddTime,
+    dealUpdateTime: d.dealUpdateTime,
+    pipedriveSyncedAt: d.pipedriveSyncedAt
+  }));
+
+  // Salvar no cache
+  saveDealsToCache(processedDeals);
+
+  // Atualizar UI (só se não for background ou se deals ainda estiver vazio)
+  if (!isBackground || deals.value.length === 0) {
+    deals.value = processedDeals;
   }
 };
 
@@ -4485,15 +4849,121 @@ const cleanupProposalSocketListeners = () => {
   console.log('[CRM] Listeners de proposta limpos');
 };
 
+// ===== POLLING DE VISUALIZAÇÕES (usa /all-views para ativos + histórico) =====
+let activeViewersPollingInterval: ReturnType<typeof setInterval> | null = null;
+
+const fetchAllViews = async () => {
+  try {
+    const response = await comercialApi.getAllViews();
+    if (response.data?.success) {
+      const { activeViewers, historyViews: historyData, totalActive, totalHistory } = response.data;
+
+      // ===== ATUALIZAR VIEWERS ATIVOS =====
+      const currentSessionIds = new Set(activeProposalViews.value.keys());
+      const newSessionIds = new Set(activeViewers.map((v: any) => v.sessionId).filter(Boolean));
+
+      // Adicionar/atualizar viewers ativos
+      activeViewers.forEach((viewer: any) => {
+        if (viewer.sessionId) {
+          const existing = activeProposalViews.value.get(viewer.sessionId);
+          if (!existing) {
+            // Nova visualização - adicionar notificação toast de "abriu"
+            proposalNotifications.value.unshift({
+              id: `opened-${viewer.sessionId}`,
+              type: 'opened',
+              clientName: viewer.clientName,
+              ownerUserName: viewer.ownerUserName,
+              leadId: viewer.leadId,
+              deviceType: viewer.deviceType,
+              timestamp: new Date(viewer.viewedAt),
+            });
+            if (proposalNotifications.value.length > 20) {
+              proposalNotifications.value = proposalNotifications.value.slice(0, 20);
+            }
+
+            // Disparar toast notification para o novo viewer
+            addViewerToast({
+              clientName: viewer.clientName,
+              ownerUserName: viewer.ownerUserName,
+              leadId: viewer.leadId,
+              deviceType: viewer.deviceType,
+              sessionId: viewer.sessionId,
+            });
+          }
+          // Atualizar/adicionar no Map
+          activeProposalViews.value.set(viewer.sessionId, {
+            sessionId: viewer.sessionId,
+            propostaId: viewer.propostaId,
+            leadId: viewer.leadId,
+            clientName: viewer.clientName,
+            ownerUserName: viewer.ownerUserName,
+            deviceType: viewer.deviceType,
+            timeOnPage: viewer.timeOnPage,
+            scrollDepth: viewer.scrollDepth,
+            startedAt: new Date(viewer.viewedAt),
+            timestamp: new Date(viewer.viewedAt),
+          });
+        }
+      });
+
+      // Remover viewers que não estão mais ativos
+      currentSessionIds.forEach(sessionId => {
+        if (!newSessionIds.has(sessionId)) {
+          activeProposalViews.value.delete(sessionId);
+        }
+      });
+
+      // ===== ATUALIZAR HISTÓRICO DO BANCO =====
+      historyViews.value = historyData.map((view: any) => ({
+        id: view.id,
+        sessionId: view.sessionId,
+        propostaId: view.propostaId,
+        leadId: view.leadId,
+        clientName: view.clientName,
+        ownerUserName: view.ownerUserName,
+        deviceType: view.deviceType,
+        timeOnPage: view.timeOnPage,
+        scrollDepth: view.scrollDepth,
+        viewedAt: new Date(view.viewedAt),
+      }));
+
+      // Log para debug
+      console.log(`[CRM] Polling: ${totalActive} ativo(s), ${totalHistory} no histórico`);
+    }
+  } catch (error) {
+    console.error('[CRM] Erro no polling:', error);
+  }
+};
+
+const startActiveViewersPolling = () => {
+  // Buscar imediatamente
+  fetchAllViews();
+  // Configurar polling a cada 10 segundos
+  activeViewersPollingInterval = setInterval(fetchAllViews, 10000);
+  console.log('[CRM] Polling de visualizações iniciado (10s)');
+};
+
+const stopActiveViewersPolling = () => {
+  if (activeViewersPollingInterval) {
+    clearInterval(activeViewersPollingInterval);
+    activeViewersPollingInterval = null;
+    console.log('[CRM] Polling de visualizações ativas parado');
+  }
+};
+
 onMounted(() => {
   loadSavedStages();
   preSelectSpecialistFromEmail(); // Pré-selecionar vendedor baseado no email do login
   fetchDeals();
-  setupProposalSocketListeners(); // Configurar listeners de proposta
+  setupProposalSocketListeners(); // Configurar listeners de proposta (mantém para fallback)
+  startActiveViewersPolling(); // Inicia polling como método principal
+  document.addEventListener('click', handleClickOutsideNotification);
 });
 
 onUnmounted(() => {
   cleanupProposalSocketListeners(); // Limpar listeners ao sair
+  stopActiveViewersPolling(); // Parar polling
+  document.removeEventListener('click', handleClickOutsideNotification);
 });
 </script>
 
@@ -4670,166 +5140,253 @@ onUnmounted(() => {
   gap: 12px;
 }
 
-/* Specialist Selector */
+/* Specialist Selector - Neobrutalista */
 .specialist-selector {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  padding: 8px 16px;
-  background: var(--white);
-  border: 2px solid var(--black);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 40px 10px 14px;
+  background: #FFFFFF;
+  border: 3px solid #1a1a1a;
+  border-radius: 10px;
+  box-shadow: 4px 4px 0 #1a1a1a;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
   margin-right: auto;
-  min-width: 120px;
+  min-width: 180px;
 }
 
 .specialist-selector:hover {
   transform: translate(-2px, -2px);
-  box-shadow: var(--shadow-md);
+  box-shadow: 6px 6px 0 #1a1a1a;
+}
+
+.specialist-selector:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 #1a1a1a;
 }
 
 .specialist-label {
-  font-family: var(--font-display);
-  font-size: 0.65rem;
-  font-weight: 700;
+  font-family: 'Syne', sans-serif;
+  font-size: 0.6rem;
+  font-weight: 800;
   letter-spacing: 1.5px;
-  color: var(--gray-600);
+  color: #1a1a1a;
   text-transform: uppercase;
+  opacity: 0.6;
 }
 
 .specialist-name {
-  font-family: var(--font-display);
-  font-size: 1.1rem;
+  font-family: 'Syne', sans-serif;
+  font-size: 1rem;
   font-weight: 800;
-  color: var(--black);
+  color: #1a1a1a;
   letter-spacing: -0.02em;
-  line-height: 1.1;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .specialist-name.pixel-text {
   font-family: 'Press Start 2P', 'Courier New', monospace;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   image-rendering: pixelated;
   -webkit-font-smoothing: none;
+  text-transform: none;
 }
 
 .specialist-chevron {
   position: absolute;
-  right: 8px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
-  color: var(--gray-400);
+  width: 18px;
+  height: 18px;
+  color: #1a1a1a;
+  transition: transform 0.2s ease;
 }
 
-.specialist-selector {
-  position: relative;
+.specialist-selector:hover .specialist-chevron {
+  transform: translateY(-50%) translateY(2px);
 }
 
-/* Specialist Modal */
+/* Specialist Modal - Neobrutalista */
 .specialist-modal {
-  background: rgba(26, 26, 26, 0.95);
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl), 0 0 0 4px rgba(0, 0, 0, 0.3), 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+  background: #FAFAFA;
+  border: 3px solid #1a1a1a;
+  border-radius: 12px;
+  box-shadow: 6px 6px 0 #1a1a1a, 0 20px 40px -10px rgba(0, 0, 0, 0.25);
   width: 100%;
-  max-width: 360px;
+  max-width: 340px;
   max-height: 80vh;
   overflow: hidden;
-  animation: modalAppear 0.2s ease;
-  color: white;
+  animation: modalBounce 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes modalBounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .specialist-modal__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(201, 169, 98, 0.2);
+  padding: 14px 18px;
+  border-bottom: 3px solid #1a1a1a;
+  background: #c9a962;
 }
 
 .specialist-modal__header h3 {
-  font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 700;
+  font-family: 'Syne', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 800;
   margin: 0;
-  color: white;
+  color: #1a1a1a;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.specialist-modal__close {
+  width: 28px;
+  height: 28px;
+  background: #FFFFFF;
+  border: 2px solid #1a1a1a;
+  border-radius: 6px;
+  box-shadow: 2px 2px 0 #1a1a1a;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.specialist-modal__close:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 #1a1a1a;
+}
+
+.specialist-modal__close:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #1a1a1a;
 }
 
 .specialist-modal__list {
   padding: 12px;
-  max-height: 400px;
+  max-height: 380px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: rgba(0, 0, 0, 0.2);
+  background: #FAFAFA;
+}
+
+.specialist-modal__list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.specialist-modal__list::-webkit-scrollbar-track {
+  background: #e5e5e5;
+  border-radius: 4px;
+}
+
+.specialist-modal__list::-webkit-scrollbar-thumb {
+  background: #1a1a1a;
+  border-radius: 4px;
 }
 
 .specialist-option {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 2px solid rgba(255, 255, 255, 0.15);
-  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: #FFFFFF;
+  border: 2px solid #1a1a1a;
+  border-radius: 8px;
+  box-shadow: 3px 3px 0 #1a1a1a;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
   text-align: left;
   width: 100%;
 }
 
 .specialist-option:hover {
-  border-color: rgba(201, 169, 98, 0.5);
-  background: rgba(201, 169, 98, 0.1);
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 #1a1a1a;
+  border-color: #c9a962;
+}
+
+.specialist-option:active {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 #1a1a1a;
 }
 
 .specialist-option--active {
-  border-color: var(--yellow);
-  background: rgba(201, 169, 98, 0.25);
-  box-shadow: 0 0 12px rgba(201, 169, 98, 0.3);
+  background: #c9a962;
+  border-color: #1a1a1a;
+  box-shadow: 3px 3px 0 #1a1a1a;
+}
+
+.specialist-option--active:hover {
+  box-shadow: 5px 5px 0 #1a1a1a;
 }
 
 .specialist-option__avatar {
-  width: 36px;
-  height: 36px;
-  background: var(--blue);
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: var(--radius-full);
+  width: 38px;
+  height: 38px;
+  background: #3b82f6;
+  border: 2px solid #1a1a1a;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: white;
+  font-family: 'Syne', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #FFFFFF;
   flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.specialist-option--active .specialist-option__avatar {
+  background: #1a1a1a;
+  color: #c9a962;
 }
 
 .specialist-option__name {
   flex: 1;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 0.95rem;
-  color: white;
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #1a1a1a;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.specialist-option--active .specialist-option__name {
+  color: #1a1a1a;
 }
 
 .specialist-option__count {
+  font-family: 'DM Sans', sans-serif;
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.7);
-  background: rgba(255, 255, 255, 0.1);
-  padding: 4px 8px;
-  border-radius: var(--radius-full);
+  font-weight: 700;
+  color: #1a1a1a;
+  background: #e5e5e5;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 2px solid #1a1a1a;
 }
 
 .specialist-option--active .specialist-option__count {
-  background: rgba(201, 169, 98, 0.3);
-  color: white;
+  background: #FFFFFF;
+  color: #1a1a1a;
 }
 
 /* KPIs Row */
@@ -4910,58 +5467,60 @@ onUnmounted(() => {
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  font-family: var(--font-display);
-  font-size: 0.95rem;
-  font-weight: 600;
-  border: var(--border);
-  border-radius: var(--radius-md);
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-family: 'Syne', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border: 2px solid #1a1a1a;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s ease;
-  box-shadow: var(--shadow-md);
+  transition: all 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 3px 3px 0 #1a1a1a;
+  background: #FFFFFF;
+  color: #1a1a1a;
+  white-space: nowrap;
 }
 
 .btn:hover {
   transform: translate(-2px, -2px);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 5px 5px 0 #1a1a1a;
 }
 
 .btn:active {
-  transform: translate(2px, 2px);
-  box-shadow: none;
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #1a1a1a;
 }
 
 .btn--primary {
-  background: var(--yellow);
-  color: var(--black);
-  border: 2px solid #1a1a1a;
-  border-radius: 8px;
-  box-shadow: 3px 3px 0 #1a1a1a;
+  background: #c9a962;
+  color: #1a1a1a;
 }
 
-.btn--primary:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: 5px 5px 0 #1a1a1a;
+.btn--primary:hover:not(:disabled) {
+  background: #d4b872;
+}
+
+.btn--primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn--outline {
   background: #FFFFFF;
-  border: 2px solid #1a1a1a;
-  border-radius: 8px;
   color: #1a1a1a;
-  box-shadow: 3px 3px 0 #1a1a1a;
 }
 
 .btn--outline:hover {
-  background: var(--yellow);
-  transform: translate(-2px, -2px);
-  box-shadow: 5px 5px 0 #1a1a1a;
+  background: #F5F5F5;
 }
 
 .btn__icon {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
 }
 
@@ -5282,6 +5841,738 @@ onUnmounted(() => {
 .filter-select:focus {
   outline: none;
   box-shadow: var(--shadow-sm);
+}
+
+/* ============================================
+   NOTIFICATION BELL SYSTEM
+   ============================================ */
+
+.notification-bell-container {
+  position: relative;
+  margin-left: auto;
+}
+
+.notification-bell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: var(--white);
+  border: 2px solid var(--black);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 3px 3px 0 var(--black);
+}
+
+.notification-bell:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 var(--black);
+}
+
+.notification-bell:active {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 var(--black);
+}
+
+.notification-bell--active {
+  background: #FEF3C7;
+  animation: bellPulse 2s ease-in-out infinite;
+}
+
+.notification-bell--has-notifications {
+  background: #FEE2E2;
+}
+
+.notification-bell--active.notification-bell--has-notifications {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FEE2E2 100%);
+}
+
+@keyframes bellPulse {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-1px, -1px) rotate(-3deg); }
+  20% { transform: translate(1px, 1px) rotate(3deg); }
+  30% { transform: translate(-1px, 0) rotate(-2deg); }
+  40% { transform: translate(1px, 0) rotate(2deg); }
+  50% { transform: translate(0, 0); }
+}
+
+.notification-bell__icon {
+  width: 24px;
+  height: 24px;
+  color: var(--black);
+}
+
+.notification-bell__eye {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 10px;
+  height: 10px;
+  background: #c9a962;
+  border-radius: 50%;
+  border: 2px solid var(--black);
+  animation: eyeBlink 3s ease-in-out infinite;
+}
+
+.notification-bell__eye-pupil {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  background: var(--black);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: pupilMove 4s ease-in-out infinite;
+}
+
+@keyframes eyeBlink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
+}
+
+@keyframes pupilMove {
+  0%, 100% { transform: translate(-50%, -50%); }
+  25% { transform: translate(-30%, -50%); }
+  50% { transform: translate(-50%, -30%); }
+  75% { transform: translate(-70%, -50%); }
+}
+
+.notification-bell__badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  background: #ef4444;
+  color: white;
+  font-family: var(--font-primary);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 2px solid var(--black);
+  box-shadow: 2px 2px 0 var(--black);
+}
+
+/* Notification Panel */
+.notification-panel {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 380px;
+  max-height: 500px;
+  overflow-y: auto;
+  background: #FFFFFF;
+  border: 2px solid var(--black);
+  border-radius: 16px;
+  box-shadow: 6px 6px 0 var(--black);
+  z-index: 1000;
+}
+
+.notification-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 2px solid var(--black);
+  background: #c9a962;
+}
+
+.notification-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-primary);
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--black);
+}
+
+.notification-panel__title-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.notification-panel__close {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--white);
+  border: 2px solid var(--black);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.notification-panel__close:hover {
+  background: #ef4444;
+  color: white;
+  transform: rotate(90deg);
+}
+
+.notification-panel__close svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Section Styles */
+.notification-panel__section {
+  padding: 16px;
+}
+
+.notification-panel__section--live {
+  background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
+  border-bottom: 2px solid var(--black);
+}
+
+.notification-panel__section--history {
+  background: #F5F5F5;
+}
+
+.notification-panel__section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-primary);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+  color: var(--black);
+}
+
+.notification-panel__section-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.notification-panel__section-dot--live {
+  background: #22c55e;
+  animation: dotPulse 1.5s ease-in-out infinite;
+}
+
+.notification-panel__section-dot--history {
+  background: var(--gray-400);
+}
+
+@keyframes dotPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.7; }
+}
+
+.notification-panel__section-count {
+  background: var(--black);
+  color: var(--white);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  margin-left: auto;
+}
+
+.notification-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.notification-panel__list--compact {
+  gap: 6px;
+}
+
+/* Notification Items */
+.notification-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--white);
+  border: 2px solid var(--black);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  animation: itemSlideIn 0.2s ease forwards;
+  animation-delay: var(--item-delay, 0s);
+  opacity: 0;
+}
+
+@keyframes itemSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.notification-item:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0 var(--black);
+}
+
+.notification-item--live {
+  box-shadow: 3px 3px 0 #22c55e;
+  border-color: #22c55e;
+}
+
+.notification-item--live:hover {
+  box-shadow: 5px 5px 0 #22c55e;
+}
+
+.notification-item--history {
+  box-shadow: 2px 2px 0 var(--gray-400);
+  padding: 10px;
+}
+
+.notification-item--opened {
+  border-left: 4px solid #22c55e;
+}
+
+.notification-item--closed {
+  border-left: 4px solid #ef4444;
+}
+
+.notification-item--gps {
+  border-left: 4px solid #3b82f6;
+}
+
+.notification-item__avatar {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  background: #c9a962;
+  border: 2px solid var(--black);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.notification-item__avatar-letter {
+  font-family: var(--font-primary);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--black);
+}
+
+.notification-item__avatar-pulse {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  background: #22c55e;
+  border: 2px solid var(--black);
+  border-radius: 50%;
+  animation: pulseLive 1.5s ease-in-out infinite;
+}
+
+@keyframes pulseLive {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+  }
+}
+
+.notification-item__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-item__name {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--black);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notification-item__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--gray-600);
+  margin-top: 2px;
+}
+
+.notification-item__device {
+  font-size: 14px;
+}
+
+.notification-item__owner-small {
+  font-size: 11px;
+  color: var(--gray-400);
+  margin-left: auto;
+}
+
+.notification-item__stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.notification-item__timer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-primary);
+  font-size: 14px;
+  font-weight: 700;
+  color: #22c55e;
+}
+
+.notification-item__timer-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.notification-item__scroll-bar {
+  width: 50px;
+  height: 6px;
+  background: var(--gray-200);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--black);
+}
+
+.notification-item__scroll-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #c9a962 0%, #22c55e 100%);
+  transition: width 0.3s ease;
+}
+
+.notification-item__type-badge {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.notification-item__time-ago {
+  font-size: 11px;
+  color: var(--gray-400);
+  white-space: nowrap;
+}
+
+/* Empty State */
+.notification-panel__empty {
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.notification-panel__empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.notification-panel__empty-text {
+  font-family: var(--font-primary);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--black);
+  margin-bottom: 4px;
+}
+
+.notification-panel__empty-subtext {
+  font-size: 13px;
+  color: var(--gray-600);
+}
+
+.notification-panel__see-more {
+  width: 100%;
+  padding: 10px;
+  margin-top: 12px;
+  background: transparent;
+  border: 2px dashed var(--gray-400);
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.notification-panel__see-more:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: #FEE2E2;
+}
+
+/* Panel Slide Transition */
+.panel-slide-enter-active,
+.panel-slide-leave-active {
+  transition: all 0.2s ease;
+}
+
+.panel-slide-enter-from,
+.panel-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+/* Toast Notifications - Bottom Right */
+.toast-notifications {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.toast-notification {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #FFFFFF;
+  border: 2px solid #1a1a1a;
+  border-radius: 12px;
+  box-shadow: 6px 6px 0 #1a1a1a;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-width: 300px;
+  max-width: 400px;
+  position: relative;
+  overflow: hidden;
+}
+
+.toast-notification:hover {
+  transform: translate(-3px, -3px);
+  box-shadow: 9px 9px 0 var(--black);
+}
+
+.toast-notification--live {
+  border-color: #22c55e;
+  box-shadow: 6px 6px 0 #22c55e;
+}
+
+.toast-notification--live:hover {
+  box-shadow: 9px 9px 0 #22c55e;
+}
+
+.toast-notification__pulse {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.15), transparent);
+  animation: toastPulse 2s ease-in-out infinite;
+}
+
+@keyframes toastPulse {
+  0%, 100% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+}
+
+.toast-notification__icon {
+  width: 40px;
+  height: 40px;
+  background: #c9a962;
+  border: 2px solid var(--black);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.toast-notification__content {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.toast-notification__title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--black);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toast-notification__subtitle {
+  font-size: 12px;
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.toast-notification__close {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gray-100);
+  border: 2px solid var(--black);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  z-index: 1;
+  font-size: 14px;
+  color: var(--gray-600);
+}
+
+.toast-notification__close:hover {
+  background: #ef4444;
+  color: white;
+}
+
+.toast-notification__close svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Toast Slide Animation */
+.toast-slide-enter-active {
+  animation: toastSlideIn 0.3s ease;
+}
+
+.toast-slide-leave-active {
+  animation: toastSlideOut 0.3s ease;
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toastSlideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(50px);
+  }
+}
+
+/* Section Close Button (for AO VIVO) */
+.notification-panel__section-close {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--white);
+  border: 2px solid var(--black);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.notification-panel__section-close:hover {
+  background: #ef4444;
+  color: white;
+}
+
+.notification-panel__section-close svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Section Toggle Button (for HISTÓRICO) */
+.notification-panel__section-header--toggle {
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+  padding: 8px;
+  margin: -8px;
+  border-radius: 8px;
+}
+
+.notification-panel__section-header--toggle:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.notification-panel__section-toggle {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--white);
+  border: 2px solid var(--black);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.notification-panel__section-toggle svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.2s ease;
+}
+
+.notification-panel__section-toggle--minimized svg {
+  transform: rotate(-90deg);
+}
+
+.notification-panel__section-toggle:hover {
+  background: var(--gray-200);
+}
+
+/* History Collapse Transition */
+.history-collapse-enter-active,
+.history-collapse-leave-active {
+  transition: all 0.25s ease;
+  overflow: hidden;
+}
+
+.history-collapse-enter-from,
+.history-collapse-leave-to {
+  opacity: 0;
+  max-height: 0;
+  padding-top: 0;
+}
+
+.history-collapse-enter-to,
+.history-collapse-leave-from {
+  opacity: 1;
+  max-height: 500px;
 }
 
 /* ============================================
@@ -5680,36 +6971,48 @@ onUnmounted(() => {
   top: 8px;
   right: 8px;
   display: flex;
-  gap: 4px;
+  gap: 6px;
   opacity: 0;
-  transform: translateY(-4px);
-  transition: all 0.15s ease;
+  transform: translateY(-6px);
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .deal-action {
-  width: 28px;
-  height: 28px;
-  border: 2px solid #1a1a1a;
-  border-radius: 6px;
-  background: var(--white);
+  width: 32px;
+  height: 32px;
+  border: 2.5px solid #1a1a1a;
+  border-radius: 8px;
+  background: #FFFFFF;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.1s ease;
+  transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
   box-shadow: 2px 2px 0 #1a1a1a;
+  position: relative;
+  overflow: hidden;
+}
+
+.deal-action::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.4) 0%, transparent 50%);
+  pointer-events: none;
 }
 
 .deal-action svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   color: #1a1a1a;
+  transition: all 0.15s ease;
+  position: relative;
+  z-index: 1;
 }
 
 .deal-action:hover {
-  background: var(--yellow);
-  transform: translate(-1px, -1px);
-  box-shadow: 3px 3px 0 #1a1a1a;
+  transform: translate(-3px, -3px);
+  box-shadow: 5px 5px 0 #1a1a1a;
 }
 
 .deal-action:active {
@@ -5717,20 +7020,79 @@ onUnmounted(() => {
   box-shadow: 1px 1px 0 #1a1a1a;
 }
 
+/* WhatsApp Button - Verde vibrante */
+.deal-action--whatsapp {
+  background: #DCFCE7;
+  border-color: #166534;
+  box-shadow: 2px 2px 0 #166534;
+}
+
+.deal-action--whatsapp svg {
+  color: #166534;
+}
+
 .deal-action--whatsapp:hover {
-  background: #25D366;
+  background: #22C55E;
+  box-shadow: 5px 5px 0 #166534;
 }
 
 .deal-action--whatsapp:hover svg {
-  color: white;
+  color: #FFFFFF;
+  transform: scale(1.15);
+}
+
+.deal-action--whatsapp:active {
+  box-shadow: 1px 1px 0 #166534;
+}
+
+/* Pipedrive Link Button - Azul vibrante */
+.deal-action--link {
+  background: #DBEAFE;
+  border-color: #1E40AF;
+  box-shadow: 2px 2px 0 #1E40AF;
+}
+
+.deal-action--link svg {
+  color: #1E40AF;
 }
 
 .deal-action--link:hover {
-  background: #3b82f6;
+  background: #3B82F6;
+  box-shadow: 5px 5px 0 #1E40AF;
 }
 
 .deal-action--link:hover svg {
-  color: white;
+  color: #FFFFFF;
+  transform: scale(1.15) rotate(-12deg);
+}
+
+.deal-action--link:active {
+  box-shadow: 1px 1px 0 #1E40AF;
+}
+
+/* Menu Button - Dourado Monofloor */
+.deal-action--menu {
+  background: #FEF9C3;
+  border-color: #92400E;
+  box-shadow: 2px 2px 0 #92400E;
+}
+
+.deal-action--menu svg {
+  color: #92400E;
+}
+
+.deal-action--menu:hover {
+  background: #c9a962;
+  box-shadow: 5px 5px 0 #92400E;
+}
+
+.deal-action--menu:hover svg {
+  color: #FFFFFF;
+  transform: scale(1.1);
+}
+
+.deal-action--menu:active {
+  box-shadow: 1px 1px 0 #92400E;
 }
 
 /* Card Transitions */
@@ -6105,9 +7467,9 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  padding: 16px 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.2);
+  padding: 20px 24px;
+  border-top: 3px solid #1a1a1a;
+  background: #F5F5F5;
 }
 
 .modal__footer--proposals {
@@ -6117,45 +7479,41 @@ onUnmounted(() => {
 .modal__footer-left,
 .modal__footer-right {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
+/* ========== NEOBRUTAL BUTTONS ========== */
+
 .btn--gold {
-  background: linear-gradient(135deg, #c9a962, #b8963e);
+  background: #c9a962;
   color: #1a1a1a;
-  font-weight: 600;
-  border: none;
-  transition: all 0.2s ease;
 }
 
 .btn--gold:hover:not(:disabled) {
-  background: linear-gradient(135deg, #d4b56e, #c9a962);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(201, 169, 98, 0.3);
+  background: #d4b872;
 }
 
 .btn--gold:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .btn--info {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  color: white;
-  font-weight: 600;
-  border: none;
-  transition: all 0.2s ease;
+  background: #3B82F6;
+  color: #FFFFFF;
+  border-color: #1E40AF;
+  box-shadow: 3px 3px 0 #1E40AF;
 }
 
 .btn--info:hover:not(:disabled) {
-  background: linear-gradient(135deg, #60a5fa, #3b82f6);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  background: #60A5FA;
+  box-shadow: 5px 5px 0 #1E40AF;
 }
 
 .btn--info:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -6207,21 +7565,19 @@ onUnmounted(() => {
 }
 
 .btn--success {
-  background: linear-gradient(135deg, #22c55e, #16a34a);
-  color: white;
-  font-weight: 600;
-  border: none;
-  transition: all 0.2s ease;
+  background: #22C55E;
+  color: #FFFFFF;
+  border-color: #166534;
+  box-shadow: 3px 3px 0 #166534;
 }
 
 .btn--success:hover:not(:disabled) {
-  background: linear-gradient(135deg, #2dd468, #22c55e);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+  background: #4ADE80;
+  box-shadow: 5px 5px 0 #166534;
 }
 
 .btn--success:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -6594,13 +7950,15 @@ onUnmounted(() => {
 }
 
 .btn--secondary {
-  background: rgba(59, 130, 246, 0.2);
-  color: #93c5fd;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: #25D366;
+  color: #FFFFFF;
+  border-color: #128C7E;
+  box-shadow: 3px 3px 0 #128C7E;
 }
 
 .btn--secondary:hover {
-  background: rgba(59, 130, 246, 0.3);
+  background: #4AE97E;
+  box-shadow: 5px 5px 0 #128C7E;
 }
 
 /* Deal Card Enhanced */
@@ -7831,5 +9189,196 @@ onUnmounted(() => {
 .replay-footer-speeds {
   display: flex;
   gap: 6px;
+}
+</style>
+
+<!-- Estilos NÃO scoped para o modal teleportado -->
+<style>
+/* ============================================
+   SPECIALIST MODAL - TELEPORTED (unscoped)
+   ============================================ */
+
+/* Overlay específico para specialist modal */
+.modal-overlay:has(.specialist-modal) {
+  background: rgba(26, 26, 26, 0.7);
+  backdrop-filter: blur(8px);
+}
+
+/* Specialist Modal - Neobrutalista */
+.specialist-modal {
+  background: #FAFAFA !important;
+  border: 3px solid #1a1a1a !important;
+  border-radius: 12px !important;
+  box-shadow: 6px 6px 0 #1a1a1a, 0 20px 40px -10px rgba(0, 0, 0, 0.25) !important;
+  width: 100%;
+  max-width: 340px;
+  max-height: 80vh;
+  overflow: hidden;
+  animation: specialistModalBounce 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  color: #1a1a1a !important;
+}
+
+@keyframes specialistModalBounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.specialist-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 3px solid #1a1a1a !important;
+  background: #c9a962 !important;
+}
+
+.specialist-modal__header h3 {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 800;
+  margin: 0;
+  color: #1a1a1a !important;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Botão fechar no header do specialist modal */
+.specialist-modal__header .modal__close {
+  width: 28px;
+  height: 28px;
+  background: #FFFFFF;
+  border: 2px solid #1a1a1a;
+  border-radius: 6px;
+  box-shadow: 2px 2px 0 #1a1a1a;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: bold;
+  color: #1a1a1a;
+  transition: all 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.specialist-modal__header .modal__close:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 #1a1a1a;
+  background: #ef4444;
+  color: white;
+}
+
+.specialist-modal__list {
+  padding: 12px;
+  max-height: 380px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #FAFAFA !important;
+}
+
+.specialist-modal__list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.specialist-modal__list::-webkit-scrollbar-track {
+  background: #e5e5e5;
+  border-radius: 4px;
+}
+
+.specialist-modal__list::-webkit-scrollbar-thumb {
+  background: #1a1a1a;
+  border-radius: 4px;
+}
+
+.specialist-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #FFFFFF !important;
+  border: 2px solid #1a1a1a !important;
+  border-radius: 8px;
+  box-shadow: 3px 3px 0 #1a1a1a;
+  cursor: pointer;
+  transition: all 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+  text-align: left;
+  width: 100%;
+  color: #1a1a1a !important;
+}
+
+.specialist-option:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 #1a1a1a;
+  border-color: #c9a962 !important;
+}
+
+.specialist-option:active {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 #1a1a1a;
+}
+
+.specialist-option--active {
+  background: #c9a962 !important;
+  border-color: #1a1a1a !important;
+  box-shadow: 3px 3px 0 #1a1a1a;
+}
+
+.specialist-option--active:hover {
+  box-shadow: 5px 5px 0 #1a1a1a;
+}
+
+.specialist-option__avatar {
+  width: 38px;
+  height: 38px;
+  background: #3b82f6;
+  border: 2px solid #1a1a1a !important;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Syne', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #FFFFFF;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.specialist-option--active .specialist-option__avatar {
+  background: #1a1a1a;
+  color: #c9a962;
+}
+
+.specialist-option__name {
+  flex: 1;
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #1a1a1a !important;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.specialist-option__count {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #1a1a1a !important;
+  background: #e5e5e5 !important;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 2px solid #1a1a1a;
+}
+
+.specialist-option--active .specialist-option__count {
+  background: #FFFFFF !important;
+  color: #1a1a1a !important;
 }
 </style>
