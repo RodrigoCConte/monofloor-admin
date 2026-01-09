@@ -4623,10 +4623,8 @@ const fetchDealsFromAPI = async (isBackground: boolean) => {
   // Salvar no cache
   saveDealsToCache(processedDeals);
 
-  // Atualizar UI (só se não for background ou se deals ainda estiver vazio)
-  if (!isBackground || deals.value.length === 0) {
-    deals.value = processedDeals;
-  }
+  // Sempre atualizar UI para refletir dados atualizados (proposalViews, etc)
+  deals.value = processedDeals;
 };
 
 // Calculate days in current stage
