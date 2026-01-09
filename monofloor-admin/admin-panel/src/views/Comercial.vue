@@ -4341,6 +4341,16 @@ const editDeal = (deal: Deal) => {
   startEditing('clientName', deal.clientName);
 };
 
+// Armazenamento de versão de mensagem por deal
+const getWhatsAppMessageVersion = (dealId: string): number => {
+  const stored = localStorage.getItem(`whatsapp_msg_version_${dealId}`);
+  return stored ? parseInt(stored) : 0;
+};
+
+const setWhatsAppMessageVersion = (dealId: string, version: number) => {
+  localStorage.setItem(`whatsapp_msg_version_${dealId}`, version.toString());
+};
+
 const sendWhatsApp = (deal: Deal) => {
   if (deal.phone) {
     const phone = deal.phone.replace(/\D/g, '');
@@ -4371,8 +4381,25 @@ const sendWhatsApp = (deal: Deal) => {
     const nomesMasculinos = ['joão', 'joao', 'gabriel'];
     const artigoGenero = nomesMasculinos.includes(nomeVendedor.toLowerCase()) ? 'o' : 'a';
 
-    // Montar mensagem
-    const mensagem = `Olá ${nomeCliente}, tudo bem? Sou ${nomeVendedor}, especialista da Monofloor e serei ${artigoGenero} responsável por cuidar do seu projeto. Vi que fez uma solicitação de ${metragem}m². Quer me falar um pouco mais sobre o projeto?`;
+    // 4 variações da mensagem de primeiro contato
+    const mensagens = [
+      `Olá ${nomeCliente}, tudo bem? Sou ${nomeVendedor}, especialista da Monofloor e serei ${artigoGenero} responsável por cuidar do seu projeto. Vi que fez uma solicitação de ${metragem}m². Quer me falar um pouco mais sobre o projeto?`,
+      `Oi ${nomeCliente}! Aqui é ${artigoGenero} ${nomeVendedor} da Monofloor. Vou te acompanhar no seu projeto de ${metragem}m². Me conta mais sobre o que você tem em mente?`,
+      `${nomeCliente}, tudo certo? ${nomeVendedor} aqui, da equipe Monofloor. Recebi sua solicitação para ${metragem}m² e estou à disposição. Como posso te ajudar com o projeto?`,
+      `Olá ${nomeCliente}! Sou ${nomeVendedor}, seu contato na Monofloor para o projeto de ${metragem}m². Conta pra mim um pouco mais sobre o que você precisa?`
+    ];
+
+    // Obter versão atual e avançar para próxima
+    const dealId = String(deal.id || deal.pipedriveDealId || phone);
+    const currentVersion = getWhatsAppMessageVersion(dealId);
+    const nextVersion = (currentVersion + 1) % 4;
+    setWhatsAppMessageVersion(dealId, nextVersion);
+
+    // Selecionar mensagem (sempre terá valor pois currentVersion está entre 0-3)
+    const mensagem = mensagens[currentVersion] as string;
+
+    // Mostrar qual versão está sendo usada
+    toast.info(`Mensagem versão ${currentVersion + 1}/4`, { duration: 2000 });
 
     // Encodar mensagem para URL
     const mensagemEncoded = encodeURIComponent(mensagem);
@@ -4744,6 +4771,13 @@ const handleProposalOpened = (data: ProposalOpenedEvent) => {
     startedAt: new Date(data.timestamp),
     timestamp: new Date(data.timestamp),
   });
+
+  // Atualizar contador de views no deal card em tempo real
+  const deal = deals.value.find(d => d.id === data.leadId);
+  if (deal) {
+    deal.proposalViews = (deal.proposalViews || 0) + 1;
+    console.log(`[CRM] Views incrementado para ${data.clientName}: ${deal.proposalViews}`);
+  }
 
   // Adicionar notificação
   proposalNotifications.value.unshift({
