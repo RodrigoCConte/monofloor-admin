@@ -24,24 +24,30 @@ RUN npm ci
 COPY requirements.txt ./
 RUN pip3 install -r requirements.txt
 
-# Copy backend source code (excluding admin-panel for now)
+# Copy backend source code
 COPY src ./src
 COPY tsconfig.json ./
 
-# Build TypeScript
+# Build TypeScript backend
 RUN npm run build
 
 # Generate Prisma Client
 RUN npx prisma generate
 
-# Force cache invalidation before copying admin-panel
+# Force cache invalidation before building admin-panel
 RUN echo "Cache bust: ${CACHEBUST:-default}"
 
-# Copy pre-built admin-panel dist (built locally and committed)
-# This avoids Docker cache issues with admin-panel build
-COPY admin-panel/dist ./admin-panel/dist
+# Copy admin-panel source and build it
+COPY admin-panel ./admin-panel
 
-# Verify admin-panel files are copied correctly
+# Build admin-panel (Vue.js)
+WORKDIR /app/admin-panel
+RUN npm ci && npm run build
+
+# Back to app root
+WORKDIR /app
+
+# Verify admin-panel files are built correctly
 RUN ls -la admin-panel/dist/assets/ | head -10
 
 # Copy remaining files
