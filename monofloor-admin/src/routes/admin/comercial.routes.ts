@@ -288,6 +288,7 @@ router.get('/', async (req: Request, res: Response) => {
           // Contagem de views das propostas (apenas humanos)
           propostas: {
             select: {
+              id: true,
               _count: {
                 select: {
                   views: true,
@@ -313,6 +314,13 @@ router.get('/', async (req: Request, res: Response) => {
       const proposalViews = c.propostas?.reduce((total: number, p: any) => {
         return total + (p._count?.views || 0);
       }, 0) || 0;
+
+      // Debug: log propostas com views
+      if (c.propostas?.length > 0 && proposalViews > 0) {
+        console.log(`[Views Debug] ${c.personName}: ${proposalViews} views from ${c.propostas.length} propostas`,
+          c.propostas.map((p: any) => ({ id: p.id, views: p._count?.views }))
+        );
+      }
 
       // Remover array de propostas e substituir por contagem
       const { propostas, ...rest } = c;
