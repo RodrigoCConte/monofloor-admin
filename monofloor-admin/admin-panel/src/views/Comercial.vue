@@ -684,10 +684,19 @@
                   ></span>
                   <span class="deal-card__specialist-name">{{ getSpecialistFirstName(deal.consultor) }}</span>
                 </div>
-                <div class="deal-card__views" :class="{ 'deal-card__views--active': (deal.proposalViews || 0) > 0 }">
-                  <svg class="deal-card__views-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
+                <div class="deal-card__views">
+                  <svg class="deal-card__views-icon" viewBox="0 0 24 16" fill="none">
+                    <!-- Outer eye shape -->
+                    <path
+                      d="M2 8C2 8 6 2 12 2C18 2 22 8 22 8C22 8 18 14 12 14C6 14 2 8 2 8Z"
+                      stroke="#1a1a1a"
+                      stroke-width="2.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      fill="none"
+                    />
+                    <!-- Pupil -->
+                    <circle cx="12" cy="8" r="3" fill="#1a1a1a"/>
                   </svg>
                   <span class="deal-card__views-count">{{ deal.proposalViews || 0 }}</span>
                 </div>
@@ -4975,7 +4984,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&family=Press+Start+2P&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&family=Press+Start+2P&family=VT323&display=swap');
 
 /* ============================================
    NEO-BRUTALIST DESIGN SYSTEM
@@ -6973,41 +6982,25 @@ onUnmounted(() => {
   color: white;
 }
 
-/* Views Counter - Neobrutalista */
+/* Views Counter - Clean */
 .deal-card__views {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  background: #e5e5e5;
-  border: 2px solid #1a1a1a;
-  border-radius: 6px;
-  box-shadow: 2px 2px 0 #1a1a1a;
-  font-family: 'Syne', sans-serif;
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: #666;
-  transition: all 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.deal-card__views--active {
-  background: #c9a962;
-  color: #1a1a1a;
+  gap: 5px;
 }
 
 .deal-card__views-icon {
-  width: 14px;
-  height: 14px;
-  stroke-width: 2.5;
-}
-
-.deal-card__views--active .deal-card__views-icon {
-  stroke: #1a1a1a;
+  width: 18px;
+  height: 12px;
+  flex-shrink: 0;
 }
 
 .deal-card__views-count {
-  min-width: 12px;
-  text-align: center;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  line-height: 1;
 }
 
 .deal-card__actions {

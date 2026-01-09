@@ -11,6 +11,7 @@ import {
   emitProposalClosed,
   emitProposalGPSUpdated
 } from '../services/socket.service';
+import { invalidateComercialCache } from './admin/comercial.routes';
 
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
@@ -510,13 +511,15 @@ router.post('/track', async (req, res) => {
       });
     }
 
+    const viewIsBot = isBot(userAgent);
+
     await prisma.propostaView.create({
       data: {
         propostaId: proposta.id,
         ip,
         userAgent,
         deviceType,
-        isBot: isBot(userAgent),
+        isBot: viewIsBot,
         sessionId: newSessionId,
         timeOnPage: timeOnPage !== undefined ? parseInt(timeOnPage) : 0,
         scrollDepth: scrollDepth !== undefined ? parseInt(scrollDepth) : 0
@@ -525,6 +528,11 @@ router.post('/track', async (req, res) => {
 
     // Invalidar cache de analytics
     invalidateAnalyticsCache(proposta.id);
+
+    // Invalidar cache comercial para atualizar contagem de views
+    if (!viewIsBot) {
+      invalidateComercialCache();
+    }
 
     res.json({ success: true, sessionId: newSessionId });
 

@@ -13,6 +13,7 @@ import { mobileRoutes } from './routes/mobile';
 import { webhookRoutes } from './routes/webhooks';
 import proposalsRoutes from './routes/proposals.routes';
 import filesRoutes from './routes/files.routes';
+import { invalidateComercialCache } from './routes/admin/comercial.routes';
 
 const prisma = new PrismaClient();
 
@@ -200,6 +201,11 @@ app.get('/p/:slug(*)', async (req, res) => {
         sessionId
       }
     });
+
+    // Invalidar cache do comercial para atualizar contagem de views
+    if (!isBot) {
+      invalidateComercialCache();
+    }
 
     console.log(`📊 [Tracking] Proposta ${slug} visualizada - IP: ${ip}, Device: ${deviceType}`);
 
