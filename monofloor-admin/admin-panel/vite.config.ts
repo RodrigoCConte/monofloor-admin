@@ -15,6 +15,13 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    build: {
+      rollupOptions: {
+        external: [
+          /^\/images\/.*/,  // Don't resolve public folder images at build time
+        ],
+      },
+    },
     server: {
       proxy: {
         '/api': {
