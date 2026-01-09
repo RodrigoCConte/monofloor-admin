@@ -3,7 +3,6 @@ import cors from 'cors';
 import path from 'path';
 import { config } from './config';
 import { PrismaClient } from '@prisma/client';
-import { emitProposalOpened } from './services/socket.service';
 
 // Force rebuild: 2024-12-21T01:15:00Z - PostgreSQL file storage
 import { errorHandler } from './middleware/errorHandler';
@@ -131,11 +130,7 @@ app.get('/p/:slug(*)', async (req, res) => {
         id: true,
         htmlImages: true, // Imagens pré-convertidas
         comercial: {
-          select: {
-            id: true,
-            personName: true,
-            ownerUserName: true
-          }
+          select: { personName: true }
         }
       }
     });
@@ -202,17 +197,6 @@ app.get('/p/:slug(*)', async (req, res) => {
     });
 
     console.log(`📊 [Tracking] Proposta ${slug} visualizada - IP: ${ip}, Device: ${deviceType}`);
-
-    // Emitir notificação em tempo real para o CRM
-    emitProposalOpened({
-      propostaId: proposta.id,
-      leadId: proposta.comercial?.id || '',
-      clientName: clienteName,
-      ownerUserName: proposta.comercial?.ownerUserName || '',
-      sessionId,
-      deviceType,
-      timestamp: new Date()
-    });
 
     // Usar imagens pré-convertidas (RÁPIDO!)
     const images: string[] = JSON.parse(proposta.htmlImages);
@@ -353,63 +337,6 @@ function generateProposalImageHTML(slug: string, sessionId: string, clienteName:
       const pagesViewed = new Set();
       for (let i = 1; i <= totalPages; i++) {
         pageTimes[i] = 0;
-      }
-
-      // Geolocalização GPS
-      let gpsLatitude = null;
-      let gpsLongitude = null;
-      let gpsAccuracy = null;
-      let gpsGranted = false;
-      let gpsSent = false;
-
-      // Pedir permissão de geolocalização
-      if ('geolocation' in navigator) {
-        navigator.geolocation.getCurrentPosition(
-          function(position) {
-            gpsLatitude = position.coords.latitude;
-            gpsLongitude = position.coords.longitude;
-            gpsAccuracy = position.coords.accuracy;
-            gpsGranted = true;
-            console.log('[GPS] Localização obtida:', gpsLatitude, gpsLongitude, 'precisão:', gpsAccuracy + 'm');
-
-            // Enviar imediatamente quando obtiver localização
-            if (!gpsSent) {
-              gpsSent = true;
-              sendGPSLocation();
-            }
-          },
-          function(error) {
-            console.log('[GPS] Permissão negada ou erro:', error.message);
-            gpsGranted = false;
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 60000
-          }
-        );
-      }
-
-      // Enviar localização GPS separadamente
-      function sendGPSLocation() {
-        if (gpsLatitude === null) return;
-
-        fetch(apiBase + '/api/proposals/track/location', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            slug: slug,
-            sessionId: sessionId,
-            latitude: gpsLatitude,
-            longitude: gpsLongitude,
-            accuracy: gpsAccuracy
-          })
-        }).then(function(res) {
-          if (res.ok) console.log('[GPS] Localização enviada com sucesso');
-          else console.error('[GPS] Erro ao enviar:', res.status);
-        }).catch(function(err) {
-          console.error('[GPS] Falha ao enviar:', err);
-        });
       }
 
       // Formatador de tempo

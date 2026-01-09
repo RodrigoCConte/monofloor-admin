@@ -461,6 +461,9 @@ export const comercialApi = {
   }) => api.post(`/api/admin/comercial/${comercialId}/proposta/gerar`, dados || {}),
   getUltimaProposta: (comercialId: string) =>
     api.get(`/api/admin/comercial/${comercialId}/ultima-proposta`),
+  // Endpoint otimizado: retorna proposta + analytics + anexos + orçamentos de uma vez
+  getLeadDetails: (comercialId: string) =>
+    api.get(`/api/admin/comercial/${comercialId}/details`),
   salvarPropostaPdf: (comercialId: string, propostaId: string, data: {
     pdfUrl?: string;
     pdfBase64?: string;
@@ -518,6 +521,12 @@ export const comercialApi = {
   }) => api.put(`/api/admin/comercial/${comercialId}/orcamentos-enviados/${orcamentoId}`, data),
   deleteOrcamentoEnviado: (comercialId: string, orcamentoId: string) =>
     api.delete(`/api/admin/comercial/${comercialId}/orcamentos-enviados/${orcamentoId}`),
+
+  // Active Viewers (para polling do sino de notificações)
+  getActiveViewers: () => api.get('/api/admin/comercial/active-viewers'),
+
+  // Todas as visualizações (ativos + histórico 24h)
+  getAllViews: () => api.get('/api/admin/comercial/all-views'),
 };
 
 // =============================================
@@ -644,4 +653,62 @@ export const schedulingApi = {
     api.get('/api/admin/scheduling/absences', { params }),
   justifyAbsence: (id: string, data: { justification: string; refundXp?: boolean }) =>
     api.put(`/api/admin/scheduling/absences/${id}/justify`, data),
+};
+
+// Pre-Obra API
+export const preObraApi = {
+  // Main CRUD
+  getAll: (params?: { status?: string; search?: string; page?: number; limit?: number }) =>
+    api.get('/api/admin/pre-obra', { params }),
+  getStats: () => api.get('/api/admin/pre-obra/stats'),
+  getById: (id: string) => api.get(`/api/admin/pre-obra/${id}`),
+  create: (projectId: string) => api.post('/api/admin/pre-obra', { projectId }),
+  update: (id: string, data: any) => api.put(`/api/admin/pre-obra/${id}`, data),
+  updateStatus: (id: string, status: string) =>
+    api.put(`/api/admin/pre-obra/${id}/status`, { status }),
+  updateChecklist: (id: string, field: string, value: boolean) =>
+    api.put(`/api/admin/pre-obra/${id}/checklist`, { field, value }),
+
+  // Tarefas (Tasks/Schedule)
+  getTarefas: (id: string, status?: string) =>
+    api.get(`/api/admin/pre-obra/${id}/tarefas`, { params: { status } }),
+  createTarefa: (id: string, data: any) =>
+    api.post(`/api/admin/pre-obra/${id}/tarefas`, data),
+  updateTarefa: (id: string, tarefaId: string, data: any) =>
+    api.put(`/api/admin/pre-obra/${id}/tarefas/${tarefaId}`, data),
+  deleteTarefa: (id: string, tarefaId: string) =>
+    api.delete(`/api/admin/pre-obra/${id}/tarefas/${tarefaId}`),
+  reorderTarefas: (id: string, tarefaIds: string[]) =>
+    api.post(`/api/admin/pre-obra/${id}/tarefas/reorder`, { tarefaIds }),
+  generateTarefas: (id: string) =>
+    api.post(`/api/admin/pre-obra/${id}/tarefas/generate`),
+
+  // Provisionamentos (Materials/Resources)
+  getProvisionamentos: (id: string, params?: { status?: string; tipo?: string }) =>
+    api.get(`/api/admin/pre-obra/${id}/provisionamentos`, { params }),
+  createProvisionamento: (id: string, data: any) =>
+    api.post(`/api/admin/pre-obra/${id}/provisionamentos`, data),
+  updateProvisionamento: (id: string, provId: string, data: any) =>
+    api.put(`/api/admin/pre-obra/${id}/provisionamentos/${provId}`, data),
+  deleteProvisionamento: (id: string, provId: string) =>
+    api.delete(`/api/admin/pre-obra/${id}/provisionamentos/${provId}`),
+  calculateProvisionamentos: (id: string) =>
+    api.post(`/api/admin/pre-obra/${id}/provisionamentos/calculate`),
+
+  // Amostras (Color Samples)
+  getAmostras: (id: string, status?: string) =>
+    api.get(`/api/admin/pre-obra/${id}/amostras`, { params: { status } }),
+  createAmostra: (id: string, data: any) =>
+    api.post(`/api/admin/pre-obra/${id}/amostras`, data),
+  updateAmostra: (id: string, amostraId: string, data: any) =>
+    api.put(`/api/admin/pre-obra/${id}/amostras/${amostraId}`, data),
+  deleteAmostra: (id: string, amostraId: string) =>
+    api.delete(`/api/admin/pre-obra/${id}/amostras/${amostraId}`),
+  selectAmostra: (id: string, amostraId: string) =>
+    api.post(`/api/admin/pre-obra/${id}/amostras/${amostraId}/select`),
+
+  // Capacity Planning
+  getCapacity: () => api.get('/api/admin/pre-obra/capacity'),
+  allocate: (id: string, mesExecucao: string | null, horasEstimadas?: number) =>
+    api.put(`/api/admin/pre-obra/${id}/allocate`, { mesExecucao, horasEstimadas }),
 };

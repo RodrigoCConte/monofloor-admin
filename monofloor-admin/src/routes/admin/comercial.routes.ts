@@ -100,6 +100,89 @@ const getStatusFromStageName = (stageName: string): ComercialStatus => {
 // COMERCIAL MODULE ROUTES
 // =============================================
 
+// Cache para Kanban (5 minutos)
+const kanbanCache: { data: any; timestamp: number } | null = { data: null, timestamp: 0 };
+const KANBAN_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+// GET /comercial/kanban - ULTRA OTIMIZADO para carregar o Kanban
+// Retorna apenas campos essenciais, agrupados por estágio
+router.get('/kanban', async (_req: Request, res: Response) => {
+  try {
+    const startTime = Date.now();
+
+    // Verificar cache
+    if (kanbanCache.data && (Date.now() - kanbanCache.timestamp) < KANBAN_CACHE_TTL) {
+      console.log(`[Kanban] Cache HIT (${Date.now() - startTime}ms)`);
+      return res.json({ ...kanbanCache.data, cached: true });
+    }
+
+    // Query ultra-leve - apenas campos necessários para visualização
+    const deals = await prisma.comercialData.findMany({
+      where: {
+        dealStatus: 'open',
+        status: { notIn: ['GANHO', 'PERDIDO'] }
+      },
+      select: {
+        id: true,
+        personName: true,
+        ownerUserName: true,
+        status: true,
+        stageName: true,
+        stageId: true,
+        dealValue: true,
+        metragemEstimada: true,
+        cidadeExecucao: true,
+        tipoCliente: true,
+        tipoProjeto: true,
+        dealAddTime: true,
+        stageChangeTime: true,
+        // Apenas flags para saber se tem dados relacionados
+        _count: {
+          select: {
+            propostas: true,
+            followUps: true,
+          }
+        }
+      },
+      orderBy: { stageChangeTime: 'desc' },
+    });
+
+    // Agrupar por status no servidor (mais eficiente que no cliente)
+    const grouped: Record<string, any[]> = {};
+    for (const deal of deals) {
+      const status = deal.status || 'LEAD';
+      if (!grouped[status]) grouped[status] = [];
+      // Calcular dias no estágio
+      const stageTime = deal.stageChangeTime ? new Date(deal.stageChangeTime) : new Date(deal.dealAddTime || Date.now());
+      const daysInStage = Math.floor((Date.now() - stageTime.getTime()) / (1000 * 60 * 60 * 24));
+      grouped[status].push({
+        ...deal,
+        daysInStage,
+        hasPropostas: deal._count.propostas > 0,
+        hasFollowUps: deal._count.followUps > 0,
+        _count: undefined // Remove count do output
+      });
+    }
+
+    const responseData = {
+      success: true,
+      deals: grouped,
+      total: deals.length,
+      loadTime: Date.now() - startTime
+    };
+
+    // Salvar no cache
+    kanbanCache.data = responseData;
+    kanbanCache.timestamp = Date.now();
+    console.log(`[Kanban] Cache MISS - loaded ${deals.length} deals in ${Date.now() - startTime}ms`);
+
+    res.json(responseData);
+  } catch (error: any) {
+    console.error('[Kanban] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // GET /comercial - List all commercial data with filtering
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -202,6 +285,16 @@ router.get('/', async (req: Request, res: Response) => {
               m2Total: true,
             },
           },
+          // Contagem de views das propostas (apenas humanos)
+          propostas: {
+            select: {
+              _count: {
+                select: {
+                  views: true,
+                },
+              },
+            },
+          },
           // NÃO incluir pipedriveRawData (muito pesado)
         },
         orderBy: [
@@ -214,18 +307,33 @@ router.get('/', async (req: Request, res: Response) => {
       prisma.comercialData.count({ where }),
     ]);
 
+    // Processar dados para incluir total de views
+    const processedComerciais = comerciais.map((c: any) => {
+      // Somar views de todas as propostas do lead
+      const proposalViews = c.propostas?.reduce((total: number, p: any) => {
+        return total + (p._count?.views || 0);
+      }, 0) || 0;
+
+      // Remover array de propostas e substituir por contagem
+      const { propostas, ...rest } = c;
+      return {
+        ...rest,
+        proposalViews,
+      };
+    });
+
     // Salvar no cache (se não for search)
     if (cacheKey) {
       comercialCache.set(cacheKey, {
-        data: comerciais,
+        data: processedComerciais,
         timestamp: Date.now(),
       });
-      console.log(`[Cache] SAVED ${cacheKey} (${comerciais.length} deals)`);
+      console.log(`[Cache] SAVED ${cacheKey} (${processedComerciais.length} deals)`);
     }
 
     res.json({
       success: true,
-      data: comerciais,
+      data: processedComerciais,
       pagination: {
         total,
         page: parseInt(page as string),
@@ -441,6 +549,134 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+// =============================================
+// ROTAS DE VISUALIZAÇÃO - DEVEM VIR ANTES DE /:id
+// =============================================
+
+/**
+ * GET /api/admin/comercial/active-viewers
+ * Retorna propostas sendo visualizadas ativamente (viewedAt < 90 segundos)
+ * Usado para a seção "AO VIVO" no sino de notificações
+ */
+router.get('/active-viewers', async (req: Request, res: Response) => {
+  try {
+    // Considerar ativo se viewedAt foi nos últimos 90 segundos
+    const cutoffTime = new Date(Date.now() - 90 * 1000);
+
+    const activeViews = await prisma.propostaView.findMany({
+      where: {
+        viewedAt: { gte: cutoffTime },
+        isBot: false,
+        sessionId: { not: null }
+      },
+      include: {
+        proposta: {
+          include: {
+            comercial: {
+              select: { id: true, personName: true, ownerUserName: true }
+            }
+          }
+        }
+      },
+      orderBy: { viewedAt: 'desc' }
+    });
+
+    // Formatar para o frontend
+    const viewers = activeViews.map(view => ({
+      sessionId: view.sessionId,
+      propostaId: view.propostaId,
+      leadId: view.proposta?.comercial?.id || '',
+      clientName: view.proposta?.comercial?.personName || 'Cliente',
+      ownerUserName: view.proposta?.comercial?.ownerUserName || '',
+      deviceType: view.deviceType || 'desktop',
+      timeOnPage: view.timeOnPage || 0,
+      scrollDepth: view.scrollDepth || 0,
+      currentPage: view.currentPage || 1,
+      startedAt: view.viewedAt,
+      lastUpdate: view.viewedAt
+    }));
+
+    res.json({
+      success: true,
+      viewers,
+      count: viewers.length,
+      timestamp: new Date()
+    });
+
+  } catch (error: any) {
+    console.error('[ActiveViewers] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /api/admin/comercial/all-views
+ * Retorna TODAS as visualizações recentes (últimas 24h)
+ * Usado para a seção "HISTÓRICO" no sino de notificações
+ */
+router.get('/all-views', async (req: Request, res: Response) => {
+  try {
+    // Pegar visualizações das últimas 24 horas
+    const cutoffTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const activeCutoff = new Date(Date.now() - 90 * 1000); // Para marcar quais estão ativas
+
+    const allViews = await prisma.propostaView.findMany({
+      where: {
+        viewedAt: { gte: cutoffTime },
+        isBot: false
+      },
+      include: {
+        proposta: {
+          include: {
+            comercial: {
+              select: { id: true, personName: true, ownerUserName: true }
+            }
+          }
+        }
+      },
+      orderBy: { viewedAt: 'desc' },
+      take: 100 // Limitar a 100 visualizações
+    });
+
+    // Formatar para o frontend
+    const views = allViews.map(view => ({
+      id: view.id,
+      sessionId: view.sessionId,
+      propostaId: view.propostaId,
+      leadId: view.proposta?.comercial?.id || '',
+      clientName: view.proposta?.comercial?.personName || 'Cliente',
+      ownerUserName: view.proposta?.comercial?.ownerUserName || '',
+      deviceType: view.deviceType || 'desktop',
+      timeOnPage: view.timeOnPage || 0,
+      scrollDepth: view.scrollDepth || 0,
+      currentPage: view.currentPage || 1,
+      viewedAt: view.viewedAt,
+      isActive: view.viewedAt >= activeCutoff // Marcar se está ativa agora
+    }));
+
+    // Separar em ativos e histórico
+    const activeViewers = views.filter(v => v.isActive);
+    const historyViews = views.filter(v => !v.isActive);
+
+    res.json({
+      success: true,
+      activeViewers,
+      historyViews,
+      totalActive: activeViewers.length,
+      totalHistory: historyViews.length,
+      timestamp: new Date()
+    });
+
+  } catch (error: any) {
+    console.error('[AllViews] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
+// FIM DAS ROTAS DE VISUALIZAÇÃO
+// =============================================
 
 // PUT /comercial/:id - Update comercial data (suporta edição inline de campos)
 router.put('/:id', async (req: Request, res: Response) => {
@@ -3876,4 +4112,4 @@ router.delete('/:id/orcamentos-enviados/:orcamentoId', async (req: Request, res:
 });
 
 export { router as comercialRoutes };
-// Deploy trigger Wed Jan  7 11:35:25 -03 2026
+// Deploy trigger Wed Jan  8 16:25:00 -03 2026

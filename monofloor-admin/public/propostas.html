@@ -55,11 +55,17 @@
       let metragemTotalStelion = 0;
       let metragemTotalLilit = 0;
 
-      // PISO → STELION (1.0x)
+      // PISO → STELION ou LILIT (dependendo da seleção do usuário)
       if (metrosPiso > 0) {
         const metrosComPerda = metrosPiso / 0.9;
-        valorTotalStelion += metrosComPerda * precoBaseStelion * 1.0;
-        metragemTotalStelion += metrosComPerda;
+        if (pisoProduto === 'stelion') {
+          valorTotalStelion += metrosComPerda * precoBaseStelion * 1.0;
+          metragemTotalStelion += metrosComPerda;
+        } else {
+          // LILIT para piso usa multiplicador 1.0x (mesmo que parede usa 0.8x)
+          valorTotalLilit += metrosComPerda * precoBaseLilit * 1.0;
+          metragemTotalLilit += metrosComPerda;
+        }
       }
 
       // PAREDE → LILIT (0.8x)

@@ -19,6 +19,7 @@ import { piuiRoutes } from './piui.routes';
 import { planejamentoRoutes } from './planejamento.routes';
 import { posvendaRoutes } from './posvenda.routes';
 import { enterpriseRoutes } from './enterprise.routes';
+import preObraRoutes from './pre-obra.routes';
 import schedulingRoutes from './scheduling.routes';
 import { detectAndProcessLunchSkips, checkLunchSkipForUser } from '../../services/lunch-skipped-detection.service';
 
@@ -46,6 +47,7 @@ router.use('/piui', piuiRoutes);
 router.use('/planejamento', planejamentoRoutes);
 router.use('/posvenda', posvendaRoutes);
 router.use('/enterprise', enterpriseRoutes);
+router.use('/pre-obra', preObraRoutes);
 
 // Scheduling (holidays, saturday schedules, absences)
 router.use('/scheduling', schedulingRoutes);

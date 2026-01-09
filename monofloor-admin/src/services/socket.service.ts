@@ -513,10 +513,12 @@ export function emitProposalViewing(data: {
 }): void {
   if (io) {
     io.to('admin').emit('proposal:viewing', data);
-    // Log only every 60 seconds to reduce noise
-    if (data.timeOnPage % 60 === 0) {
-      console.log(`[Socket] Emitted proposal:viewing - "${data.clientName}" ${data.timeOnPage}s na proposta`);
+    // Log every 30 seconds for debugging
+    if (data.timeOnPage % 30 === 0) {
+      console.log(`[Socket] ✅ Emitted proposal:viewing to admin room - "${data.clientName}" ${data.timeOnPage}s`);
     }
+  } else {
+    console.log('[Socket] ❌ io is NULL - cannot emit proposal:viewing');
   }
 }
 

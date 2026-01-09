@@ -157,6 +157,7 @@ model Project {
   nightShiftInvites           NightShiftInvite[]
   planejamento                Planejamento?
   posVendas                   PosVenda[]
+  preObra                     PreObra?
   assignments                 ProjectAssignment[]
   documents                   ProjectDocument[]
   tasks                       ProjectTask[]
@@ -2427,4 +2428,222 @@ enum AbsenceType {
   CONFIRMED_NO_SHOW
   EARLY_LEAVE
   LATE_ARRIVAL
+}
+
+// ==================== PRE-OBRA ENUMS ====================
+
+enum PreObraStatus {
+  AGUARDANDO_ORIENTACOES
+  ORIENTACOES_ENVIADAS
+  AGEND_VISITA_TECNICA
+  VISITA_AGENDADA
+  VISITA_REALIZADA
+  REUNIAO_ORIENTATIVA_PEND
+  REUNIAO_REALIZADA
+  AGUARDANDO_COR
+  COR_DEFINIDA
+  MATERIAIS_SOLICITADOS
+  MATERIAIS_EM_TRANSITO
+  MATERIAIS_RECEBIDOS
+  PRONTO_EXECUCAO
+}
+
+enum PreObraTarefaTipo {
+  VISITA_TECNICA_AFERICAO
+  REUNIAO_ORIENTATIVA
+  ENVIO_AMOSTRAS
+  DEFINICAO_COR
+  PREPARACAO_CLIENTE
+  ENVIO_MATERIAIS
+  CONFIRMACAO_RECEBIMENTO
+  CUSTOM
+}
+
+enum PreObraTarefaStatus {
+  PENDENTE
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+  BLOQUEADA
+}
+
+enum ProvisionamentoStatus {
+  PENDENTE
+  SOLICITADO
+  EM_TRANSITO
+  RECEBIDO
+  CANCELADO
+}
+
+enum ProvisionamentoTipo {
+  MATERIAL
+  RECURSO
+  EQUIPAMENTO
+  FERRAMENTA
+}
+
+enum AmostraStatus {
+  AMOSTRA_PENDENTE
+  ENVIADA
+  RECEBIDA
+  EM_AVALIACAO
+  APROVADA
+  REJEITADA
+}
+
+// ==================== PRE-OBRA MODELS ====================
+
+model PreObra {
+  id                          String        @id @default(uuid())
+  projectId                   String        @unique @map("project_id")
+  status                      PreObraStatus @default(AGUARDANDO_ORIENTACOES)
+
+  // Checklist flags
+  orientacoesEnviadas         Boolean       @default(false) @map("orientacoes_enviadas")
+  orientacoesEnviadasEm       DateTime?     @map("orientacoes_enviadas_em")
+  visitaTecnicaAgendada       Boolean       @default(false) @map("visita_tecnica_agendada")
+  visitaTecnicaRealizada      Boolean       @default(false) @map("visita_tecnica_realizada")
+  visitaTecnicaRealizadaEm    DateTime?     @map("visita_tecnica_realizada_em")
+  reuniaoOrientativaRealizada Boolean       @default(false) @map("reuniao_orientativa_realizada")
+  reuniaoOrientativaEm        DateTime?     @map("reuniao_orientativa_em")
+  materiaisEnviados           Boolean       @default(false) @map("materiais_enviados")
+  materiaisEnviadosEm         DateTime?     @map("materiais_enviados_em")
+  corDefinida                 Boolean       @default(false) @map("cor_definida")
+  corDefinidaEm               DateTime?     @map("cor_definida_em")
+
+  // Dates & Scheduling
+  dataEntrada                 DateTime?     @map("data_entrada")
+  dataInicioEstimada          DateTime?     @map("data_inicio_estimada")
+  observacoes                 String?       @db.Text
+
+  // Capacity Planning
+  horasEstimadas              Decimal?      @map("horas_estimadas") @db.Decimal(10, 2)
+  mesExecucao                 String?       @map("mes_execucao") // Format: "2026-01"
+
+  // Responsible consultant
+  consultorResponsavelId      String?       @map("consultor_responsavel_id")
+
+  // Timestamps
+  createdAt                   DateTime      @default(now()) @map("created_at")
+  updatedAt                   DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  project                     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tarefas                     PreObraTarefa[]
+  provisionamentos            PreObraProvisionamento[]
+  amostras                    PreObraAmostra[]
+
+  @@index([status])
+  @@index([projectId])
+  @@map("pre_obras")
+}
+
+model PreObraTarefa {
+  id             String              @id @default(uuid())
+  preObraId      String              @map("pre_obra_id")
+  titulo         String
+  descricao      String?
+  tipo           PreObraTarefaTipo   @default(CUSTOM)
+  status         PreObraTarefaStatus @default(PENDENTE)
+
+  // Scheduling
+  dataAgendada   DateTime?           @map("data_agendada")
+  horaAgendada   String?             @map("hora_agendada")
+  dataRealizacao DateTime?           @map("data_realizacao")
+
+  // Assignment
+  responsavelNome String?            @map("responsavel_nome")
+  responsavelId   String?            @map("responsavel_id")
+
+  // Additional info
+  observacoes    String?             @db.Text
+  sortOrder      Int                 @default(0) @map("sort_order")
+
+  // Timestamps
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  preObra        PreObra             @relation(fields: [preObraId], references: [id], onDelete: Cascade)
+
+  @@index([preObraId, sortOrder])
+  @@index([preObraId, status])
+  @@map("pre_obra_tarefas")
+}
+
+model PreObraProvisionamento {
+  id              String                @id @default(uuid())
+  preObraId       String                @map("pre_obra_id")
+  tipo            ProvisionamentoTipo   @default(MATERIAL)
+  status          ProvisionamentoStatus @default(PENDENTE)
+
+  // Item details
+  nome            String
+  descricao       String?
+  quantidade      Decimal               @db.Decimal(10, 2)
+  unidade         String                @default("un")
+
+  // Calculated from m2
+  baseadoEmM2     Boolean               @default(false) @map("baseado_em_m2")
+  fatorM2         Decimal?              @map("fator_m2") @db.Decimal(10, 4)
+
+  // Cost tracking (optional)
+  custoUnitario   Decimal?              @map("custo_unitario") @db.Decimal(12, 2)
+  custoTotal      Decimal?              @map("custo_total") @db.Decimal(12, 2)
+
+  // Supplier info (optional)
+  fornecedor      String?
+  notaFiscal      String?               @map("nota_fiscal")
+
+  // Dates
+  dataSolicitacao DateTime?             @map("data_solicitacao")
+  dataPrevisao    DateTime?             @map("data_previsao")
+  dataRecebimento DateTime?             @map("data_recebimento")
+
+  // Timestamps
+  sortOrder       Int                   @default(0) @map("sort_order")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+
+  preObra         PreObra               @relation(fields: [preObraId], references: [id], onDelete: Cascade)
+
+  @@index([preObraId])
+  @@index([preObraId, status])
+  @@map("pre_obra_provisionamentos")
+}
+
+model PreObraAmostra {
+  id                  String        @id @default(uuid())
+  preObraId           String        @map("pre_obra_id")
+
+  // Color info
+  corNome             String        @map("cor_nome")
+  corCodigo           String?       @map("cor_codigo")
+  corHex              String?       @map("cor_hex")
+
+  // Sample tracking
+  status              AmostraStatus @default(AMOSTRA_PENDENTE)
+  dataEnvio           DateTime?     @map("data_envio")
+  dataRecebimento     DateTime?     @map("data_recebimento")
+  dataAvaliacao       DateTime?     @map("data_avaliacao")
+
+  // Client feedback
+  aprovada            Boolean?
+  feedbackCliente     String?       @map("feedback_cliente") @db.Text
+
+  // Photos
+  fotoAmostraUrl      String?       @map("foto_amostra_url")
+  fotoReferenciaUrl   String?       @map("foto_referencia_url")
+
+  // If this is the final selected color
+  selecionadaFinal    Boolean       @default(false) @map("selecionada_final")
+
+  // Timestamps
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  preObra             PreObra       @relation(fields: [preObraId], references: [id], onDelete: Cascade)
+
+  @@index([preObraId])
+  @@index([preObraId, status])
+  @@map("pre_obra_amostras")
 }

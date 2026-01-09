@@ -419,7 +419,8 @@ router.post('/track', async (req, res) => {
         // Construir objeto de update - só incluir campos que foram enviados
         const updateData: any = {
           timeOnPage: time,
-          scrollDepth: scroll
+          scrollDepth: scroll,
+          viewedAt: new Date() // Atualizar timestamp para saber que está ativo
         };
 
         // Sempre salvar pageTimes se for um objeto válido
@@ -445,27 +446,37 @@ router.post('/track', async (req, res) => {
           data: updateData
         });
 
-        // Atualizar sessão ativa e emitir evento de viewing
+        // Atualizar sessão ativa (se existir nesta instância PM2)
         if (activeSessions.has(sessionId)) {
           const session = activeSessions.get(sessionId)!;
           session.lastUpdate = Date.now();
           session.timeOnPage = time;
           session.scrollDepth = scroll;
-
-          // Emitir evento de viewing a cada 10 segundos
-          if (time % 10 === 0) {
-            emitProposalViewing({
-              propostaId: proposta.id,
-              leadId,
-              clientName,
-              ownerUserName,
-              sessionId,
-              timeOnPage: time,
-              scrollDepth: scroll,
-              timestamp: new Date()
-            });
-          }
+        } else {
+          // Se sessão não existe localmente (outra instância PM2 criou), criar aqui
+          activeSessions.set(sessionId, {
+            propostaId: proposta.id,
+            leadId,
+            clientName,
+            ownerUserName,
+            lastUpdate: Date.now(),
+            timeOnPage: time,
+            scrollDepth: scroll
+          });
         }
+
+        // Emitir evento de viewing em cada tracking request (a cada ~5 segundos)
+        console.log('📡 [SOCKET] Emitindo proposal:viewing para', clientName, '- tempo:', time);
+        emitProposalViewing({
+          propostaId: proposta.id,
+          leadId,
+          clientName,
+          ownerUserName,
+          sessionId,
+          timeOnPage: time,
+          scrollDepth: scroll,
+          timestamp: new Date()
+        });
 
         return res.json({ success: true, updated: true });
       }

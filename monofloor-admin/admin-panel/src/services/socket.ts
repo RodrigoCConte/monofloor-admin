@@ -6,7 +6,8 @@
 import { io, Socket } from 'socket.io-client';
 import { ref } from 'vue';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://devoted-wholeness-production.up.railway.app';
+// Use same origin for socket connection (nginx will proxy to backend)
+const API_URL = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : 'https://comercial.monofloor.cloud');
 
 // Socket instance
 let socket: Socket | null = null;
@@ -118,6 +119,18 @@ export interface ProposalClosedEvent {
   timestamp: Date;
 }
 
+export interface ProposalGPSUpdatedEvent {
+  propostaId: string;
+  leadId: string;
+  clientName: string;
+  sessionId: string;
+  city: string | null;
+  state: string | null;
+  latitude: number;
+  longitude: number;
+  timestamp: Date;
+}
+
 // Event listeners storage
 type EventCallback<T> = (data: T) => void;
 const listeners: { [key: string]: EventCallback<any>[] } = {};
@@ -201,6 +214,11 @@ export function connectSocket(): Socket {
     notifyListeners('proposal:closed', data);
   });
 
+  socket.on('proposal:gpsUpdated', (data: ProposalGPSUpdatedEvent) => {
+    console.log('📍 Proposal GPS updated:', data.clientName, data.city);
+    notifyListeners('proposal:gpsUpdated', data);
+  });
+
   return socket;
 }
 
@@ -267,6 +285,10 @@ export function onProposalViewing(callback: EventCallback<ProposalViewingEvent>)
 
 export function onProposalClosed(callback: EventCallback<ProposalClosedEvent>): () => void {
   return addListener('proposal:closed', callback);
+}
+
+export function onProposalGPSUpdated(callback: EventCallback<ProposalGPSUpdatedEvent>): () => void {
+  return addListener('proposal:gpsUpdated', callback);
 }
 
 /**

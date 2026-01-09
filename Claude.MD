@@ -1,5 +1,26 @@
 # Projeto Monofloor Equipes
 
+---
+## REGRAS OBRIGATORIAS - LEIA PRIMEIRO!
+
+> **ANTES DE QUALQUER ALTERACAO, LEIA:**
+> - `ARQUITETURA-SISTEMAS.md` - Define qual sistema eh qual
+> - `CHANGELOG.md` - Registre TODAS as alteracoes aqui
+> - `INSTRUCOES-AGENTES.md` - Regras detalhadas
+
+### Sistemas Separados:
+| Dominio | O que eh | Codigo Fonte |
+|---------|----------|--------------|
+| comercial.monofloor.cloud | CRM Comercial | admin-panel (Comercial.vue) |
+| admin.monofloor.cloud | Admin Panel | admin-panel (outras views) |
+| app.monofloor.cloud | App Mobile | monofloor-app/ |
+| vt.monofloor.cloud | Video Processor | public-video-processor/ |
+
+### Regra de Ouro:
+**PERGUNTE ao usuario qual sistema alterar antes de fazer qualquer mudanca!**
+
+---
+
 ## Contexto do Projeto
 
 **Monofloor Equipes** é um aplicativo mobile para equipes de obra que trabalham com o sistema STELION (piso monolítico). O app serve como plataforma de gestão de equipes e acompanhamento de trabalho.
@@ -494,6 +515,7 @@ cd monofloor-admin/admin-panel && npm run dev
 
 #### Credenciais de Teste:
 - **Admin Panel**: admin@monofloor.com.br / admin123
+- **CRM Comercial**: amanda@monofloor.com.br / senha123
 - **APP Mobile**: joao@monofloor.com.br / senha123
 
 #### Sistema de Campanhas no APP Mobile:
@@ -703,6 +725,112 @@ Arquivos de identidade visual salvos em `monofloor-admin/public/branding/`:
 - Arquivo: `monofloor-admin/public/og-image.jpg` (cópia da capa)
 - URL produção: `https://propostas.monofloor.cloud/og-image.jpg`
 - Descrição OG: "Um piso sem juntas é um caminho sem volta."
+
+---
+
+## Gerador de Propostas - Backups e Arquivos Essenciais
+
+### BACKUP COMPLETO FUNCIONANDO (08/01/2026)
+
+**Arquivos de backup da versão COMPLETA (gerador + social share):**
+```
+monofloor-admin/src/services/google-slides.service.ts.backup-COMPLETO-20260108  (gerador PDF)
+monofloor-admin/src/app.ts.backup-COMPLETO-20260108                             (social share OG tags)
+monofloor-admin/public/og-image.jpg.backup-COMPLETO-20260108                    (imagem social share 800x1185)
+```
+
+**Para restaurar o backup COMPLETO:**
+```bash
+# Restaurar código
+cp monofloor-admin/src/services/google-slides.service.ts.backup-COMPLETO-20260108 monofloor-admin/src/services/google-slides.service.ts
+cp monofloor-admin/src/app.ts.backup-COMPLETO-20260108 monofloor-admin/src/app.ts
+cp monofloor-admin/public/og-image.jpg.backup-COMPLETO-20260108 monofloor-admin/public/og-image.jpg
+
+# Build e deploy
+npm run build
+scp monofloor-admin/public/og-image.jpg root@72.61.56.150:/var/www/propostas.monofloor.cloud/
+# Fazer deploy do dist/ para o servidor
+pm2 restart monofloor-admin
+```
+
+**Backup anterior (apenas gerador, sem social share):**
+```
+monofloor-admin/src/services/google-slides.service.ts.backup-FUNCIONANDO-20260108
+```
+
+### Arquivos de Assets Necessários (LOCAL)
+
+Esses arquivos DEVEM existir localmente em `monofloor-admin/public/`:
+
+| Arquivo Local | Descrição |
+|---------------|-----------|
+| `public/artboard 1.png` | Logo Monofloor cursivo (6.6KB) |
+| `public/NITECLUB.TTF` | Fonte NITECLUB (17KB) |
+| `public/slides/slide23-bg.jpg` | Background página de dados do cliente (262KB) |
+| `public/fonts/Widescreen Ex Bold.otf` | Fonte Widescreen Bold (95KB) |
+| `public/fonts/Widescreen Regular.otf` | Fonte Widescreen Regular (93KB) |
+
+### Arquivos de Assets no SERVIDOR
+
+Esses arquivos DEVEM existir no servidor em `/var/www/monofloor-admin/public/`:
+
+| Arquivo no Servidor | Descrição |
+|---------------------|-----------|
+| `/var/www/monofloor-admin/public/artboard 1.png` | Logo Monofloor |
+| `/var/www/monofloor-admin/public/NITECLUB.TTF` | Fonte NITECLUB |
+| `/var/www/monofloor-admin/public/slides/slide23-bg.jpg` | Background slide 23 |
+| `/var/www/monofloor-admin/public/fonts/Widescreen Ex Bold.otf` | Fonte Widescreen Bold |
+| `/var/www/monofloor-admin/public/fonts/Widescreen Regular.otf` | Fonte Widescreen Regular |
+
+### Como fazer upload dos assets para o servidor
+
+```bash
+# Conectar ao servidor
+ssh root@72.61.56.150
+# Senha: qS4wv19mLrB;c@rOGeX,
+
+# OU usar scp para enviar arquivos:
+scp "monofloor-admin/public/artboard 1.png" root@72.61.56.150:/var/www/monofloor-admin/public/
+scp "monofloor-admin/public/NITECLUB.TTF" root@72.61.56.150:/var/www/monofloor-admin/public/
+scp "monofloor-admin/public/slides/slide23-bg.jpg" root@72.61.56.150:/var/www/monofloor-admin/public/slides/
+scp "monofloor-admin/public/fonts/Widescreen Ex Bold.otf" root@72.61.56.150:/var/www/monofloor-admin/public/fonts/
+scp "monofloor-admin/public/fonts/Widescreen Regular.otf" root@72.61.56.150:/var/www/monofloor-admin/public/fonts/
+
+# Reiniciar PM2 após alterações
+pm2 restart monofloor-admin
+```
+
+### OG Image (Social Share) - WhatsApp/Facebook
+
+**IMPORTANTE**: O nginx serve arquivos estáticos de DUAS pastas diferentes!
+
+| Arquivo | Pasta no Servidor | Uso |
+|---------|-------------------|-----|
+| og-image.jpg | `/var/www/propostas.monofloor.cloud/` | Social share (WhatsApp/Facebook) |
+| Assets (fontes, logo) | `/var/www/monofloor-admin/public/` | Geração de PDF |
+
+**Para atualizar o og-image.jpg (social share):**
+```bash
+# Copiar imagem da pasta branding para og-image.jpg local
+cp monofloor-admin/public/branding/Capa\ Proposta\ de\ investimento.001.jpeg monofloor-admin/public/og-image.jpg
+
+# Upload para AMBAS as pastas no servidor:
+scp monofloor-admin/public/og-image.jpg root@72.61.56.150:/var/www/monofloor-admin/public/
+scp monofloor-admin/public/og-image.jpg root@72.61.56.150:/var/www/propostas.monofloor.cloud/
+```
+
+**Dimensões atuais do og-image.jpg**: 1080x1600 pixels (configurado em app.ts)
+
+### Funções importantes no google-slides.service.ts
+
+| Função | Linha (aprox) | Descrição |
+|--------|---------------|-----------|
+| `loadLogoBase64()` | ~74 | Carrega logo como base64 |
+| `getNiteclubFontBase64()` | ~85 | Carrega fonte NITECLUB |
+| `getWidescreenFontsBase64()` | ~97 | Carrega fontes Widescreen (Ex Bold + Regular) |
+| `createProposalHTML()` | ~142 | Cria página de investimento (slide 26) |
+| `createPaymentHTML()` | ~808 | Cria página de pagamento com fonte Widescreen |
+| `applyClientInfoOverlays()` | ~1198 | Aplica dados do cliente na página 24 |
 
 ---
 

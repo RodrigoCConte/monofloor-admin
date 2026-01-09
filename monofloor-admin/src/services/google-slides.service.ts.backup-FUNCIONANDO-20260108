@@ -5,254 +5,6 @@ import fontkit from '@pdf-lib/fontkit';
 import fs from 'fs';
 import path from 'path';
 
-// ============================================================
-// CACHE DE ASSETS EM MEMÓRIA (carregados 1x na inicialização)
-// ============================================================
-interface AssetsCache {
-  logoBase64: string | null;
-  niteclubFontBase64: string | null;
-  widescreenExBold: string | null;
-  widescreenRegular: string | null;
-  templatePdfBytes: Buffer | null;
-  niteclubFontBytes: Buffer | null;
-  widescreenExBoldBytes: Buffer | null;
-  widescreenRegularBytes: Buffer | null;
-  bgImageBytes: Buffer | null;
-  initialized: boolean;
-}
-
-const assetsCache: AssetsCache = {
-  logoBase64: null,
-  niteclubFontBase64: null,
-  widescreenExBold: null,
-  widescreenRegular: null,
-  templatePdfBytes: null,
-  niteclubFontBytes: null,
-  widescreenExBoldBytes: null,
-  widescreenRegularBytes: null,
-  bgImageBytes: null,
-  initialized: false,
-};
-
-/**
- * Inicializa o cache de assets (chamado 1x no startup)
- */
-export function initializeAssetsCache(): void {
-  if (assetsCache.initialized) {
-    console.log('📦 Cache de assets já inicializado');
-    return;
-  }
-
-  console.log('📦 Inicializando cache de assets...');
-  const startTime = Date.now();
-
-  // Logo
-  const logoPath = path.join(__dirname, '../../public/artboard 1.png');
-  try {
-    if (fs.existsSync(logoPath)) {
-      const logoBuffer = fs.readFileSync(logoPath);
-      assetsCache.logoBase64 = `data:image/png;base64,${logoBuffer.toString('base64')}`;
-      console.log('  ✓ Logo carregada');
-    }
-  } catch (error) {
-    console.warn('  ⚠️ Erro ao carregar logo:', error);
-  }
-
-  // Fonte NITECLUB
-  const niteclubPath = path.join(__dirname, '../../public/NITECLUB.TTF');
-  try {
-    if (fs.existsSync(niteclubPath)) {
-      const fontBuffer = fs.readFileSync(niteclubPath);
-      assetsCache.niteclubFontBase64 = `data:font/truetype;base64,${fontBuffer.toString('base64')}`;
-      assetsCache.niteclubFontBytes = fontBuffer;
-      console.log('  ✓ Fonte NITECLUB carregada');
-    }
-  } catch (error) {
-    console.warn('  ⚠️ Erro ao carregar NITECLUB:', error);
-  }
-
-  // Fontes Widescreen
-  const exBoldPath = path.join(__dirname, '../../public/fonts/Widescreen Ex Bold.otf');
-  const regularPath = path.join(__dirname, '../../public/fonts/Widescreen Regular.otf');
-  try {
-    if (fs.existsSync(exBoldPath)) {
-      const fontBuffer = fs.readFileSync(exBoldPath);
-      assetsCache.widescreenExBold = `data:font/opentype;base64,${fontBuffer.toString('base64')}`;
-      assetsCache.widescreenExBoldBytes = fontBuffer;
-      console.log('  ✓ Fonte Widescreen Ex Bold carregada');
-    }
-    if (fs.existsSync(regularPath)) {
-      const fontBuffer = fs.readFileSync(regularPath);
-      assetsCache.widescreenRegular = `data:font/opentype;base64,${fontBuffer.toString('base64')}`;
-      assetsCache.widescreenRegularBytes = fontBuffer;
-      console.log('  ✓ Fonte Widescreen Regular carregada');
-    }
-  } catch (error) {
-    console.warn('  ⚠️ Erro ao carregar fontes Widescreen:', error);
-  }
-
-  // Template PDF
-  const templatePath = path.join(__dirname, '../../public/slides/template.pdf');
-  try {
-    if (fs.existsSync(templatePath)) {
-      assetsCache.templatePdfBytes = fs.readFileSync(templatePath);
-      console.log('  ✓ Template PDF carregado');
-    }
-  } catch (error) {
-    console.warn('  ⚠️ Erro ao carregar template:', error);
-  }
-
-  // Background image slide 23
-  const bgImagePath = path.join(__dirname, '../../public/slides/slide23-bg.jpg');
-  try {
-    if (fs.existsSync(bgImagePath)) {
-      assetsCache.bgImageBytes = fs.readFileSync(bgImagePath);
-      console.log('  ✓ Background slide 23 carregado');
-    }
-  } catch (error) {
-    console.warn('  ⚠️ Erro ao carregar background:', error);
-  }
-
-  assetsCache.initialized = true;
-  console.log(`📦 Cache inicializado em ${Date.now() - startTime}ms`);
-}
-
-// Inicializar cache automaticamente no import
-initializeAssetsCache();
-
-// ============================================================
-// BROWSER POOL - Reutiliza browser Puppeteer (evita ~2-3s de startup)
-// ============================================================
-import type { Browser, Page } from 'puppeteer';
-
-interface BrowserPool {
-  browser: Browser | null;
-  isLaunching: boolean;
-  lastUsed: number;
-  useCount: number;
-}
-
-const browserPool: BrowserPool = {
-  browser: null,
-  isLaunching: false,
-  lastUsed: 0,
-  useCount: 0,
-};
-
-// Tempo máximo de inatividade antes de fechar o browser (5 minutos)
-const BROWSER_IDLE_TIMEOUT = 5 * 60 * 1000;
-// Número máximo de usos antes de reiniciar o browser (evita memory leak)
-const MAX_BROWSER_USES = 50;
-
-/**
- * Obtém uma página do browser pool (cria browser se necessário)
- */
-async function getPooledPage(): Promise<{ page: Page; release: () => Promise<void> }> {
-  // Se o browser não existe ou foi fechado, criar um novo
-  if (!browserPool.browser || !browserPool.browser.isConnected()) {
-    // Evitar múltiplas tentativas de launch simultâneas
-    if (browserPool.isLaunching) {
-      // Esperar o browser que está sendo criado
-      while (browserPool.isLaunching) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    } else {
-      browserPool.isLaunching = true;
-      console.log('🚀 Browser Pool: Iniciando novo browser...');
-      const startTime = Date.now();
-
-      try {
-        browserPool.browser = await puppeteer.launch({
-          headless: true,
-          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-web-security',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--disable-extensions',
-            '--disable-default-apps',
-            '--no-first-run',
-            '--single-process' // Reduz uso de memória
-          ]
-        });
-        browserPool.useCount = 0;
-        console.log(`🚀 Browser Pool: Browser iniciado em ${Date.now() - startTime}ms`);
-      } finally {
-        browserPool.isLaunching = false;
-      }
-    }
-  }
-
-  // Verificar se precisa reiniciar por excesso de uso
-  if (browserPool.useCount >= MAX_BROWSER_USES) {
-    console.log('🔄 Browser Pool: Reiniciando browser (limite de uso atingido)');
-    await closeBrowserPool();
-    return getPooledPage(); // Recursivo para criar novo browser
-  }
-
-  browserPool.lastUsed = Date.now();
-  browserPool.useCount++;
-
-  // Criar nova página
-  const page = await browserPool.browser!.newPage();
-  await page.setViewport({
-    width: 1080,
-    height: 1920,
-    deviceScaleFactor: 2
-  });
-
-  // Função para liberar a página (fecha a página, mantém o browser)
-  const release = async () => {
-    try {
-      if (!page.isClosed()) {
-        await page.close();
-      }
-    } catch (error) {
-      // Ignorar erros ao fechar página
-    }
-  };
-
-  return { page, release };
-}
-
-/**
- * Fecha o browser pool (chamado no shutdown)
- */
-async function closeBrowserPool(): Promise<void> {
-  if (browserPool.browser) {
-    try {
-      await browserPool.browser.close();
-      console.log('🛑 Browser Pool: Browser fechado');
-    } catch (error) {
-      // Ignorar erros ao fechar
-    }
-    browserPool.browser = null;
-  }
-}
-
-// Fechar browser no shutdown do processo
-process.on('beforeExit', closeBrowserPool);
-process.on('SIGINT', async () => {
-  await closeBrowserPool();
-  process.exit(0);
-});
-process.on('SIGTERM', async () => {
-  await closeBrowserPool();
-  process.exit(0);
-});
-
-// Timer para fechar browser inativo (verifica a cada minuto)
-setInterval(async () => {
-  if (browserPool.browser &&
-      browserPool.lastUsed > 0 &&
-      Date.now() - browserPool.lastUsed > BROWSER_IDLE_TIMEOUT) {
-    console.log('💤 Browser Pool: Fechando browser inativo');
-    await closeBrowserPool();
-  }
-}, 60 * 1000);
-
 interface ProposalData {
   // STELION
   metragemTotalStelion: number;
@@ -317,12 +69,8 @@ function formatarMetragem(valor: number): string {
   return valor.toFixed(2);
 }
 
-// Helper para carregar logo como base64 (usa cache)
+// Helper para carregar logo como base64
 function loadLogoBase64(): string {
-  if (assetsCache.logoBase64) {
-    return assetsCache.logoBase64;
-  }
-  // Fallback: carregar do disco se cache não inicializado
   const logoPath = path.join(__dirname, '../../public/artboard 1.png');
   try {
     const logoBuffer = fs.readFileSync(logoPath);
@@ -333,12 +81,8 @@ function loadLogoBase64(): string {
   }
 }
 
-// Helper para carregar fonte NITECLUB como base64 (usa cache)
+// Helper para carregar fonte NITECLUB como base64
 function getNiteclubFontBase64(): string {
-  if (assetsCache.niteclubFontBase64) {
-    return assetsCache.niteclubFontBase64;
-  }
-  // Fallback: carregar do disco se cache não inicializado
   const fontPath = path.join(__dirname, '../../public/NITECLUB.TTF');
   try {
     const fontBuffer = fs.readFileSync(fontPath);
@@ -349,12 +93,8 @@ function getNiteclubFontBase64(): string {
   }
 }
 
-// Helper para carregar fontes Widescreen como base64 (usa cache)
+// Helper para carregar fontes Widescreen como base64
 function getWidescreenFontsBase64(): { exBold: string; regular: string } {
-  if (assetsCache.widescreenExBold && assetsCache.widescreenRegular) {
-    return { exBold: assetsCache.widescreenExBold, regular: assetsCache.widescreenRegular };
-  }
-  // Fallback: carregar do disco se cache não inicializado
   const exBoldPath = path.join(__dirname, '../../public/fonts/Widescreen Ex Bold.otf');
   const regularPath = path.join(__dirname, '../../public/fonts/Widescreen Regular.otf');
 
@@ -1475,20 +1215,14 @@ async function applyClientInfoOverlays(
   const page = pdf.getPage(infoPageIndex);
   const { width, height } = page.getSize();
 
-  // Carregar e aplicar imagem de fundo (usa cache se disponível)
-  let bgImageBytes = assetsCache.bgImageBytes;
-  if (!bgImageBytes) {
-    const bgImagePath = path.join(__dirname, '../../public/slides/slide23-bg.jpg');
-    if (fs.existsSync(bgImagePath)) {
-      console.log('🖼️ Carregando imagem de fundo do disco (cache miss)...');
-      bgImageBytes = fs.readFileSync(bgImagePath);
-    }
-  } else {
-    console.log('🖼️ Usando imagem de fundo do cache');
-  }
-
-  if (bgImageBytes) {
+  // Carregar e aplicar imagem de fundo
+  const bgImagePath = path.join(__dirname, '../../public/slides/slide23-bg.jpg');
+  if (fs.existsSync(bgImagePath)) {
+    console.log('🖼️ Carregando imagem de fundo do slide 23...');
+    const bgImageBytes = fs.readFileSync(bgImagePath);
     const bgImage = await pdf.embedJpg(bgImageBytes);
+
+    // Desenhar imagem cobrindo toda a página (sem bordas)
     page.drawImage(bgImage, {
       x: 0,
       y: 0,
@@ -1497,49 +1231,43 @@ async function applyClientInfoOverlays(
     });
     console.log('✅ Imagem de fundo aplicada');
   } else {
-    console.log('⚠️ Imagem de fundo não encontrada');
+    console.log('⚠️ Imagem de fundo não encontrada:', bgImagePath);
   }
 
   // Registrar fontkit para carregar fontes customizadas
   pdf.registerFontkit(fontkit);
 
-  // Carregar fontes Widescreen (usa cache se disponível)
+  // Carregar fontes Widescreen
+  const fontExBoldPath = path.join(__dirname, '../../public/fonts/Widescreen Ex Bold.otf');
+  const fontRegularPath = path.join(__dirname, '../../public/fonts/Widescreen Regular.otf');
+
+  console.log('🔍 Verificando fontes:');
+  console.log('  - Ex Bold path:', fontExBoldPath);
+  console.log('  - Ex Bold exists:', fs.existsSync(fontExBoldPath));
+  console.log('  - Regular path:', fontRegularPath);
+  console.log('  - Regular exists:', fs.existsSync(fontRegularPath));
+
   let fontBold: any;
   let fontRegular: any;
 
-  const fontExBoldBytes = assetsCache.widescreenExBoldBytes;
-  const fontRegularBytes = assetsCache.widescreenRegularBytes;
-
-  if (fontExBoldBytes && fontRegularBytes) {
+  if (fs.existsSync(fontExBoldPath) && fs.existsSync(fontRegularPath)) {
     try {
-      console.log('🔤 Usando fontes Widescreen do cache');
+      console.log('🔤 Carregando fontes Widescreen...');
+      const fontExBoldBytes = fs.readFileSync(fontExBoldPath);
+      const fontRegularBytes = fs.readFileSync(fontRegularPath);
+      console.log('📦 Bytes lidos - ExBold:', fontExBoldBytes.length, 'Regular:', fontRegularBytes.length);
       fontBold = await pdf.embedFont(fontExBoldBytes);
       fontRegular = await pdf.embedFont(fontRegularBytes);
-      console.log('✅ Fontes Widescreen embebidas');
+      console.log('✅ Fontes Widescreen carregadas (Ex Bold + Regular)');
     } catch (fontError) {
-      console.error('❌ Erro ao embeber fontes Widescreen:', fontError);
+      console.error('❌ Erro ao carregar fontes Widescreen:', fontError);
       fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
       fontRegular = await pdf.embedFont(StandardFonts.Helvetica);
     }
   } else {
-    // Fallback: tentar carregar do disco
-    const fontExBoldPath = path.join(__dirname, '../../public/fonts/Widescreen Ex Bold.otf');
-    const fontRegularPath = path.join(__dirname, '../../public/fonts/Widescreen Regular.otf');
-
-    if (fs.existsSync(fontExBoldPath) && fs.existsSync(fontRegularPath)) {
-      try {
-        console.log('🔤 Carregando fontes do disco (cache miss)...');
-        fontBold = await pdf.embedFont(fs.readFileSync(fontExBoldPath));
-        fontRegular = await pdf.embedFont(fs.readFileSync(fontRegularPath));
-      } catch (fontError) {
-        fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
-        fontRegular = await pdf.embedFont(StandardFonts.Helvetica);
-      }
-    } else {
-      console.log('⚠️ Fontes Widescreen não encontradas, usando Helvetica');
-      fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
-      fontRegular = await pdf.embedFont(StandardFonts.Helvetica);
-    }
+    console.log('⚠️ Fontes Widescreen não encontradas, usando Helvetica');
+    fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    fontRegular = await pdf.embedFont(StandardFonts.Helvetica);
   }
 
   // Cores
@@ -1755,20 +1483,15 @@ async function applyProductNamesWithNiteclub(
   // Registrar fontkit
   pdf.registerFontkit(fontkit);
 
-  // Carregar fonte NITECLUB (usa cache se disponível)
-  let niteclubBytes = assetsCache.niteclubFontBytes;
-  if (!niteclubBytes) {
-    const niteclubPath = path.join(__dirname, '../../public/NITECLUB.TTF');
-    if (!fs.existsSync(niteclubPath)) {
-      console.log('⚠️ Fonte NITECLUB não encontrada, pulando');
-      return;
-    }
-    console.log('🔤 Carregando fonte NITECLUB do disco (cache miss)...');
-    niteclubBytes = fs.readFileSync(niteclubPath);
-  } else {
-    console.log('🔤 Usando fonte NITECLUB do cache');
+  // Carregar fonte NITECLUB
+  const niteclubPath = path.join(__dirname, '../../public/NITECLUB.TTF');
+  if (!fs.existsSync(niteclubPath)) {
+    console.log('⚠️ Fonte NITECLUB não encontrada, pulando');
+    return;
   }
 
+  console.log('🔤 Carregando fonte NITECLUB para nomes dos produtos...');
+  const niteclubBytes = fs.readFileSync(niteclubPath);
   const niteclubFont = await pdf.embedFont(niteclubBytes);
 
   const white = rgb(1, 1, 1);
@@ -1845,27 +1568,37 @@ async function applyProductNamesWithNiteclub(
 }
 
 export async function generateProposal(data: ProposalData): Promise<Buffer> {
-  const startTime = Date.now();
-  let release: (() => Promise<void>) | null = null;
-
   try {
-    console.log('📄 Gerando slides com Puppeteer (Browser Pool)...');
+    console.log('📄 Gerando slides com Puppeteer...');
 
-    // Usar browser pool ao invés de criar novo browser
-    const pooled = await getPooledPage();
-    const page = pooled.page;
-    release = pooled.release;
+    const browser = await puppeteer.launch({
+      headless: true,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-web-security',
+        '--disable-dev-shm-usage',
+        '--disable-gpu'
+      ]
+    });
 
-    console.log(`⚡ Página obtida do pool em ${Date.now() - startTime}ms`);
+    const page = await browser.newPage();
+
+    await page.setViewport({
+      width: 1080,
+      height: 1920,
+      deviceScaleFactor: 2
+    });
 
     // Gerar slide de Investimento
     const htmlInvestimento = createProposalHTML(data);
-    await page.setContent(htmlInvestimento, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.setContent(htmlInvestimento, { waitUntil: 'networkidle0', timeout: 60000 });
 
     // Esperar fontes carregarem (incluindo NITECLUB)
     await page.evaluate(() => document.fonts.ready);
-    // Delay reduzido (fontes já estão em base64 inline)
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Pequeno delay adicional para garantir renderização da fonte
+    await new Promise(resolve => setTimeout(resolve, 500));
     console.log('✅ Fontes carregadas para slide Investimento');
 
     const slideInvestimentoBuffer = await page.pdf({
@@ -1884,7 +1617,7 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
     await page.setContent(htmlPagamento, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     await page.evaluate(() => document.fonts.ready);
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 500));
     console.log('✅ Fontes carregadas para slide Pagamento');
 
     const slidePagamentoBuffer = await page.pdf({
@@ -1918,7 +1651,8 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
 
       // Esperar fontes carregarem
       await page.evaluate(() => document.fonts.ready);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Pequeno delay adicional para garantir renderização
+      await new Promise(resolve => setTimeout(resolve, 500));
       console.log('✅ Fontes carregadas para slide Detalhamento');
 
       slideSuperficiesBuffer = await page.pdf({
@@ -1934,27 +1668,18 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
       console.log('⚠️ Slide Detalhamento ignorado (sem dados de superfície)');
     }
 
-    // Liberar página de volta ao pool (não fecha o browser)
-    if (release) {
-      await release();
-      console.log(`⚡ Página liberada para o pool (total: ${Date.now() - startTime}ms para slides)`);
+    await browser.close();
+
+    // Carregar PDF template (slides 1-25)
+    const templatePath = path.join(__dirname, '../../public/slides/template.pdf');
+
+    if (!fs.existsSync(templatePath)) {
+      console.log('⚠️ Template não encontrado, retornando apenas slides gerados');
+      return slideInvestimentoBuffer;
     }
 
-    // Carregar PDF template (slides 1-25) - usa cache se disponível
-    let templateBytes: Buffer | null = assetsCache.templatePdfBytes;
-
-    if (!templateBytes) {
-      const templatePath = path.join(__dirname, '../../public/slides/template.pdf');
-      if (!fs.existsSync(templatePath)) {
-        console.log('⚠️ Template não encontrado, retornando apenas slides gerados');
-        return slideInvestimentoBuffer;
-      }
-      console.log('📚 Carregando template do disco (cache miss)...');
-      templateBytes = fs.readFileSync(templatePath);
-    } else {
-      console.log('📚 Usando template do cache');
-    }
-
+    console.log('📚 Carregando template...');
+    const templateBytes = fs.readFileSync(templatePath);
     const templatePdf = await PDFDocument.load(templateBytes);
 
     console.log(`📄 Template tem ${templatePdf.getPageCount()} páginas`);
@@ -2017,14 +1742,6 @@ export async function generateProposal(data: ProposalData): Promise<Buffer> {
 
   } catch (error) {
     console.error('❌ Erro ao gerar proposta:', error);
-    if (release) {
-      try {
-        await release();
-        console.log('⚡ Página liberada após erro');
-      } catch (releaseError) {
-        console.error('❌ Erro ao liberar página:', releaseError);
-      }
-    }
     throw error;
   }
 }

@@ -113,6 +113,12 @@ const routes = [
     component: () => import('../views/Scheduling.vue'),
     meta: { requiresAuth: true },
   },
+  {
+    path: '/pre-obra',
+    name: 'PreObra',
+    component: () => import('../views/PreObra.vue'),
+    meta: { requiresAuth: true },
+  },
 ];
 
 const router = createRouter({

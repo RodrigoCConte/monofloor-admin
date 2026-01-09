@@ -70,8 +70,8 @@ async function main() {
     console.log('✅ Database connected');
 
     // Start server with Socket.io
-    // Railway requires binding to 0.0.0.0, not localhost
-    const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+    // Always bind to 0.0.0.0 to accept connections from nginx and all interfaces
+    const host = '0.0.0.0';
     httpServer.listen(config.port, host, () => {
       console.log(`🚀 Server running on ${host}:${config.port}`);
       console.log(`🔌 Socket.io enabled`);

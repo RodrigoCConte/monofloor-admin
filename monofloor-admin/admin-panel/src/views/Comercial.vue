@@ -684,6 +684,13 @@
                   ></span>
                   <span class="deal-card__specialist-name">{{ getSpecialistFirstName(deal.consultor) }}</span>
                 </div>
+                <div class="deal-card__views" :class="{ 'deal-card__views--active': (deal.proposalViews || 0) > 0 }">
+                  <svg class="deal-card__views-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  <span class="deal-card__views-count">{{ deal.proposalViews || 0 }}</span>
+                </div>
                 <div class="deal-card__days" :class="getDaysClass(deal.daysInStage)">
                   {{ deal.daysInStage || 0 }}d
                 </div>
@@ -6964,6 +6971,43 @@ onUnmounted(() => {
 .deal-card__days--danger {
   background: var(--coral);
   color: white;
+}
+
+/* Views Counter - Neobrutalista */
+.deal-card__views {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: #e5e5e5;
+  border: 2px solid #1a1a1a;
+  border-radius: 6px;
+  box-shadow: 2px 2px 0 #1a1a1a;
+  font-family: 'Syne', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #666;
+  transition: all 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.deal-card__views--active {
+  background: #c9a962;
+  color: #1a1a1a;
+}
+
+.deal-card__views-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.5;
+}
+
+.deal-card__views--active .deal-card__views-icon {
+  stroke: #1a1a1a;
+}
+
+.deal-card__views-count {
+  min-width: 12px;
+  text-align: center;
 }
 
 .deal-card__actions {
