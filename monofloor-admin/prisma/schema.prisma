@@ -1262,6 +1262,8 @@ model Proposta {
   htmlContent    String?        @map("html_content") @db.Text // Conteúdo HTML da proposta
   htmlImages     String?        @map("html_images") @db.Text // Imagens pré-convertidas (JSON array)
   htmlGeradoEm   DateTime?      @map("html_gerado_em") // Quando foi gerada em HTML
+  hasVideoCover  Boolean        @default(false) @map("has_video_cover") // Se usa vídeo como capa (slide 1)
+  hasGradients   Boolean        @default(false) @map("has_gradients") // Se usa degradês entre slides
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
   comercial          ComercialData    @relation(fields: [comercialId], references: [id], onDelete: Cascade)
