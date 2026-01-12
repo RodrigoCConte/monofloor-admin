@@ -1,6 +1,5 @@
 import express from 'express';
 import { generateProposal, compressPDF } from '../services/google-slides.service';
-import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import zlib from 'zlib';
 import { promisify } from 'util';
@@ -12,12 +11,12 @@ import {
   emitProposalGPSUpdated
 } from '../services/socket.service';
 import { invalidateComercialCache } from './admin/comercial.routes';
+import { prisma } from '../lib/prisma';
 
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Cache para rastrear sessões ativas (para detectar quando fechar)
 const activeSessions = new Map<string, {
@@ -177,6 +176,17 @@ router.post('/generate', async (req, res) => {
       clienteLocal,
       clienteDetalhes,
       areaTotalInterna,
+
+      // MODO APENAS MATERIAIS (sem mão de obra)
+      apenasMateriais,
+
+      // CONFIGURAÇÕES DE PAGAMENTO
+      percentualRT,
+      percentualEntrada,
+      descontoVista,
+      taxaTransacaoCartao,
+      taxaPorParcelaCartao,
+      numeroParcelasCartao,
     } = req.body;
 
     // Validações básicas
@@ -228,6 +238,17 @@ router.post('/generate', async (req, res) => {
       clienteLocal: clienteLocal || '',
       clienteDetalhes: clienteDetalhes || '',
       areaTotalInterna: parseFloat(areaTotalInterna) || 0,
+
+      // MODO APENAS MATERIAIS (sem mão de obra)
+      apenasMateriais: apenasMateriais === true,
+
+      // CONFIGURAÇÕES DE PAGAMENTO
+      percentualRT: parseFloat(percentualRT) || 10,
+      percentualEntrada: parseFloat(percentualEntrada) || 50,
+      descontoVista: parseFloat(descontoVista) || 5,
+      taxaTransacaoCartao: parseFloat(taxaTransacaoCartao) || 2.36,
+      taxaPorParcelaCartao: parseFloat(taxaPorParcelaCartao) || 1,
+      numeroParcelasCartao: parseInt(numeroParcelasCartao) || 6,
     });
 
     // Comprimir PDF
@@ -285,11 +306,14 @@ async function convertPdfToImages(pdfBuffer: Buffer): Promise<string[]> {
  */
 router.post('/generate-html', async (req, res) => {
   try {
-    const { propostaId } = req.body;
+    const { propostaId, withVideoCover, withGradients } = req.body;
 
     if (!propostaId) {
       return res.status(400).json({ error: 'propostaId é obrigatório' });
     }
+
+    const hasVideoCover = withVideoCover === true;
+    const hasGradients = withGradients === true;
 
     // Verificar se proposta existe e tem PDF
     const proposta = await prisma.proposta.findUnique({
@@ -324,15 +348,24 @@ router.post('/generate-html', async (req, res) => {
 
     console.log(`✅ PDF convertido para ${images.length} imagem(s)`);
 
-    // Salvar slug e imagens no banco (em campo JSON)
+    // Salvar slug, imagens e flags no banco
     await prisma.proposta.update({
       where: { id: propostaId },
       data: {
         htmlSlug: slug,
         htmlGeradoEm: new Date(),
-        htmlImages: JSON.stringify(images) // Salva array de imagens base64
+        htmlImages: JSON.stringify(images), // Salva array de imagens base64
+        hasVideoCover, // Flag para usar vídeo como capa
+        hasGradients // Flag para usar degradês entre slides
       }
     });
+
+    if (hasVideoCover) {
+      console.log(`🎬 Proposta ${propostaId} gerada COM vídeo de capa`);
+    }
+    if (hasGradients) {
+      console.log(`🎨 Proposta ${propostaId} gerada COM degradês entre slides`);
+    }
 
     // URL do serviço de propostas
     const baseUrl = 'https://propostas.monofloor.cloud';
@@ -344,7 +377,9 @@ router.post('/generate-html', async (req, res) => {
       success: true,
       slug,
       url: publicUrl,
-      pageCount: images.length
+      pageCount: images.length,
+      hasVideoCover,
+      hasGradients
     });
 
   } catch (error: any) {

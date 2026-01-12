@@ -299,11 +299,15 @@ interface ProposalData {
   areaTotalInterna?: number;
 
   // PAGAMENTO
+  percentualRT?: number;
   percentualEntrada?: number;
-  numeroParcelas?: number;
   descontoVista?: number;
-  taxaJurosCartao?: number;
+  taxaTransacaoCartao?: number;
+  taxaPorParcelaCartao?: number;
   numeroParcelasCartao?: number;
+
+  // MODO APENAS MATERIAIS
+  apenasMateriais?: boolean;
 }
 
 function formatarMoeda(valor: number): string {
@@ -410,6 +414,89 @@ function createProposalHTML(data: ProposalData): string {
 
   const logoBase64 = loadLogoBase64();
   const niteclubFontBase64 = getNiteclubFontBase64();
+
+  // Detectar qual produto foi selecionado para o piso (toggle)
+  const isPisoLilit = (data.pisoLilit || 0) > 0 && (data.pisoStelion || 0) === 0;
+  const produtoToggle: 'STELION' | 'LILIT' = isPisoLilit ? 'LILIT' : 'STELION';
+
+  // Construir lista de superfícies para cada produto
+  const superficiesStelion: { nome: string; area: number }[] = [];
+  const superficiesLilit: { nome: string; area: number }[] = [];
+
+  // Piso → Segue o toggle
+  const areaPiso = (data.pisoStelion || 0) + (data.pisoLilit || 0);
+  if (areaPiso > 0) {
+    if (produtoToggle === 'STELION') {
+      superficiesStelion.push({ nome: 'Piso', area: areaPiso });
+    } else {
+      superficiesLilit.push({ nome: 'Piso', area: areaPiso });
+    }
+  }
+
+  // Parede → Sempre LILIT
+  const areaParede = data.paredeStelion || data.paredeLilit || 0;
+  if (areaParede > 0) {
+    superficiesLilit.push({ nome: 'Parede', area: areaParede });
+  }
+
+  // Teto → Sempre LILIT
+  if ((data.teto || 0) > 0) {
+    superficiesLilit.push({ nome: 'Teto', area: data.teto || 0 });
+  }
+
+  // Bancadas → Segue toggle
+  if ((data.bancadas || 0) > 0) {
+    if (produtoToggle === 'STELION') {
+      superficiesStelion.push({ nome: 'Bancadas', area: data.bancadas || 0 });
+    } else {
+      superficiesLilit.push({ nome: 'Bancadas', area: data.bancadas || 0 });
+    }
+  }
+
+  // Escadas → Segue toggle
+  if ((data.escadas || 0) > 0) {
+    if (produtoToggle === 'STELION') {
+      superficiesStelion.push({ nome: 'Escadas', area: data.escadas || 0 });
+    } else {
+      superficiesLilit.push({ nome: 'Escadas', area: data.escadas || 0 });
+    }
+  }
+
+  // Especiais Pequenos → Segue toggle
+  if ((data.especiaisPequenos || 0) > 0) {
+    if (produtoToggle === 'STELION') {
+      superficiesStelion.push({ nome: 'Especiais Pequenos', area: data.especiaisPequenos || 0 });
+    } else {
+      superficiesLilit.push({ nome: 'Especiais Pequenos', area: data.especiaisPequenos || 0 });
+    }
+  }
+
+  // Especiais Grandes → Segue toggle
+  if ((data.especiaisGrandes || 0) > 0) {
+    if (produtoToggle === 'STELION') {
+      superficiesStelion.push({ nome: 'Especiais Grandes', area: data.especiaisGrandes || 0 });
+    } else {
+      superficiesLilit.push({ nome: 'Especiais Grandes', area: data.especiaisGrandes || 0 });
+    }
+  }
+
+  // Piscina → SEMPRE STELION (exceção)
+  if ((data.piscina || 0) > 0) {
+    superficiesStelion.push({ nome: 'Piscina', area: data.piscina || 0 });
+  }
+
+  // Gerar HTML das superfícies para cada card
+  const renderSuperficies = (superficies: { nome: string; area: number }[]) => {
+    if (superficies.length === 0) return '';
+    return superficies.map(s => `
+        <div class="value-row surface-row">
+          <span class="value-label">${s.nome}</span>
+          <span class="value-amount">${formatarMetragem(s.area)} m²</span>
+        </div>`).join('');
+  };
+
+  const superficiesStelionHTML = renderSuperficies(superficiesStelion);
+  const superficiesLilitHTML = renderSuperficies(superficiesLilit);
 
   return `
 <!DOCTYPE html>
@@ -639,7 +726,7 @@ function createProposalHTML(data: ProposalData): string {
   <!-- Header -->
   <div class="header">
     ${logoBase64 ? `<img src="${logoBase64}" alt="Monofloor" class="logo-img">` : '<div class="logo">MONOFLOOR</div>'}
-    <div class="subtitle">INVESTIMENTO</div>
+    <div class="subtitle">INVESTIMENTO${data.apenasMateriais ? ' • APENAS MATERIAIS' : ''}</div>
   </div>
 
   <!-- Products -->
@@ -662,10 +749,10 @@ function createProposalHTML(data: ProposalData): string {
           <span class="value-label">Materiais</span>
           <span class="value-amount">R$ ${formatarMoeda(data.materiaisStelion)}</span>
         </div>
-        <div class="value-row">
+        ${!data.apenasMateriais ? `<div class="value-row">
           <span class="value-label">Instalação</span>
           <span class="value-amount">R$ ${formatarMoeda(data.maoObraStelion)}</span>
-        </div>
+        </div>` : ''}
         <div class="value-row">
           <span class="value-label">Impostos</span>
           <span class="value-amount">R$ ${formatarMoeda(data.impostosStelion)}</span>
@@ -695,10 +782,10 @@ function createProposalHTML(data: ProposalData): string {
           <span class="value-label">Materiais</span>
           <span class="value-amount">R$ ${formatarMoeda(data.materiaisLilit)}</span>
         </div>
-        <div class="value-row">
+        ${!data.apenasMateriais ? `<div class="value-row">
           <span class="value-label">Instalação</span>
           <span class="value-amount">R$ ${formatarMoeda(data.maoObraLilit)}</span>
-        </div>
+        </div>` : ''}
         <div class="value-row">
           <span class="value-label">Impostos</span>
           <span class="value-amount">R$ ${formatarMoeda(data.impostosLilit)}</span>
@@ -713,7 +800,7 @@ function createProposalHTML(data: ProposalData): string {
 
   <!-- Total Geral -->
   <div class="total-section">
-    <div class="total-title">Investimento Total</div>
+    <div class="total-title">Investimento Total${data.apenasMateriais ? ' (Apenas Materiais)' : ''}</div>
     <div class="total-grid">
       <div class="total-item">
         <div class="total-item-label">Área Total</div>
@@ -723,10 +810,10 @@ function createProposalHTML(data: ProposalData): string {
         <div class="total-item-label">Materiais</div>
         <div class="total-item-value">R$ ${formatarMoeda(data.materiaisTotal)}</div>
       </div>
-      <div class="total-item">
+      ${!data.apenasMateriais ? `<div class="total-item">
         <div class="total-item-label">Instalação</div>
         <div class="total-item-value">R$ ${formatarMoeda(data.maoObraTotal)}</div>
-      </div>
+      </div>` : ''}
       <div class="total-item">
         <div class="total-item-label">Impostos</div>
         <div class="total-item-value">R$ ${formatarMoeda(data.impostosTotal)}</div>
@@ -751,7 +838,28 @@ function createSurfacesTableHTML(data: ProposalData): string {
   const precoStelion = data.precoBaseStelion || 910;
   const precoLilit = data.precoBaseLilit || 590;
 
-  // DEBUG: Log das superfícies recebidas
+  // Fator de perda (+11% = dividir por 0.9)
+  const FATOR_PERDA = 0.9;
+
+  // Detectar qual produto foi selecionado para o piso (toggle)
+  const isPisoLilit = (data.pisoLilit || 0) > 0 && (data.pisoStelion || 0) === 0;
+  const produtoToggle: 'STELION' | 'LILIT' = isPisoLilit ? 'LILIT' : 'STELION';
+
+  // Multiplicadores por tipo de superfície
+  // Regra: Parede/Teto sempre LILIT, Piscina sempre STELION, resto segue o toggle
+  const MULTIPLICADORES: Record<string, { produto: 'STELION' | 'LILIT', mult: number }> = {
+    piso: { produto: produtoToggle, mult: 1.0 },
+    parede: { produto: 'LILIT', mult: 0.8 },           // Sempre LILIT
+    teto: { produto: 'LILIT', mult: 0.8 },             // Sempre LILIT
+    bancadas: { produto: produtoToggle, mult: 1.5 },   // Segue toggle
+    escadas: { produto: produtoToggle, mult: 1.5 },    // Segue toggle
+    especiaisPequenos: { produto: produtoToggle, mult: 0.5 },  // Segue toggle
+    especiaisGrandes: { produto: produtoToggle, mult: 1.5 },   // Segue toggle
+    piscina: { produto: 'STELION', mult: 1.5 },        // EXCEÇÃO: Sempre STELION
+  };
+
+  // DEBUG: Log do toggle e superfícies recebidas
+  console.log('🔍 createSurfacesTableHTML - TOGGLE:', produtoToggle, '(isPisoLilit:', isPisoLilit, ')');
   console.log('🔍 createSurfacesTableHTML - SUPERFÍCIES NO DATA:', {
     teto: data.teto,
     bancadas: data.bancadas,
@@ -765,21 +873,57 @@ function createSurfacesTableHTML(data: ProposalData): string {
     paredeLilit: data.paredeLilit,
   });
 
-  // Lista de superfícies com seus dados
-  // Piso usa STELION, demais usam LILIT
+  // Custo de mão de obra por m²
+  const MAO_OBRA_M2 = 120;
+
+  // Função para calcular valor total de uma superfície
+  // NOTA: A área já vem COM perda aplicada do frontend (dividida por 0.9)
+  // Fórmula: area * precoBase * multiplicador
+  // Se apenasMateriais está ativo, subtrai a mão de obra
+  const calcularValor = (area: number, tipo: string) => {
+    const config = MULTIPLICADORES[tipo];
+    const precoBase = config.produto === 'STELION' ? precoStelion : precoLilit;
+    // NÃO dividir por FATOR_PERDA - os dados já vêm com perda aplicada do frontend
+    const valorCompleto = area * precoBase * config.mult;
+
+    // Se apenasMateriais, subtrair mão de obra (R$120/m²)
+    if (data.apenasMateriais) {
+      const maoObra = MAO_OBRA_M2 * area;
+      return valorCompleto - maoObra;
+    }
+
+    return valorCompleto;
+  };
+
+  // Função para calcular R$/m² (preço base × multiplicador, SEM dividir por perda)
+  // Se apenasMateriais, subtrai R$120/m² do preço base
+  const calcularPrecoM2 = (tipo: string) => {
+    const config = MULTIPLICADORES[tipo];
+    const precoBase = config.produto === 'STELION' ? precoStelion : precoLilit;
+    const precoCompleto = precoBase * config.mult;
+
+    // Se apenasMateriais, subtrair mão de obra do preço por m²
+    if (data.apenasMateriais) {
+      return precoCompleto - MAO_OBRA_M2;
+    }
+
+    return precoCompleto;
+  };
+
+  // Lista de superfícies com seus dados (produto dinâmico baseado no toggle)
   const superficies = [
-    { nome: 'Piso', area: (data.pisoStelion || 0) + (data.pisoLilit || 0), produto: 'STELION', preco: precoStelion },
-    { nome: 'Parede', area: data.paredeStelion || data.paredeLilit || 0, produto: 'LILIT', preco: precoLilit },
-    { nome: 'Teto', area: data.teto || 0, produto: 'LILIT', preco: precoLilit },
-    { nome: 'Bancadas', area: data.bancadas || 0, produto: 'STELION', preco: precoStelion },
-    { nome: 'Escadas', area: data.escadas || 0, produto: 'STELION', preco: precoStelion },
-    { nome: 'Especiais Pequenos', area: data.especiaisPequenos || 0, produto: 'STELION', preco: precoStelion },
-    { nome: 'Especiais Grandes', area: data.especiaisGrandes || 0, produto: 'STELION', preco: precoStelion },
-    { nome: 'Piscina', area: data.piscina || 0, produto: 'STELION', preco: precoStelion },
+    { nome: 'Piso', area: (data.pisoStelion || 0) + (data.pisoLilit || 0), tipo: 'piso', produto: produtoToggle },
+    { nome: 'Parede', area: data.paredeStelion || data.paredeLilit || 0, tipo: 'parede', produto: 'LILIT' },
+    { nome: 'Teto', area: data.teto || 0, tipo: 'teto', produto: 'LILIT' },
+    { nome: 'Bancadas', area: data.bancadas || 0, tipo: 'bancadas', produto: produtoToggle },
+    { nome: 'Escadas', area: data.escadas || 0, tipo: 'escadas', produto: produtoToggle },
+    { nome: 'Especiais Pequenos', area: data.especiaisPequenos || 0, tipo: 'especiaisPequenos', produto: produtoToggle },
+    { nome: 'Especiais Grandes', area: data.especiaisGrandes || 0, tipo: 'especiaisGrandes', produto: produtoToggle },
+    { nome: 'Piscina', area: data.piscina || 0, tipo: 'piscina', produto: 'STELION' },  // EXCEÇÃO: Sempre STELION
   ].filter(s => s.area > 0); // Só mostrar superfícies com área > 0
 
-  // Calcular totais
-  const totalGeral = superficies.reduce((sum, s) => sum + (s.area * s.preco), 0);
+  // Calcular totais (agora com multiplicadores e fator de perda)
+  const totalGeral = superficies.reduce((sum, s) => sum + calcularValor(s.area, s.tipo), 0);
   const areaTotal = superficies.reduce((sum, s) => sum + s.area, 0);
 
   return `
@@ -1017,7 +1161,7 @@ function createSurfacesTableHTML(data: ProposalData): string {
   <!-- Header -->
   <div class="header">
     ${logoBase64 ? `<img src="${logoBase64}" alt="Monofloor" class="logo-img">` : '<div class="logo">MONOFLOOR</div>'}
-    <div class="subtitle">DETALHAMENTO POR SUPERFÍCIE</div>
+    <div class="subtitle">DETALHAMENTO POR SUPERFÍCIE${data.apenasMateriais ? ' • APENAS MATERIAIS' : ''}</div>
   </div>
 
   <!-- Tabela por Superfície -->
@@ -1041,8 +1185,8 @@ function createSurfacesTableHTML(data: ProposalData): string {
             </div>
           </td>
           <td>${formatarMetragem(s.area)} m²</td>
-          <td>R$ ${formatarMoeda(s.preco)}</td>
-          <td>R$ ${formatarMoeda(s.area * s.preco)}</td>
+          <td>R$ ${formatarMoeda(calcularPrecoM2(s.tipo))}</td>
+          <td>R$ ${formatarMoeda(calcularValor(s.area, s.tipo))}</td>
         </tr>
         `).join('')}
         <!-- Linha de Total -->
@@ -1387,7 +1531,7 @@ function createPaymentHTML(data: ProposalData): string {
   <!-- Header -->
   <div class="header">
     ${logoBase64 ? `<img src="${logoBase64}" alt="Monofloor" class="logo-img">` : ''}
-    <h1 class="page-title">Pagamento</h1>
+    <h1 class="page-title">Pagamento${data.apenasMateriais ? ' <span style="font-size: 0.6em; color: #666;">(Apenas Materiais)</span>' : ''}</h1>
   </div>
 
   <div class="payment-section">
