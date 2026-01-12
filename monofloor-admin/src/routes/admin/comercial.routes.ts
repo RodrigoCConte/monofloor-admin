@@ -1,13 +1,27 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient, ComercialStatus, PropostaStatus, FollowUpStatus, FollowUpTipo, FollowUpCanal } from '@prisma/client';
+import { ComercialStatus, PropostaStatus, FollowUpStatus, FollowUpTipo, FollowUpCanal } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import multer from 'multer';
 import { gptService } from '../../services/ai/gpt.service';
 import { leadDistributionService } from '../../services/lead-distribution.service';
 import { sendWhatsAppDocument, sendWhatsAppMessage, isWhatsAppConfigured } from '../../services/whatsapp.service';
+import { prisma } from '../../lib/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
+
+// Formata telefone para WhatsApp - evita duplicar +55
+const formatPhoneForWhatsApp = (phone: string): string => {
+  // Remove tudo que não é dígito
+  const digits = phone.replace(/\D/g, '');
+
+  // Se já começa com 55 e tem mais de 11 dígitos (DDD + 9 dígitos), já tem código do país
+  if (digits.startsWith('55') && digits.length > 11) {
+    return digits;
+  }
+
+  // Caso contrário, adiciona 55
+  return `55${digits}`;
+};
 
 // =============================================
 // CACHE SYSTEM FOR COMERCIAL DATA
@@ -3414,6 +3428,17 @@ router.put('/:id/proposta/:propostaId/pdf', async (req: Request, res: Response) 
       },
     });
 
+    // 3.1. Atualizar o valor do lead com o valor da proposta
+    if (valorTotal) {
+      await prisma.comercialData.update({
+        where: { id },
+        data: {
+          dealValue: parseFloat(valorTotal),
+        },
+      });
+      console.log(`[Propostas] Valor do lead ${id} atualizado para R$ ${valorTotal}`);
+    }
+
     // 4. Anexar PDF ao lead automaticamente
     const anexo = await prisma.comercialAnexo.create({
       data: {
@@ -3483,7 +3508,7 @@ router.post('/:id/proposta/:propostaId/enviar-whatsapp', async (req: Request, re
     }
 
     // Preparar dados para envio
-    const telefone = proposta.comercial.personPhone.replace(/\D/g, '');
+    const telefone = formatPhoneForWhatsApp(proposta.comercial.personPhone);
     const nomeCliente = proposta.comercial.primeiroNomeZapi || proposta.comercial.personName?.split(' ')[0] || 'Cliente';
 
     // Mensagem
@@ -3510,7 +3535,7 @@ router.post('/:id/proposta/:propostaId/enviar-whatsapp', async (req: Request, re
       return res.json({
         success: true,
         method: 'fallback',
-        whatsappUrl: `https://wa.me/55${telefone}?text=${encodeURIComponent(mensagem)}`,
+        whatsappUrl: `https://wa.me/${telefone}?text=${encodeURIComponent(mensagem)}`,
         telefone,
         mensagem,
         message: 'Z-API não configurado. Use o link para enviar manualmente.',
@@ -3532,7 +3557,7 @@ router.post('/:id/proposta/:propostaId/enviar-whatsapp', async (req: Request, re
       return res.status(500).json({
         success: false,
         error: `Erro ao enviar PDF: ${documentResult.error}`,
-        whatsappUrl: `https://wa.me/55${telefone}?text=${encodeURIComponent(mensagem)}`,
+        whatsappUrl: `https://wa.me/${telefone}?text=${encodeURIComponent(mensagem)}`,
       });
     }
 
